@@ -28,9 +28,12 @@ export default function Slide2({ session, sessionId, onNext, onBack }) {
 
   // Load persistent data on mount
   useEffect(() => {
-    getSlideResponses(sessionId).then(responses => {
+    if (!sessionId) return
+    getSlideResponses(sessionId).then(grouped => {
+      // Server returns object grouped by slide_number key
+      const slideData = grouped[SLIDE_NUMBER] || []
       const map = {}
-      responses.forEach(r => { map[r.field_key] = r.field_value || '' })
+      slideData.forEach(r => { map[r.field_key] = r.field_value || '' })
       if (map.keywords_paused) {
         setPauseFields(prev => ({ ...prev, keywords_paused: map.keywords_paused }))
         setPauseOpen(true)

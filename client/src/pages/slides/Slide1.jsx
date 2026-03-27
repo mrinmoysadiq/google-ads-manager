@@ -25,22 +25,25 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
 
   // Load persistent data on mount
   useEffect(() => {
-    getSlideResponses(sessionId).then(responses => {
+    if (!sessionId) return
+    getSlideResponses(sessionId).then(grouped => {
+      // Server returns object grouped by slide_number key
+      const slideData = grouped[SLIDE_NUMBER] || []
       const map = {}
-      responses.forEach(r => { map[r.field_key] = r.field_value || '' })
+      slideData.forEach(r => { map[r.field_key] = r.field_value || '' })
       setFields(prev => ({
         ...prev,
-        spend_yesterday: map.spend_yesterday || '',
-        conversions_yesterday: map.conversions_yesterday || '',
-        conversion_rate_yesterday: map.conversion_rate_yesterday || '',
-        cpr_yesterday: map.cpr_yesterday || '',
-        conversions_7d: map.conversions_7d || '',
-        conversion_rate_7d: map.conversion_rate_7d || '',
-        cpr_7d: map.cpr_7d || '',
-        conversions_14d: map.conversions_14d || '',
-        conversion_rate_14d: map.conversion_rate_14d || '',
-        cpr_14d: map.cpr_14d || '',
-        observations: map.observations || '',
+        spend_yesterday: map.spend_yesterday !== undefined ? map.spend_yesterday : prev.spend_yesterday,
+        conversions_yesterday: map.conversions_yesterday !== undefined ? map.conversions_yesterday : prev.conversions_yesterday,
+        conversion_rate_yesterday: map.conversion_rate_yesterday !== undefined ? map.conversion_rate_yesterday : prev.conversion_rate_yesterday,
+        cpr_yesterday: map.cpr_yesterday !== undefined ? map.cpr_yesterday : prev.cpr_yesterday,
+        conversions_7d: map.conversions_7d !== undefined ? map.conversions_7d : prev.conversions_7d,
+        conversion_rate_7d: map.conversion_rate_7d !== undefined ? map.conversion_rate_7d : prev.conversion_rate_7d,
+        cpr_7d: map.cpr_7d !== undefined ? map.cpr_7d : prev.cpr_7d,
+        conversions_14d: map.conversions_14d !== undefined ? map.conversions_14d : prev.conversions_14d,
+        conversion_rate_14d: map.conversion_rate_14d !== undefined ? map.conversion_rate_14d : prev.conversion_rate_14d,
+        cpr_14d: map.cpr_14d !== undefined ? map.cpr_14d : prev.cpr_14d,
+        observations: map.observations !== undefined ? map.observations : prev.observations,
       }))
     }).catch(console.error)
   }, [sessionId])

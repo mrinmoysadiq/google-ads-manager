@@ -7,7 +7,6 @@ import StickyHeader from '../components/StickyHeader'
 import Slide1 from './slides/Slide1'
 import Slide2 from './slides/Slide2'
 import Slide3 from './slides/Slide3'
-import Slide4 from './slides/Slide4'
 
 export default function ChecklistWrapper() {
   const { sessionId } = useParams()
@@ -30,7 +29,7 @@ export default function ChecklistWrapper() {
   }, [sessionId])
 
   const goNext = async () => {
-    if (currentSlide < 4) {
+    if (currentSlide < 3) {
       setCurrentSlide(prev => prev + 1)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
@@ -73,18 +72,17 @@ export default function ChecklistWrapper() {
     onNext: goNext,
     onBack: goBack,
     isFirstSlide: currentSlide === 1,
-    isLastSlide: currentSlide === 4,
+    isLastSlide: currentSlide === 3,
   }
 
   return (
     <div className="min-h-screen bg-[#1b1b1b]">
-      <ProgressBar currentStep={currentSlide} totalSteps={4} />
+      <ProgressBar currentStep={currentSlide} totalSteps={3} />
       <StickyHeader session={session} />
       <div className="max-w-4xl mx-auto px-4 py-6">
         {currentSlide === 1 && <Slide1 {...slideProps} />}
         {currentSlide === 2 && <Slide2 {...slideProps} />}
         {currentSlide === 3 && <Slide3 {...slideProps} />}
-        {currentSlide === 4 && <Slide4 {...slideProps} />}
       </div>
     </div>
   )

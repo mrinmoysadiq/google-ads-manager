@@ -7,7 +7,6 @@ const SECTIONS = [
   'Daily Performance',
   'Search Terms',
   'Assets & Landing Pages',
-  'Audience & Targeting',
 ]
 
 export default function SessionComplete() {
@@ -37,12 +36,14 @@ export default function SessionComplete() {
     setPdfStatus('generating')
 
     getSlideResponses(parseInt(sessionId))
-      .then(responses => {
+      .then(grouped => {
+        // Server returns object grouped by slide_number: { 1: [...], 2: [...], 3: [...] }
         // Build a map: slideResponsesMap[slideNumber][fieldKey] = fieldValue
         const map = {}
-        responses.forEach(r => {
-          if (!map[r.slide_number]) map[r.slide_number] = {}
-          map[r.slide_number][r.field_key] = r.field_value || ''
+        Object.entries(grouped).forEach(([slideNum, rows]) => {
+          const num = parseInt(slideNum)
+          if (!map[num]) map[num] = {}
+          rows.forEach(r => { map[num][r.field_key] = r.field_value || '' })
         })
         generateSessionPDF(session, map)
         setPdfStatus('done')
@@ -57,11 +58,12 @@ export default function SessionComplete() {
     if (!session) return
     setPdfStatus('generating')
     getSlideResponses(parseInt(sessionId))
-      .then(responses => {
+      .then(grouped => {
         const map = {}
-        responses.forEach(r => {
-          if (!map[r.slide_number]) map[r.slide_number] = {}
-          map[r.slide_number][r.field_key] = r.field_value || ''
+        Object.entries(grouped).forEach(([slideNum, rows]) => {
+          const num = parseInt(slideNum)
+          if (!map[num]) map[num] = {}
+          rows.forEach(r => { map[num][r.field_key] = r.field_value || '' })
         })
         generateSessionPDF(session, map)
         setPdfStatus('done')

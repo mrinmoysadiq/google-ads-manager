@@ -429,7 +429,7 @@ export default function Admin() {
   ]
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className="min-h-screen bg-[#1b1b1b]"><div className="max-w-4xl mx-auto px-4 py-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[#c5c1b9]">Admin Panel</h1>
         <p className="text-[#8a8680] text-sm mt-1">Manage accounts, team members and data retention</p>
@@ -496,6 +496,7 @@ export default function Admin() {
           />
         )}
       </div>
+    </div>
     </div>
   )
 }

@@ -2,10 +2,9 @@ const STEPS = [
   { number: 1, title: 'Daily Performance' },
   { number: 2, title: 'Search Terms' },
   { number: 3, title: 'Assets & Landing Pages' },
-  { number: 4, title: 'Audience & Targeting' },
 ]
 
-export default function ProgressBar({ currentStep, totalSteps = 4 }) {
+export default function ProgressBar({ currentStep, totalSteps = 3 }) {
   return (
     <div className="bg-[#242424] px-4 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
       <div className="max-w-4xl mx-auto">

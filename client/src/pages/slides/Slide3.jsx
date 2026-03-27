@@ -115,9 +115,12 @@ export default function Slide3({ session, sessionId, onNext, onBack }) {
 
   // Load persistent data on mount
   useEffect(() => {
-    getSlideResponses(sessionId).then(responses => {
+    if (!sessionId) return
+    getSlideResponses(sessionId).then(grouped => {
+      // Server returns object grouped by slide_number key
+      const slideData = grouped[SLIDE_NUMBER] || []
       const map = {}
-      responses.forEach(r => { map[r.field_key] = r.field_value || '' })
+      slideData.forEach(r => { map[r.field_key] = r.field_value || '' })
 
       // Restore asset rows
       if (map.asset_status_snapshot) {

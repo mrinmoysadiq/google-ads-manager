@@ -9,7 +9,7 @@ import Admin from './pages/Admin'
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#1b1b1b]">
       <Navbar />
       <main className="pt-0">
         <Routes>
