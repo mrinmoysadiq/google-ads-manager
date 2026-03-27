@@ -11,36 +11,46 @@ export default function ExpandablePanel({ title, isOpen, onToggle, children }) {
   }, [isOpen, children])
 
   return (
-    <div className={`border rounded-lg overflow-hidden transition-all duration-200 ${
-      isOpen ? 'border-blue-200 bg-blue-50/30' : 'border-gray-200 bg-white'
-    }`}>
+    <div
+      className="rounded-lg overflow-hidden transition-all duration-200"
+      style={{
+        border: `1px solid ${isOpen ? 'rgba(87,94,207,0.3)' : 'rgba(255,255,255,0.08)'}`,
+        backgroundColor: '#242424',
+      }}
+    >
       {/* Header */}
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+        style={{ ':hover': { backgroundColor: 'rgba(255,255,255,0.03)' } }}
+        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)'}
+        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
       >
         {/* Checkbox-style toggle */}
-        <div className={`w-5 h-5 rounded flex items-center justify-center border-2 flex-shrink-0 transition-all ${
-          isOpen
-            ? 'bg-blue-600 border-blue-600'
-            : 'bg-white border-gray-300'
-        }`}>
+        <div
+          className="w-5 h-5 rounded flex items-center justify-center border-2 flex-shrink-0 transition-all"
+          style={{
+            backgroundColor: isOpen ? '#575ECF' : 'transparent',
+            borderColor: isOpen ? '#575ECF' : 'rgba(255,255,255,0.2)',
+          }}
+        >
           {isOpen && (
             <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
           )}
         </div>
-        <span className={`font-medium text-sm ${isOpen ? 'text-blue-700' : 'text-gray-700'}`}>
+        <span className="font-medium text-sm" style={{ color: '#c5c1b9' }}>
           {title}
         </span>
         <div className="ml-auto">
           <svg
-            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+            className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
+            style={{ color: '#8a8680' }}
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
@@ -55,7 +65,7 @@ export default function ExpandablePanel({ title, isOpen, onToggle, children }) {
           transition: 'max-height 0.3s ease-in-out',
         }}
       >
-        <div ref={contentRef} className="px-4 pb-4 pt-1 border-t border-gray-100">
+        <div ref={contentRef} className="px-4 pb-4 pt-1" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           {children}
         </div>
       </div>

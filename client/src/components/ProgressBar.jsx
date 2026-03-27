@@ -7,7 +7,7 @@ const STEPS = [
 
 export default function ProgressBar({ currentStep, totalSteps = 4 }) {
   return (
-    <div className="bg-white border-b border-gray-200 px-4 py-4">
+    <div className="bg-[#242424] px-4 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between">
           {STEPS.map((step, index) => {
@@ -22,11 +22,12 @@ export default function ProgressBar({ currentStep, totalSteps = 4 }) {
                   <div
                     className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm border-2 transition-all ${
                       isCompleted
-                        ? 'bg-green-500 border-green-500 text-white'
+                        ? 'bg-[#575ECF] border-[#575ECF] text-white'
                         : isCurrent
-                        ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-200'
-                        : 'bg-white border-gray-300 text-gray-400'
+                        ? 'bg-[#575ECF] border-[#575ECF] text-white'
+                        : 'bg-[#333] border-[#333] text-[#8a8680]'
                     }`}
+                    style={isCurrent ? { boxShadow: '0 0 0 3px rgba(87,94,207,0.25)' } : {}}
                   >
                     {isCompleted ? (
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -39,10 +40,10 @@ export default function ProgressBar({ currentStep, totalSteps = 4 }) {
                   <span
                     className={`mt-1.5 text-xs font-medium text-center max-w-[90px] leading-tight ${
                       isCompleted
-                        ? 'text-green-600'
+                        ? 'text-[#575ECF]'
                         : isCurrent
-                        ? 'text-blue-600'
-                        : 'text-gray-400'
+                        ? 'text-[#c5c1b9]'
+                        : 'text-[#8a8680]'
                     }`}
                   >
                     {step.title}
@@ -53,9 +54,8 @@ export default function ProgressBar({ currentStep, totalSteps = 4 }) {
                 {index < STEPS.length - 1 && (
                   <div className="flex-1 h-0.5 mx-3 mt-[-18px]">
                     <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        step.number < currentStep ? 'bg-green-400' : 'bg-gray-200'
-                      }`}
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{ backgroundColor: step.number < currentStep ? '#575ECF' : '#333' }}
                     />
                   </div>
                 )}

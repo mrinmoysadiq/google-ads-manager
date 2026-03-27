@@ -115,8 +115,8 @@ export default function Slide2({ session, sessionId, onNext, onBack }) {
       .catch(err => { console.error(err); setAddStatus('error'); resetStatus(setAddStatus) })
   }, [debouncedAddFields, addOpen])
 
-  const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white'
-  const labelClass = 'block text-sm font-semibold text-gray-700 mb-1.5'
+  const inputClass = 'w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none transition-colors bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#575ECF]'
+  const labelClass = 'block text-sm font-semibold text-[#8a8680] mb-1.5'
 
   const toggleMatchType = (type) => {
     setSelectedMatchTypes(prev =>
@@ -127,14 +127,14 @@ export default function Slide2({ session, sessionId, onNext, onBack }) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <div className="rounded-xl p-6" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-xl font-bold text-gray-900">Keyword Analysis & Management</h2>
+          <h2 className="text-xl font-bold text-[#c5c1b9]">Keyword Analysis & Management</h2>
           <AutoSaveIndicator saveStatus={saveStatus} />
         </div>
         {/* Instruction block */}
-        <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800 leading-relaxed">
+        <div className="mt-3 rounded-lg p-4" style={{ backgroundColor: 'rgba(87,94,207,0.1)', border: '1px solid rgba(87,94,207,0.2)' }}>
+          <p className="text-sm text-[#c5c1b9] leading-relaxed">
             <strong>Instructions:</strong> Analyze keyword performance for the last 7, 14, and 30 days. Identify keywords that have spent the most but are generating results at a high cost and low conversion rate. Take action accordingly.
           </p>
         </div>
@@ -144,8 +144,8 @@ export default function Slide2({ session, sessionId, onNext, onBack }) {
       <LastActionBox account={session.account_name} section={SECTION_NAME} />
 
       {/* Analysis Fields */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-5">
-        <h3 className="text-base font-semibold text-gray-800">Keyword Review</h3>
+      <div className="rounded-xl p-6 space-y-5" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <h3 className="text-base font-semibold text-[#c5c1b9]">Keyword Review</h3>
 
         <div>
           <label className={labelClass}>Underperforming Keywords Identified</label>
@@ -182,9 +182,9 @@ export default function Slide2({ session, sessionId, onNext, onBack }) {
       </div>
 
       {/* Changes Made */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <div className="rounded-xl p-6" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-gray-800">Changes Made</h3>
+          <h3 className="text-base font-semibold text-[#c5c1b9]">Changes Made</h3>
           <AutoSaveIndicator saveStatus={changeLogStatus} />
         </div>
         <textarea
@@ -210,7 +210,7 @@ export default function Slide2({ session, sessionId, onNext, onBack }) {
               <AutoSaveIndicator saveStatus={pauseStatus} />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Keywords Paused</label>
+              <label className="block text-xs text-[#8a8680] mb-1">Keywords Paused</label>
               <textarea
                 rows={3}
                 placeholder="List the keywords you paused (one per line or comma-separated)..."
@@ -220,7 +220,7 @@ export default function Slide2({ session, sessionId, onNext, onBack }) {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Reason for Pausing</label>
+              <label className="block text-xs text-[#8a8680] mb-1">Reason for Pausing</label>
               <textarea
                 rows={2}
                 placeholder="Explain why these keywords were paused..."
@@ -244,7 +244,7 @@ export default function Slide2({ session, sessionId, onNext, onBack }) {
               <AutoSaveIndicator saveStatus={addStatus} />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Keywords Added</label>
+              <label className="block text-xs text-[#8a8680] mb-1">Keywords Added</label>
               <textarea
                 rows={3}
                 placeholder="List the new keywords you added (one per line or comma-separated)..."
@@ -254,17 +254,17 @@ export default function Slide2({ session, sessionId, onNext, onBack }) {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Match Type</label>
+              <label className="block text-xs text-[#8a8680] mb-1">Match Type</label>
               <div className="flex gap-2 flex-wrap">
                 {MATCH_TYPES.map(type => (
                   <button
                     key={type}
                     type="button"
                     onClick={() => toggleMatchType(type)}
-                    className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
                       selectedMatchTypes.includes(type)
-                        ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                        : 'bg-white border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600'
+                        ? 'bg-[#575ECF] text-white'
+                        : 'bg-[#2a2a2a] text-[#8a8680] border border-white/10 hover:border-[#575ECF]'
                     }`}
                   >
                     {type}
@@ -273,7 +273,7 @@ export default function Slide2({ session, sessionId, onNext, onBack }) {
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Reason for Adding</label>
+              <label className="block text-xs text-[#8a8680] mb-1">Reason for Adding</label>
               <textarea
                 rows={2}
                 placeholder="Explain why these keywords were added..."
@@ -290,13 +290,16 @@ export default function Slide2({ session, sessionId, onNext, onBack }) {
       <div className="flex justify-between pt-2 pb-6">
         <button
           onClick={onBack}
-          className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-50 hover:border-gray-400 transition-all"
+          className="px-6 py-2.5 rounded-lg font-medium text-sm transition-all bg-[#2a2a2a] text-[#c5c1b9] border border-white/10 hover:border-[#575ECF]"
         >
           ← Back
         </button>
         <button
           onClick={onNext}
-          className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-all shadow-sm hover:shadow-md"
+          className="px-8 py-2.5 text-white rounded-lg font-medium text-sm transition-all"
+          style={{ backgroundColor: '#575ECF' }}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#6B72D8'}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = '#575ECF'}
         >
           Save & Continue →
         </button>

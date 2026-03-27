@@ -86,33 +86,33 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
     setFields(prev => ({ ...prev, [key]: value }))
   }
 
-  const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white'
-  const labelClass = 'block text-sm font-semibold text-gray-700 mb-1.5'
+  const inputClass = 'w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none transition-colors bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#575ECF]'
+  const labelClass = 'block text-sm font-semibold text-[#8a8680] mb-1.5'
 
   return (
     <div className="space-y-6">
       {/* Slide header */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <div className="rounded-xl p-6" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-xl font-bold text-gray-900">Daily Performance Review</h2>
+          <h2 className="text-xl font-bold text-[#c5c1b9]">Daily Performance Review</h2>
           <AutoSaveIndicator saveStatus={saveStatus} />
         </div>
-        <p className="text-gray-500 text-sm">Enter today's performance metrics and observations.</p>
+        <p className="text-[#8a8680] text-sm">Enter today's performance metrics and observations.</p>
       </div>
 
       {/* Last Action Box */}
       <LastActionBox account={session.account_name} section={SECTION_NAME} />
 
       {/* Performance Metrics */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-gray-800 mb-5">Performance Metrics</h3>
+      <div className="rounded-xl p-6" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <h3 className="text-base font-semibold text-[#c5c1b9] mb-5">Performance Metrics</h3>
 
         <div className="space-y-5">
           {/* Yesterday Spend */}
           <div>
             <label className={labelClass}>Spend Yesterday (USD)</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">$</span>
               <input
                 type="number"
                 step="0.01"
@@ -130,7 +130,7 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
             <label className={labelClass}>Yesterday</label>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Conversions</label>
+                <label className="block text-xs text-[#8a8680] mb-1">Conversions</label>
                 <input
                   type="number"
                   min="0"
@@ -141,9 +141,9 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Cost Per Result (CPR)</label>
+                <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result (CPR)</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">$</span>
                   <input
                     type="number"
                     step="0.01"
@@ -163,7 +163,7 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
             <label className={labelClass}>Last 7 Days</label>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Conversions</label>
+                <label className="block text-xs text-[#8a8680] mb-1">Conversions</label>
                 <input
                   type="number"
                   min="0"
@@ -174,9 +174,9 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Cost Per Result (CPR)</label>
+                <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result (CPR)</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">$</span>
                   <input
                     type="number"
                     step="0.01"
@@ -196,7 +196,7 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
             <label className={labelClass}>Last 14 Days</label>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Conversions</label>
+                <label className="block text-xs text-[#8a8680] mb-1">Conversions</label>
                 <input
                   type="number"
                   min="0"
@@ -207,9 +207,9 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Cost Per Result (CPR)</label>
+                <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result (CPR)</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">$</span>
                   <input
                     type="number"
                     step="0.01"
@@ -226,7 +226,7 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
 
           {/* Observations */}
           <div>
-            <label className={labelClass}>Observations <span className="text-gray-400 font-normal">(optional)</span></label>
+            <label className={labelClass}>Observations <span className="text-[#8a8680] font-normal">(optional)</span></label>
             <textarea
               rows={3}
               placeholder="Note any trends, anomalies, or performance observations..."
@@ -239,9 +239,9 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
       </div>
 
       {/* Changes Made */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <div className="rounded-xl p-6" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-gray-800">Changes Made</h3>
+          <h3 className="text-base font-semibold text-[#c5c1b9]">Changes Made</h3>
           <AutoSaveIndicator saveStatus={changeLogSaveStatus} />
         </div>
         <div>
@@ -263,15 +263,24 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
           disabled={isFirstSlide}
           className={`px-6 py-2.5 rounded-lg font-medium text-sm transition-all ${
             isFirstSlide
-              ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
-              : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400'
+              ? 'cursor-not-allowed'
+              : ''
           }`}
+          style={isFirstSlide
+            ? { backgroundColor: '#2a2a2a', color: '#555', border: '1px solid rgba(255,255,255,0.05)' }
+            : { backgroundColor: '#2a2a2a', color: '#c5c1b9', border: '1px solid rgba(255,255,255,0.1)' }
+          }
+          onMouseEnter={e => { if (!isFirstSlide) e.currentTarget.style.borderColor = '#575ECF' }}
+          onMouseLeave={e => { if (!isFirstSlide) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
         >
           ← Back
         </button>
         <button
           onClick={onNext}
-          className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-all shadow-sm hover:shadow-md"
+          className="px-8 py-2.5 text-white rounded-lg font-medium text-sm transition-all"
+          style={{ backgroundColor: '#575ECF' }}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#6B72D8'}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = '#575ECF'}
         >
           Save & Continue →
         </button>

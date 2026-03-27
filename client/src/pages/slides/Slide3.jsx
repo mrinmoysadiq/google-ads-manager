@@ -96,8 +96,8 @@ export default function Slide3({ session, sessionId, onNext, onBack }) {
 
   const setField = (key, value) => setFields(prev => ({ ...prev, [key]: value }))
 
-  const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white'
-  const labelClass = 'block text-sm font-semibold text-gray-700 mb-1.5'
+  const inputClass = 'w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none transition-colors bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#575ECF]'
+  const labelClass = 'block text-sm font-semibold text-[#8a8680] mb-1.5'
 
   const YesNoToggle = ({ value, onChange }) => (
     <div className="flex gap-2">
@@ -106,8 +106,8 @@ export default function Slide3({ session, sessionId, onNext, onBack }) {
         onClick={() => onChange('yes')}
         className={`px-5 py-2 rounded-lg text-sm font-medium border transition-all ${
           value === 'yes'
-            ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-            : 'bg-white border-gray-300 text-gray-600 hover:border-blue-400'
+            ? 'bg-[#575ECF] border-[#575ECF] text-white'
+            : 'bg-[#2a2a2a] border-white/10 text-[#8a8680] hover:border-[#575ECF]'
         }`}
       >
         Yes
@@ -117,8 +117,8 @@ export default function Slide3({ session, sessionId, onNext, onBack }) {
         onClick={() => onChange('no')}
         className={`px-5 py-2 rounded-lg text-sm font-medium border transition-all ${
           value === 'no'
-            ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-            : 'bg-white border-gray-300 text-gray-600 hover:border-blue-400'
+            ? 'bg-[#575ECF] border-[#575ECF] text-white'
+            : 'bg-[#2a2a2a] border-white/10 text-[#8a8680] hover:border-[#575ECF]'
         }`}
       >
         No
@@ -129,20 +129,20 @@ export default function Slide3({ session, sessionId, onNext, onBack }) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <div className="rounded-xl p-6" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-xl font-bold text-gray-900">Ad Copy & Creative Review</h2>
+          <h2 className="text-xl font-bold text-[#c5c1b9]">Ad Copy & Creative Review</h2>
           <AutoSaveIndicator saveStatus={saveStatus} />
         </div>
-        <p className="text-gray-500 text-sm">Review active ads, assess performance, and log any creative changes.</p>
+        <p className="text-[#8a8680] text-sm">Review active ads, assess performance, and log any creative changes.</p>
       </div>
 
       {/* Last Action */}
       <LastActionBox account={session.account_name} section={SECTION_NAME} />
 
       {/* Ad Review Fields */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-5">
-        <h3 className="text-base font-semibold text-gray-800">Ad Performance Review</h3>
+      <div className="rounded-xl p-6 space-y-5" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <h3 className="text-base font-semibold text-[#c5c1b9]">Ad Performance Review</h3>
 
         {/* Active Ads Count */}
         <div>
@@ -203,9 +203,9 @@ export default function Slide3({ session, sessionId, onNext, onBack }) {
       </div>
 
       {/* Changes Made */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <div className="rounded-xl p-6" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-gray-800">Changes Made</h3>
+          <h3 className="text-base font-semibold text-[#c5c1b9]">Changes Made</h3>
           <AutoSaveIndicator saveStatus={changeLogStatus} />
         </div>
         <textarea
@@ -225,11 +225,11 @@ export default function Slide3({ session, sessionId, onNext, onBack }) {
       >
         <div className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-700">Ad Change Details</span>
+            <span className="text-sm font-semibold text-[#c5c1b9]">Ad Change Details</span>
             <AutoSaveIndicator saveStatus={adPanelStatus} />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ads Paused</label>
+            <label className="block text-xs text-[#8a8680] mb-1">Ads Paused</label>
             <textarea
               rows={2}
               placeholder="List ads that were paused..."
@@ -239,7 +239,7 @@ export default function Slide3({ session, sessionId, onNext, onBack }) {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ads Created</label>
+            <label className="block text-xs text-[#8a8680] mb-1">Ads Created</label>
             <textarea
               rows={2}
               placeholder="Describe new ads created..."
@@ -249,7 +249,7 @@ export default function Slide3({ session, sessionId, onNext, onBack }) {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Reason for Changes</label>
+            <label className="block text-xs text-[#8a8680] mb-1">Reason for Changes</label>
             <textarea
               rows={2}
               placeholder="Explain why these ad changes were made..."
@@ -265,13 +265,16 @@ export default function Slide3({ session, sessionId, onNext, onBack }) {
       <div className="flex justify-between pt-2 pb-6">
         <button
           onClick={onBack}
-          className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-50 hover:border-gray-400 transition-all"
+          className="px-6 py-2.5 rounded-lg font-medium text-sm transition-all bg-[#2a2a2a] text-[#c5c1b9] border border-white/10 hover:border-[#575ECF]"
         >
           ← Back
         </button>
         <button
           onClick={onNext}
-          className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-all shadow-sm hover:shadow-md"
+          className="px-8 py-2.5 text-white rounded-lg font-medium text-sm transition-all"
+          style={{ backgroundColor: '#575ECF' }}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#6B72D8'}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = '#575ECF'}
         >
           Save & Continue →
         </button>

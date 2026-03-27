@@ -28,11 +28,11 @@ const CHANGE_TYPE_LABELS = {
 }
 
 const CHANGE_TYPE_COLORS = {
-  performance_note: 'bg-blue-100 text-blue-700',
-  keyword_paused: 'bg-orange-100 text-orange-700',
-  keyword_added: 'bg-green-100 text-green-700',
-  ad_copy_change: 'bg-purple-100 text-purple-700',
-  audience_targeting_change: 'bg-pink-100 text-pink-700',
+  performance_note: { backgroundColor: 'rgba(87,94,207,0.15)', color: '#575ECF' },
+  keyword_paused: { backgroundColor: 'rgba(251,191,36,0.15)', color: '#fbbf24' },
+  keyword_added: { backgroundColor: 'rgba(74,222,128,0.15)', color: '#4ade80' },
+  ad_copy_change: { backgroundColor: 'rgba(167,139,250,0.15)', color: '#a78bfa' },
+  audience_targeting_change: { backgroundColor: 'rgba(248,113,113,0.15)', color: '#f87171' },
 }
 
 const DETAIL_FIELD_LABELS = {
@@ -190,35 +190,57 @@ export default function ChangeLog() {
   const selectStyles = {
     control: (base, state) => ({
       ...base,
-      borderColor: state.isFocused ? '#2563eb' : '#d1d5db',
-      boxShadow: state.isFocused ? '0 0 0 1px #2563eb' : 'none',
-      '&:hover': { borderColor: '#2563eb' },
+      backgroundColor: '#2a2a2a',
+      borderColor: state.isFocused ? '#575ECF' : 'rgba(255,255,255,0.12)',
+      boxShadow: state.isFocused ? '0 0 0 1px #575ECF' : 'none',
+      '&:hover': { borderColor: '#575ECF' },
       borderRadius: '8px',
       minHeight: '38px',
       fontSize: '13px',
+      color: '#c5c1b9',
     }),
+    menu: (base) => ({ ...base, backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)' }),
     option: (base, state) => ({
       ...base,
-      backgroundColor: state.isSelected ? '#2563eb' : state.isFocused ? '#eff6ff' : 'white',
-      color: state.isSelected ? 'white' : '#111827',
+      backgroundColor: state.isSelected ? '#575ECF' : state.isFocused ? '#333' : '#2a2a2a',
+      color: '#c5c1b9',
       fontSize: '13px',
     }),
+    singleValue: (base) => ({ ...base, color: '#c5c1b9' }),
+    placeholder: (base) => ({ ...base, color: '#8a8680' }),
+    input: (base) => ({ ...base, color: '#c5c1b9' }),
+    multiValue: (base) => ({ ...base, backgroundColor: 'rgba(87,94,207,0.13)' }),
+    multiValueLabel: (base) => ({ ...base, color: '#c5c1b9' }),
   }
 
   const startIndex = (page - 1) * 25 + 1
   const endIndex = Math.min(page * 25, total)
 
+  const dateInputStyle = {
+    backgroundColor: '#2a2a2a',
+    border: '1px solid rgba(255,255,255,0.12)',
+    color: '#c5c1b9',
+    borderRadius: '8px',
+    padding: '6px 10px',
+    fontSize: '12px',
+    width: '100%',
+    outline: 'none',
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Change Log</h1>
-          <p className="text-gray-500 text-sm mt-1">Track all changes made across accounts</p>
+          <h1 className="text-2xl font-bold text-[#c5c1b9]">Change Log</h1>
+          <p className="text-[#8a8680] text-sm mt-1">Track all changes made across accounts</p>
         </div>
         <button
           onClick={handleExport}
           disabled={exporting}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-all shadow-sm disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+          style={{ backgroundColor: '#575ECF' }}
+          onMouseEnter={e => { if (!exporting) e.currentTarget.style.backgroundColor = '#6B72D8' }}
+          onMouseLeave={e => { if (!exporting) e.currentTarget.style.backgroundColor = '#575ECF' }}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -228,11 +250,11 @@ export default function ChangeLog() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm mb-6">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Filters</h3>
+      <div className="rounded-xl p-5 mb-6" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <h3 className="text-sm font-semibold text-[#c5c1b9] mb-4">Filters</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Account</label>
+            <label className="block text-xs text-[#8a8680] mb-1">Account</label>
             <Select
               options={[{ value: '', label: 'All Accounts' }, ...accounts]}
               value={filters.account}
@@ -243,7 +265,7 @@ export default function ChangeLog() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Team Member</label>
+            <label className="block text-xs text-[#8a8680] mb-1">Team Member</label>
             <Select
               options={[{ value: '', label: 'All Members' }, ...teamMembers]}
               value={filters.team_member}
@@ -254,25 +276,29 @@ export default function ChangeLog() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Date From</label>
+            <label className="block text-xs text-[#8a8680] mb-1">Date From</label>
             <input
               type="date"
               value={filters.date_from}
               onChange={e => setFilters(prev => ({ ...prev, date_from: e.target.value }))}
-              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              style={dateInputStyle}
+              onFocus={e => e.target.style.borderColor = '#575ECF'}
+              onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.12)'}
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Date To</label>
+            <label className="block text-xs text-[#8a8680] mb-1">Date To</label>
             <input
               type="date"
               value={filters.date_to}
               onChange={e => setFilters(prev => ({ ...prev, date_to: e.target.value }))}
-              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              style={dateInputStyle}
+              onFocus={e => e.target.style.borderColor = '#575ECF'}
+              onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.12)'}
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Change Type</label>
+            <label className="block text-xs text-[#8a8680] mb-1">Change Type</label>
             <Select
               options={CHANGE_TYPE_OPTIONS}
               value={filters.change_type}
@@ -283,7 +309,7 @@ export default function ChangeLog() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Section</label>
+            <label className="block text-xs text-[#8a8680] mb-1">Section</label>
             <Select
               options={SECTION_OPTIONS}
               value={filters.section}
@@ -297,13 +323,19 @@ export default function ChangeLog() {
         <div className="flex gap-2 mt-4">
           <button
             onClick={handleApplyFilters}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-all"
+            className="px-5 py-2 text-white rounded-lg text-sm font-medium transition-all"
+            style={{ backgroundColor: '#575ECF' }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#6B72D8'}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#575ECF'}
           >
             Apply Filters
           </button>
           <button
             onClick={handleReset}
-            className="px-5 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-medium transition-all"
+            className="px-5 py-2 rounded-lg text-sm font-medium transition-all text-[#c5c1b9]"
+            style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)' }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = '#575ECF'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
           >
             Reset
           </button>
@@ -311,28 +343,28 @@ export default function ChangeLog() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <svg className="w-8 h-8 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+            <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24" style={{ color: '#575ECF' }}>
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
           </div>
         ) : logs.length === 0 ? (
           <div className="text-center py-16">
-            <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-12 h-12 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#333' }}>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p className="text-gray-400 text-sm">No change log entries found.</p>
+            <p className="text-sm" style={{ color: '#8a8680' }}>No change log entries found.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead style={{ backgroundColor: '#1b1b1b', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                 <tr>
                   {['Date', 'Account', 'Team Member', 'Section', 'Change Type', 'Summary', 'Actions'].map(col => (
-                    <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    <th key={col} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a8680' }}>
                       {col}
                     </th>
                   ))}
@@ -340,27 +372,33 @@ export default function ChangeLog() {
               </thead>
               <tbody>
                 {logs.map((log, i) => (
-                  <tr key={log.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(log.date)}</td>
-                    <td className="px-4 py-3 text-gray-900 font-medium">{log.account_name}</td>
-                    <td className="px-4 py-3 text-gray-700">{log.team_member}</td>
-                    <td className="px-4 py-3 text-gray-700 text-xs">{log.section}</td>
+                  <tr key={log.id} style={{ backgroundColor: i % 2 === 0 ? '#242424' : '#2a2a2a', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <td className="px-4 py-3 whitespace-nowrap" style={{ color: '#c5c1b9' }}>{formatDate(log.date)}</td>
+                    <td className="px-4 py-3 font-medium" style={{ color: '#c5c1b9' }}>{log.account_name}</td>
+                    <td className="px-4 py-3" style={{ color: '#c5c1b9' }}>{log.team_member}</td>
+                    <td className="px-4 py-3 text-xs" style={{ color: '#8a8680' }}>{log.section}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${CHANGE_TYPE_COLORS[log.change_type] || 'bg-gray-100 text-gray-700'}`}>
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                        style={CHANGE_TYPE_COLORS[log.change_type] || { backgroundColor: 'rgba(255,255,255,0.08)', color: '#c5c1b9' }}
+                      >
                         {CHANGE_TYPE_LABELS[log.change_type] || log.change_type}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 max-w-xs">
-                      <span className="line-clamp-2 text-xs">
+                    <td className="px-4 py-3 max-w-xs">
+                      <span className="line-clamp-2 text-xs" style={{ color: '#8a8680' }}>
                         {log.changes_made_note
                           ? log.changes_made_note.substring(0, 80) + (log.changes_made_note.length > 80 ? '…' : '')
-                          : <span className="text-gray-300 italic">—</span>}
+                          : <span style={{ color: '#555', fontStyle: 'italic' }}>—</span>}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <button
                         onClick={() => setSelectedEntry(log)}
-                        className="text-blue-600 hover:text-blue-800 text-xs font-medium hover:underline"
+                        className="text-xs font-medium transition-colors hover:underline"
+                        style={{ color: '#575ECF' }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#6B72D8'}
+                        onMouseLeave={e => e.currentTarget.style.color = '#575ECF'}
                       >
                         View Details
                       </button>
@@ -374,25 +412,31 @@ export default function ChangeLog() {
 
         {/* Pagination */}
         {total > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-            <p className="text-sm text-gray-600">
-              Showing <strong>{startIndex}–{endIndex}</strong> of <strong>{total}</strong> results
+          <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#1b1b1b' }}>
+            <p className="text-sm" style={{ color: '#8a8680' }}>
+              Showing <strong style={{ color: '#c5c1b9' }}>{startIndex}–{endIndex}</strong> of <strong style={{ color: '#c5c1b9' }}>{total}</strong> results
             </p>
             <div className="flex gap-2">
               <button
                 onClick={() => { const np = page - 1; setPage(np); fetchLogs(appliedFilters, np) }}
                 disabled={page <= 1}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="px-3 py-1.5 text-sm rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ border: '1px solid rgba(255,255,255,0.1)', color: '#c5c1b9', backgroundColor: '#2a2a2a' }}
+                onMouseEnter={e => { if (page > 1) e.currentTarget.style.borderColor = '#575ECF' }}
+                onMouseLeave={e => { if (page > 1) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
               >
                 ← Prev
               </button>
-              <span className="px-3 py-1.5 text-sm text-gray-600 font-medium">
+              <span className="px-3 py-1.5 text-sm font-medium" style={{ color: '#c5c1b9' }}>
                 {page} / {totalPages}
               </span>
               <button
                 onClick={() => { const np = page + 1; setPage(np); fetchLogs(appliedFilters, np) }}
                 disabled={page >= totalPages}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="px-3 py-1.5 text-sm rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ border: '1px solid rgba(255,255,255,0.1)', color: '#c5c1b9', backgroundColor: '#2a2a2a' }}
+                onMouseEnter={e => { if (page < totalPages) e.currentTarget.style.borderColor = '#575ECF' }}
+                onMouseLeave={e => { if (page < totalPages) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
               >
                 Next →
               </button>
@@ -403,21 +447,24 @@ export default function ChangeLog() {
 
       {/* Detail Modal */}
       {selectedEntry && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 flex items-center justify-center z-50 px-4" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}>
+          <div className="rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.12)' }}>
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Change Log Details</h3>
-                <p className="text-sm text-gray-500">
+                <h3 className="text-lg font-bold text-[#c5c1b9]">Change Log Details</h3>
+                <p className="text-sm text-[#8a8680]">
                   {selectedEntry.account_name} — {formatDate(selectedEntry.date)}
                 </p>
               </div>
               <button
                 onClick={() => setSelectedEntry(null)}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-full transition-colors"
+                style={{ color: '#8a8680' }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#c5c1b9' }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#8a8680' }}
               >
-                <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -432,15 +479,18 @@ export default function ChangeLog() {
                   return (
                     <div key={key} className="flex gap-4">
                       <div className="w-44 flex-shrink-0">
-                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a8680' }}>{label}</span>
                       </div>
                       <div className="flex-1">
                         {key === 'change_type' ? (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${CHANGE_TYPE_COLORS[value] || 'bg-gray-100 text-gray-700'}`}>
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                            style={CHANGE_TYPE_COLORS[value] || { backgroundColor: 'rgba(255,255,255,0.08)', color: '#c5c1b9' }}
+                          >
                             {CHANGE_TYPE_LABELS[value] || value}
                           </span>
                         ) : (
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{value}</p>
+                          <p className="text-sm whitespace-pre-wrap" style={{ color: '#c5c1b9' }}>{value}</p>
                         )}
                       </div>
                     </div>
@@ -450,10 +500,13 @@ export default function ChangeLog() {
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+            <div className="px-6 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#1b1b1b' }}>
               <button
                 onClick={() => setSelectedEntry(null)}
-                className="w-full py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                className="w-full py-2 px-4 rounded-lg text-sm font-medium transition-colors text-[#c5c1b9]"
+                style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#575ECF'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
               >
                 Close
               </button>

@@ -55,13 +55,13 @@ export default function ChecklistWrapper() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-[#1b1b1b] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <svg className="w-10 h-10 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+          <svg className="w-10 h-10 animate-spin" fill="none" viewBox="0 0 24 24" style={{ color: '#575ECF' }}>
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          <p className="text-gray-500 text-sm">Loading session...</p>
+          <p className="text-[#8a8680] text-sm">Loading session...</p>
         </div>
       </div>
     )
@@ -77,7 +77,7 @@ export default function ChecklistWrapper() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#1b1b1b]">
       <ProgressBar currentStep={currentSlide} totalSteps={4} />
       <StickyHeader session={session} />
       <div className="max-w-4xl mx-auto px-4 py-6">

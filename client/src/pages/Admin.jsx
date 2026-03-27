@@ -82,14 +82,19 @@ function AdminTab({ type, items, setItems, onAdd, onUpdate, onToggle, onDelete }
     }
   }
 
+  const inputClass = 'flex-1 rounded-lg px-3 py-2 text-sm focus:outline-none transition-colors text-[#c5c1b9]'
+
   return (
     <div>
       {/* Add Button */}
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">{items.length} {items.length === 1 ? 'entry' : 'entries'}</p>
+        <p className="text-sm text-[#8a8680]">{items.length} {items.length === 1 ? 'entry' : 'entries'}</p>
         <button
           onClick={() => { setShowAddForm(v => !v); setNewName('') }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-all"
+          className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-medium transition-all"
+          style={{ backgroundColor: '#575ECF' }}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#6B72D8'}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = '#575ECF'}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -100,26 +105,35 @@ function AdminTab({ type, items, setItems, onAdd, onUpdate, onToggle, onDelete }
 
       {/* Add Form */}
       {showAddForm && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex gap-3 items-center">
+        <div className="rounded-lg p-4 mb-4 flex gap-3 items-center" style={{ backgroundColor: 'rgba(87,94,207,0.08)', border: '1px solid rgba(87,94,207,0.2)' }}>
           <input
             type="text"
             placeholder={`Enter ${type === 'account' ? 'account' : 'team member'} name...`}
             value={newName}
             onChange={e => setNewName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAdd()}
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            className={inputClass}
+            style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)' }}
+            onFocus={e => e.target.style.borderColor = '#575ECF'}
+            onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.12)'}
             autoFocus
           />
           <button
             onClick={handleAdd}
             disabled={loading || !newName.trim()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-all"
+            className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-all"
+            style={{ backgroundColor: '#575ECF' }}
+            onMouseEnter={e => { if (!loading && newName.trim()) e.currentTarget.style.backgroundColor = '#6B72D8' }}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#575ECF'}
           >
             Save
           </button>
           <button
             onClick={() => { setShowAddForm(false); setNewName('') }}
-            className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-medium transition-all"
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-all text-[#c5c1b9]"
+            style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)' }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = '#575ECF'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
           >
             Cancel
           </button>
@@ -127,25 +141,25 @@ function AdminTab({ type, items, setItems, onAdd, onUpdate, onToggle, onDelete }
       )}
 
       {/* Table */}
-      <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead style={{ backgroundColor: '#1b1b1b', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Status</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wide">Actions</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a8680' }}>Name</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a8680' }}>Status</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a8680' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-gray-400 text-sm italic">
+                <td colSpan={3} className="px-4 py-8 text-center text-sm italic" style={{ color: '#8a8680' }}>
                   No entries yet. Add one above.
                 </td>
               </tr>
             ) : (
               items.map((item, i) => (
-                <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                <tr key={item.id} style={{ backgroundColor: i % 2 === 0 ? '#242424' : '#2a2a2a', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   <td className="px-4 py-3">
                     {editingId === item.id ? (
                       <input
@@ -156,19 +170,24 @@ function AdminTab({ type, items, setItems, onAdd, onUpdate, onToggle, onDelete }
                           if (e.key === 'Enter') handleEditSave(item.id)
                           if (e.key === 'Escape') { setEditingId(null); setEditingName('') }
                         }}
-                        className="w-full border border-blue-400 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full rounded-lg px-3 py-1.5 text-sm focus:outline-none text-[#c5c1b9]"
+                        style={{ backgroundColor: '#2a2a2a', border: '1px solid #575ECF' }}
                         autoFocus
                       />
                     ) : (
-                      <span className={`font-medium ${item.active ? 'text-gray-900' : 'text-gray-400 line-through'}`}>
+                      <span className={`font-medium ${item.active ? 'text-[#c5c1b9]' : 'text-[#8a8680] line-through'}`}>
                         {item.name}
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      item.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
+                    <span
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                      style={item.active
+                        ? { backgroundColor: 'rgba(74,222,128,0.1)', color: '#4ade80' }
+                        : { color: '#8a8680' }
+                      }
+                    >
                       {item.active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
@@ -179,13 +198,19 @@ function AdminTab({ type, items, setItems, onAdd, onUpdate, onToggle, onDelete }
                           <button
                             onClick={() => handleEditSave(item.id)}
                             disabled={loading}
-                            className="text-green-600 hover:text-green-800 text-xs font-medium"
+                            className="text-xs font-medium transition-colors"
+                            style={{ color: '#4ade80' }}
+                            onMouseEnter={e => e.currentTarget.style.color = '#86efac'}
+                            onMouseLeave={e => e.currentTarget.style.color = '#4ade80'}
                           >
                             Save
                           </button>
                           <button
                             onClick={() => { setEditingId(null); setEditingName('') }}
-                            className="text-gray-500 hover:text-gray-700 text-xs font-medium"
+                            className="text-xs font-medium transition-colors"
+                            style={{ color: '#8a8680' }}
+                            onMouseEnter={e => e.currentTarget.style.color = '#c5c1b9'}
+                            onMouseLeave={e => e.currentTarget.style.color = '#8a8680'}
                           >
                             Cancel
                           </button>
@@ -194,22 +219,29 @@ function AdminTab({ type, items, setItems, onAdd, onUpdate, onToggle, onDelete }
                         <>
                           <button
                             onClick={() => { setEditingId(item.id); setEditingName(item.name) }}
-                            className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                            className="text-xs font-medium transition-colors"
+                            style={{ color: '#575ECF' }}
+                            onMouseEnter={e => e.currentTarget.style.color = '#6B72D8'}
+                            onMouseLeave={e => e.currentTarget.style.color = '#575ECF'}
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => handleToggle(item)}
-                            className={`text-xs font-medium ${
-                              item.active ? 'text-orange-500 hover:text-orange-700' : 'text-green-600 hover:text-green-800'
-                            }`}
+                            className="text-xs font-medium transition-colors"
+                            style={{ color: item.active ? '#fbbf24' : '#4ade80' }}
+                            onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+                            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
                           >
                             {item.active ? 'Deactivate' : 'Activate'}
                           </button>
                           {onDelete && (
                             <button
                               onClick={() => handleDelete(item)}
-                              className="text-red-500 hover:text-red-700 text-xs font-medium"
+                              className="text-xs font-medium transition-colors"
+                              style={{ color: '#f87171' }}
+                              onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+                              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
                             >
                               Delete
                             </button>
@@ -256,26 +288,32 @@ export default function Admin() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Admin Panel</h1>
-        <p className="text-gray-500 text-sm mt-1">Manage accounts and team members</p>
+        <h1 className="text-2xl font-bold text-[#c5c1b9]">Admin Panel</h1>
+        <p className="text-[#8a8680] text-sm mt-1">Manage accounts and team members</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-6 w-fit">
+      <div className="flex gap-1 p-1 rounded-xl mb-6 w-fit" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-              activeTab === tab.id
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
+            className="px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
+            style={activeTab === tab.id
+              ? { backgroundColor: '#575ECF', color: '#fff' }
+              : { color: '#8a8680' }
+            }
+            onMouseEnter={e => { if (activeTab !== tab.id) e.currentTarget.style.color = '#c5c1b9' }}
+            onMouseLeave={e => { if (activeTab !== tab.id) e.currentTarget.style.color = '#8a8680' }}
           >
             {tab.label}
-            <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-semibold ${
-              activeTab === tab.id ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-500'
-            }`}>
+            <span
+              className="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-semibold"
+              style={activeTab === tab.id
+                ? { backgroundColor: 'rgba(255,255,255,0.2)', color: '#fff' }
+                : { backgroundColor: 'rgba(255,255,255,0.08)', color: '#8a8680' }
+              }
+            >
               {tab.count}
             </span>
           </button>
@@ -283,10 +321,10 @@ export default function Admin() {
       </div>
 
       {/* Content */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <div className="rounded-xl p-6" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <svg className="w-8 h-8 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+            <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24" style={{ color: '#575ECF' }}>
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>

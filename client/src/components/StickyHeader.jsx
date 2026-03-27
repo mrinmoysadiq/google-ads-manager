@@ -17,22 +17,22 @@ export default function StickyHeader({ session }) {
   }
 
   return (
-    <div className="bg-blue-50 border-b border-blue-100 px-4 py-2.5 sticky top-16 z-40">
+    <div className="bg-[#242424] px-4 py-2.5 sticky top-16 z-40" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
       <div className="max-w-4xl mx-auto">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
           <div className="flex items-center gap-1.5">
-            <span className="text-blue-500 font-medium">Account:</span>
-            <span className="text-blue-900 font-semibold">{session.account_name}</span>
+            <span className="text-[#8a8680] font-medium">Account:</span>
+            <span className="text-[#c5c1b9] font-semibold">{session.account_name}</span>
           </div>
-          <div className="text-blue-200 hidden sm:block">|</div>
+          <div className="text-[#575ECF] hidden sm:block">·</div>
           <div className="flex items-center gap-1.5">
-            <span className="text-blue-500 font-medium">Team Member:</span>
-            <span className="text-blue-900 font-semibold">{session.team_member}</span>
+            <span className="text-[#8a8680] font-medium">Team Member:</span>
+            <span className="text-[#c5c1b9] font-semibold">{session.team_member}</span>
           </div>
-          <div className="text-blue-200 hidden sm:block">|</div>
+          <div className="text-[#575ECF] hidden sm:block">·</div>
           <div className="flex items-center gap-1.5">
-            <span className="text-blue-500 font-medium">Date:</span>
-            <span className="text-blue-900 font-semibold">{formatDate(session.date)}</span>
+            <span className="text-[#8a8680] font-medium">Date:</span>
+            <span className="text-[#c5c1b9] font-semibold">{formatDate(session.date)}</span>
           </div>
         </div>
       </div>
