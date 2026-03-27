@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import {
   getAccounts, createAccount, updateAccount, deleteAccount,
-  getTeamMembers, createTeamMember, updateTeamMember
+  getTeamMembers, createTeamMember, updateTeamMember,
+  getDataStats, cleanupOldData
 } from '../utils/api'
 
 function AdminTab({ type, items, setItems, onAdd, onUpdate, onToggle, onDelete }) {
@@ -260,6 +261,147 @@ function AdminTab({ type, items, setItems, onAdd, onUpdate, onToggle, onDelete }
   )
 }
 
+function DataManagementTab() {
+  const [stats, setStats] = useState(null)
+  const [loadingStats, setLoadingStats] = useState(true)
+  const [cleaning, setCleaning] = useState(false)
+  const [lastResult, setLastResult] = useState(null)
+
+  const fetchStats = () => {
+    setLoadingStats(true)
+    getDataStats()
+      .then(data => { setStats(data); setLoadingStats(false) })
+      .catch(err => { console.error(err); setLoadingStats(false) })
+  }
+
+  useEffect(() => { fetchStats() }, [])
+
+  const handleCleanup = async () => {
+    if (!window.confirm(
+      `This will permanently delete all sessions, change logs, and slide responses older than 90 days (before ${stats?.cutoffDate}).\n\nDisk space will be reclaimed immediately.\n\nThis cannot be undone. Continue?`
+    )) return
+
+    setCleaning(true)
+    try {
+      const result = await cleanupOldData()
+      setLastResult(result)
+      toast.success(`Cleanup complete! Deleted ${result.deleted.sessions} sessions, ${result.deleted.changeLogs} change log entries.`)
+      fetchStats()
+    } catch (err) {
+      console.error(err)
+      toast.error('Cleanup failed')
+    } finally {
+      setCleaning(false)
+    }
+  }
+
+  const statCard = (label, value, sub) => (
+    <div className="rounded-xl p-5 flex flex-col gap-1" style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <p className="text-xs uppercase tracking-wide font-semibold" style={{ color: '#8a8680' }}>{label}</p>
+      <p className="text-3xl font-bold text-[#c5c1b9]">{value}</p>
+      {sub && <p className="text-xs" style={{ color: '#8a8680' }}>{sub}</p>}
+    </div>
+  )
+
+  return (
+    <div className="space-y-6">
+      {/* Info Banner */}
+      <div className="rounded-xl p-4 flex gap-3" style={{ backgroundColor: 'rgba(87,94,207,0.08)', border: '1px solid rgba(87,94,207,0.2)' }}>
+        <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#575ECF' }}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div>
+          <p className="text-sm font-medium text-[#c5c1b9]">Data Retention Policy</p>
+          <p className="text-sm mt-0.5" style={{ color: '#8a8680' }}>
+            Running cleanup removes all sessions, slide responses, and change log entries older than <strong className="text-[#c5c1b9]">90 days</strong> from the database and reclaims disk space immediately using SQLite VACUUM. Accounts and team members are never deleted.
+          </p>
+        </div>
+      </div>
+
+      {/* Stats */}
+      {loadingStats ? (
+        <div className="flex justify-center py-8">
+          <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24" style={{ color: '#575ECF' }}>
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        </div>
+      ) : stats ? (
+        <>
+          <div>
+            <p className="text-sm font-semibold text-[#c5c1b9] mb-3">Current Database</p>
+            <div className="grid grid-cols-3 gap-3">
+              {statCard('Sessions', stats.total.sessions)}
+              {statCard('Change Logs', stats.total.changeLogs)}
+              {statCard('Slide Responses', stats.total.slideResponses)}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-[#c5c1b9] mb-3">Older Than 90 Days <span className="font-normal text-[#8a8680]">(eligible for deletion — before {stats.cutoffDate})</span></p>
+            <div className="grid grid-cols-2 gap-3">
+              {statCard('Sessions', stats.olderThan90Days.sessions, stats.olderThan90Days.sessions > 0 ? 'Will be deleted' : 'Nothing to delete')}
+              {statCard('Change Logs', stats.olderThan90Days.changeLogs, stats.olderThan90Days.changeLogs > 0 ? 'Will be deleted' : 'Nothing to delete')}
+            </div>
+          </div>
+
+          {stats.oldestRecord && (
+            <p className="text-xs" style={{ color: '#8a8680' }}>
+              Oldest record: <span className="text-[#c5c1b9]">{stats.oldestRecord.split('T')[0]}</span>
+            </p>
+          )}
+        </>
+      ) : null}
+
+      {/* Last Result */}
+      {lastResult && (
+        <div className="rounded-xl p-4" style={{ backgroundColor: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.2)' }}>
+          <p className="text-sm font-medium" style={{ color: '#4ade80' }}>✓ Last cleanup result</p>
+          <p className="text-sm mt-1" style={{ color: '#8a8680' }}>
+            Deleted <strong className="text-[#c5c1b9]">{lastResult.deleted.sessions}</strong> sessions,{' '}
+            <strong className="text-[#c5c1b9]">{lastResult.deleted.slideResponses}</strong> slide responses,{' '}
+            <strong className="text-[#c5c1b9]">{lastResult.deleted.changeLogs}</strong> change log entries.
+            Disk space reclaimed.
+          </p>
+        </div>
+      )}
+
+      {/* Action */}
+      <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+        <div>
+          <p className="text-sm font-medium text-[#c5c1b9]">Delete data older than 90 days</p>
+          <p className="text-xs mt-0.5" style={{ color: '#8a8680' }}>Disk space is reclaimed immediately after deletion</p>
+        </div>
+        <button
+          onClick={handleCleanup}
+          disabled={cleaning || loadingStats || (stats && stats.olderThan90Days.sessions === 0 && stats.olderThan90Days.changeLogs === 0)}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white"
+          style={{ backgroundColor: '#dc2626' }}
+          onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = '#b91c1c' }}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = '#dc2626'}
+        >
+          {cleaning ? (
+            <>
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Cleaning up...
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Run Cleanup
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function Admin() {
   const [activeTab, setActiveTab] = useState('accounts')
   const [accounts, setAccounts] = useState([])
@@ -283,13 +425,14 @@ export default function Admin() {
   const tabs = [
     { id: 'accounts', label: 'Accounts', count: accounts.length },
     { id: 'team-members', label: 'Team Members', count: teamMembers.length },
+    { id: 'data', label: 'Data Management', count: null },
   ]
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[#c5c1b9]">Admin Panel</h1>
-        <p className="text-[#8a8680] text-sm mt-1">Manage accounts and team members</p>
+        <p className="text-[#8a8680] text-sm mt-1">Manage accounts, team members and data retention</p>
       </div>
 
       {/* Tabs */}
@@ -307,22 +450,26 @@ export default function Admin() {
             onMouseLeave={e => { if (activeTab !== tab.id) e.currentTarget.style.color = '#8a8680' }}
           >
             {tab.label}
-            <span
-              className="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-semibold"
-              style={activeTab === tab.id
-                ? { backgroundColor: 'rgba(255,255,255,0.2)', color: '#fff' }
-                : { backgroundColor: 'rgba(255,255,255,0.08)', color: '#8a8680' }
-              }
-            >
-              {tab.count}
-            </span>
+            {tab.count !== null && (
+              <span
+                className="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-semibold"
+                style={activeTab === tab.id
+                  ? { backgroundColor: 'rgba(255,255,255,0.2)', color: '#fff' }
+                  : { backgroundColor: 'rgba(255,255,255,0.08)', color: '#8a8680' }
+                }
+              >
+                {tab.count}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       {/* Content */}
       <div className="rounded-xl p-6" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
-        {loading ? (
+        {activeTab === 'data' ? (
+          <DataManagementTab />
+        ) : loading ? (
           <div className="flex items-center justify-center py-12">
             <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24" style={{ color: '#575ECF' }}>
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

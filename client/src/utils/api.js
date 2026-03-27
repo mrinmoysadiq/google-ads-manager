@@ -48,6 +48,10 @@ export const createAccount = (name) => api.post('/admin/accounts', { name }).the
 export const updateAccount = (id, data) => api.patch(`/admin/accounts/${id}`, data).then(r => r.data)
 export const deleteAccount = (id) => api.delete(`/admin/accounts/${id}`).then(r => r.data)
 
+// Admin - Data Management
+export const getDataStats = () => api.get('/admin/data-stats').then(r => r.data)
+export const cleanupOldData = () => api.delete('/admin/cleanup').then(r => r.data)
+
 // Admin - Team Members
 export const getTeamMembers = () => api.get('/admin/team-members').then(r => r.data)
 export const createTeamMember = (name) => api.post('/admin/team-members', { name }).then(r => r.data)

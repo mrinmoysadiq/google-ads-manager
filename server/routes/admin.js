@@ -140,4 +140,81 @@ router.patch('/team-members/:id', (req, res) => {
   }
 });
 
+// --- DATA MANAGEMENT ---
+
+// GET /data-stats — return record counts and how many are older than 90 days
+router.get('/data-stats', (req, res) => {
+  try {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+
+    const totalSessions = db.prepare('SELECT COUNT(*) as cnt FROM sessions').get().cnt;
+    const totalChangeLogs = db.prepare('SELECT COUNT(*) as cnt FROM change_log').get().cnt;
+    const totalSlideResponses = db.prepare('SELECT COUNT(*) as cnt FROM slide_responses').get().cnt;
+
+    const oldSessions = db.prepare('SELECT COUNT(*) as cnt FROM sessions WHERE date(created_at) < ?').get(cutoffStr).cnt;
+    const oldChangeLogs = db.prepare('SELECT COUNT(*) as cnt FROM change_log WHERE date < ?').get(cutoffStr).cnt;
+
+    // Get oldest record date
+    const oldestSession = db.prepare('SELECT MIN(created_at) as oldest FROM sessions').get().oldest;
+    const oldestChangeLog = db.prepare('SELECT MIN(date) as oldest FROM change_log').get().oldest;
+    const oldest = [oldestSession, oldestChangeLog].filter(Boolean).sort()[0] || null;
+
+    res.json({
+      total: { sessions: totalSessions, changeLogs: totalChangeLogs, slideResponses: totalSlideResponses },
+      olderThan90Days: { sessions: oldSessions, changeLogs: oldChangeLogs },
+      oldestRecord: oldest,
+      cutoffDate: cutoffStr
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to get data stats' });
+  }
+});
+
+// DELETE /cleanup — delete all data older than 90 days and reclaim disk space
+router.delete('/cleanup', (req, res) => {
+  try {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+
+    // Find old session IDs first
+    const oldSessionIds = db.prepare('SELECT id FROM sessions WHERE date(created_at) < ?').all(cutoffStr).map(r => r.id);
+
+    let deletedSessions = 0;
+    let deletedSlideResponses = 0;
+    let deletedChangeLogs = 0;
+
+    if (oldSessionIds.length > 0) {
+      const placeholders = oldSessionIds.map(() => '?').join(',');
+      deletedSlideResponses = db.prepare(`DELETE FROM slide_responses WHERE session_id IN (${placeholders})`).run(...oldSessionIds).changes;
+      deletedSessions = db.prepare(`DELETE FROM sessions WHERE id IN (${placeholders})`).run(...oldSessionIds).changes;
+    }
+
+    // Delete old change_log entries (by date field)
+    deletedChangeLogs = db.prepare('DELETE FROM change_log WHERE date < ?').run(cutoffStr).changes;
+
+    // Run VACUUM to reclaim disk space on the persistent disk
+    db.exec('VACUUM');
+
+    console.log(`Cleanup: removed ${deletedSessions} sessions, ${deletedSlideResponses} slide responses, ${deletedChangeLogs} change log entries. VACUUM complete.`);
+
+    res.json({
+      success: true,
+      deleted: {
+        sessions: deletedSessions,
+        slideResponses: deletedSlideResponses,
+        changeLogs: deletedChangeLogs
+      },
+      cutoffDate: cutoffStr,
+      message: `Deleted all records older than ${cutoffStr} and reclaimed disk space.`
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to clean up old data' });
+  }
+});
+
 module.exports = router;
