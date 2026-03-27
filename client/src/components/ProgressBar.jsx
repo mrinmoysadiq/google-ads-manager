@@ -1,7 +1,7 @@
 const STEPS = [
-  { number: 1, title: 'Spend & Conversions' },
-  { number: 2, title: 'Keyword Analysis' },
-  { number: 3, title: 'Ad Copy Review' },
+  { number: 1, title: 'Daily Performance' },
+  { number: 2, title: 'Search Terms' },
+  { number: 3, title: 'Assets & Landing Pages' },
   { number: 4, title: 'Audience & Targeting' },
 ]
 

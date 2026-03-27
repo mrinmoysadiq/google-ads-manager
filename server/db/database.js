@@ -60,6 +60,17 @@ function initializeDatabase() {
       bid_changes TEXT,
       other_targeting TEXT,
       targeting_reason TEXT,
+      disapproved_asset_type TEXT,
+      disapproved_asset_issue TEXT,
+      disapproved_asset_action TEXT,
+      account_sitelink_issues TEXT,
+      account_sitelink_action TEXT,
+      campaign_sitelink_issues TEXT,
+      campaign_sitelink_action TEXT,
+      lp_issue_description TEXT,
+      lp_escalated_to TEXT,
+      lp_issue_status TEXT,
+      asset_status_snapshot TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (session_id) REFERENCES sessions(id)
     );
@@ -78,6 +89,29 @@ function initializeDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Add new columns to change_log if they don't exist (for existing deployments)
+  const newCols = [
+    'disapproved_asset_type TEXT',
+    'disapproved_asset_issue TEXT',
+    'disapproved_asset_action TEXT',
+    'account_sitelink_issues TEXT',
+    'account_sitelink_action TEXT',
+    'campaign_sitelink_issues TEXT',
+    'campaign_sitelink_action TEXT',
+    'lp_issue_description TEXT',
+    'lp_escalated_to TEXT',
+    'lp_issue_status TEXT',
+    'asset_status_snapshot TEXT',
+  ];
+  newCols.forEach(col => {
+    const colName = col.split(' ')[0];
+    try {
+      db.exec(`ALTER TABLE change_log ADD COLUMN ${col}`);
+    } catch(e) {
+      // Column already exists, ignore
+    }
+  });
 
   // Seed accounts if empty
   const accountCount = db.prepare('SELECT COUNT(*) as cnt FROM accounts').get();

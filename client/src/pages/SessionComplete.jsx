@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { getSession } from '../utils/api'
+import { getSession, getSlideResponses } from '../utils/api'
+import { generateSessionPDF } from '../utils/pdfGenerator'
 
 const SECTIONS = [
-  'Spend & Conversions',
-  'Keyword Analysis',
-  'Ad Copy Review',
+  'Daily Performance',
+  'Search Terms',
+  'Assets & Landing Pages',
   'Audience & Targeting',
 ]
 
@@ -14,6 +15,7 @@ export default function SessionComplete() {
   const navigate = useNavigate()
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [pdfStatus, setPdfStatus] = useState('pending') // 'pending' | 'generating' | 'done' | 'error'
 
   useEffect(() => {
     getSession(sessionId)
@@ -26,6 +28,49 @@ export default function SessionComplete() {
         setLoading(false)
       })
   }, [sessionId])
+
+  // Auto-generate PDF once session is loaded
+  useEffect(() => {
+    if (!session) return
+    if (pdfStatus !== 'pending') return
+
+    setPdfStatus('generating')
+
+    getSlideResponses(parseInt(sessionId))
+      .then(responses => {
+        // Build a map: slideResponsesMap[slideNumber][fieldKey] = fieldValue
+        const map = {}
+        responses.forEach(r => {
+          if (!map[r.slide_number]) map[r.slide_number] = {}
+          map[r.slide_number][r.field_key] = r.field_value || ''
+        })
+        generateSessionPDF(session, map)
+        setPdfStatus('done')
+      })
+      .catch(err => {
+        console.error('PDF generation failed:', err)
+        setPdfStatus('error')
+      })
+  }, [session])
+
+  const handleDownloadAgain = () => {
+    if (!session) return
+    setPdfStatus('generating')
+    getSlideResponses(parseInt(sessionId))
+      .then(responses => {
+        const map = {}
+        responses.forEach(r => {
+          if (!map[r.slide_number]) map[r.slide_number] = {}
+          map[r.slide_number][r.field_key] = r.field_value || ''
+        })
+        generateSessionPDF(session, map)
+        setPdfStatus('done')
+      })
+      .catch(err => {
+        console.error('PDF generation failed:', err)
+        setPdfStatus('error')
+      })
+  }
 
   const formatDate = (dateStr) => {
     if (!dateStr) return ''
@@ -65,6 +110,56 @@ export default function SessionComplete() {
           </div>
           <h1 className="text-3xl font-bold text-[#c5c1b9]">Session Complete!</h1>
           <p className="text-[#8a8680] mt-2">Your daily Google Ads review has been saved.</p>
+        </div>
+
+        {/* PDF Status */}
+        <div className="rounded-xl p-4 mb-4 flex items-center gap-3" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
+          {pdfStatus === 'generating' && (
+            <>
+              <svg className="w-5 h-5 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24" style={{ color: '#575ECF' }}>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-sm text-[#c5c1b9]">Downloading PDF report...</span>
+            </>
+          )}
+          {pdfStatus === 'done' && (
+            <>
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#4ade80' }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-sm text-[#c5c1b9]">PDF Downloaded</span>
+              <button
+                onClick={handleDownloadAgain}
+                className="ml-auto text-xs font-medium transition-colors"
+                style={{ color: '#575ECF' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#6B72D8'}
+                onMouseLeave={e => e.currentTarget.style.color = '#575ECF'}
+              >
+                Download Again
+              </button>
+            </>
+          )}
+          {pdfStatus === 'error' && (
+            <>
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#f87171' }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span className="text-sm" style={{ color: '#f87171' }}>PDF generation failed</span>
+              <button
+                onClick={handleDownloadAgain}
+                className="ml-auto text-xs font-medium transition-colors"
+                style={{ color: '#575ECF' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#6B72D8'}
+                onMouseLeave={e => e.currentTarget.style.color = '#575ECF'}
+              >
+                Try Again
+              </button>
+            </>
+          )}
+          {pdfStatus === 'pending' && (
+            <span className="text-sm text-[#8a8680]">Preparing PDF report...</span>
+          )}
         </div>
 
         {/* Summary Card */}

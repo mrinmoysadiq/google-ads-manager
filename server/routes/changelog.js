@@ -25,7 +25,18 @@ router.post('/', (req, res) => {
       audiences_adjusted,
       bid_changes,
       other_targeting,
-      targeting_reason
+      targeting_reason,
+      disapproved_asset_type,
+      disapproved_asset_issue,
+      disapproved_asset_action,
+      account_sitelink_issues,
+      account_sitelink_action,
+      campaign_sitelink_issues,
+      campaign_sitelink_action,
+      lp_issue_description,
+      lp_escalated_to,
+      lp_issue_status,
+      asset_status_snapshot
     } = req.body;
 
     if (!session_id || !section || !change_type) {
@@ -54,7 +65,18 @@ router.post('/', (req, res) => {
           audiences_adjusted = ?,
           bid_changes = ?,
           other_targeting = ?,
-          targeting_reason = ?
+          targeting_reason = ?,
+          disapproved_asset_type = ?,
+          disapproved_asset_issue = ?,
+          disapproved_asset_action = ?,
+          account_sitelink_issues = ?,
+          account_sitelink_action = ?,
+          campaign_sitelink_issues = ?,
+          campaign_sitelink_action = ?,
+          lp_issue_description = ?,
+          lp_escalated_to = ?,
+          lp_issue_status = ?,
+          asset_status_snapshot = ?
         WHERE id = ?
       `).run(
         team_member, account_name, date,
@@ -62,6 +84,10 @@ router.post('/', (req, res) => {
         keywords_added, add_match_type, add_reason,
         ads_paused, ads_created, ad_change_reason,
         audiences_adjusted, bid_changes, other_targeting, targeting_reason,
+        disapproved_asset_type, disapproved_asset_issue, disapproved_asset_action,
+        account_sitelink_issues, account_sitelink_action,
+        campaign_sitelink_issues, campaign_sitelink_action,
+        lp_issue_description, lp_escalated_to, lp_issue_status, asset_status_snapshot,
         existing.id
       );
       const updated = db.prepare('SELECT * FROM change_log WHERE id = ?').get(existing.id);
@@ -73,14 +99,22 @@ router.post('/', (req, res) => {
           changes_made_note, keywords_paused, pause_reason,
           keywords_added, add_match_type, add_reason,
           ads_paused, ads_created, ad_change_reason,
-          audiences_adjusted, bid_changes, other_targeting, targeting_reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          audiences_adjusted, bid_changes, other_targeting, targeting_reason,
+          disapproved_asset_type, disapproved_asset_issue, disapproved_asset_action,
+          account_sitelink_issues, account_sitelink_action,
+          campaign_sitelink_issues, campaign_sitelink_action,
+          lp_issue_description, lp_escalated_to, lp_issue_status, asset_status_snapshot
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         session_id, team_member, account_name, date, section, change_type,
         changes_made_note, keywords_paused, pause_reason,
         keywords_added, add_match_type, add_reason,
         ads_paused, ads_created, ad_change_reason,
-        audiences_adjusted, bid_changes, other_targeting, targeting_reason
+        audiences_adjusted, bid_changes, other_targeting, targeting_reason,
+        disapproved_asset_type, disapproved_asset_issue, disapproved_asset_action,
+        account_sitelink_issues, account_sitelink_action,
+        campaign_sitelink_issues, campaign_sitelink_action,
+        lp_issue_description, lp_escalated_to, lp_issue_status, asset_status_snapshot
       );
       const inserted = db.prepare('SELECT * FROM change_log WHERE id = ?').get(result.lastInsertRowid);
       return res.status(201).json(inserted);
@@ -177,7 +211,12 @@ router.get('/export', (req, res) => {
       'id', 'session_id', 'team_member', 'account_name', 'date', 'section', 'change_type',
       'changes_made_note', 'keywords_paused', 'pause_reason', 'keywords_added', 'add_match_type',
       'add_reason', 'ads_paused', 'ads_created', 'ad_change_reason', 'audiences_adjusted',
-      'bid_changes', 'other_targeting', 'targeting_reason', 'created_at'
+      'bid_changes', 'other_targeting', 'targeting_reason',
+      'disapproved_asset_type', 'disapproved_asset_issue', 'disapproved_asset_action',
+      'account_sitelink_issues', 'account_sitelink_action',
+      'campaign_sitelink_issues', 'campaign_sitelink_action',
+      'lp_issue_description', 'lp_escalated_to', 'lp_issue_status', 'asset_status_snapshot',
+      'created_at'
     ];
 
     const parser = new Parser({ fields });

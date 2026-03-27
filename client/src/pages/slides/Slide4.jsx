@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { saveSlideResponse, saveChangeLog } from '../../utils/api'
+import { saveSlideResponse, saveChangeLog, getSlideResponses } from '../../utils/api'
 import { useDebounce } from '../../hooks/useDebounce'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import LastActionBox from '../../components/LastActionBox'
@@ -38,6 +38,36 @@ export default function Slide4({ session, sessionId, onNext, onBack, isLastSlide
 
   const resetStatus = (setter) => setTimeout(() => setter('idle'), 2000)
 
+  // Load persistent data on mount
+  useEffect(() => {
+    getSlideResponses(sessionId).then(responses => {
+      const map = {}
+      responses.forEach(r => { map[r.field_key] = r.field_value || '' })
+      setFields(prev => ({
+        ...prev,
+        reviewed_audiences: map.reviewed_audiences || '',
+        underperforming_audiences: map.underperforming_audiences || '',
+        underperforming_detail: map.underperforming_detail || '',
+        bid_adjustments: map.bid_adjustments || '',
+        bid_audience_segments: map.bid_audience_segments || '',
+        bid_percentages: map.bid_percentages || '',
+        targeting_changes: map.targeting_changes || '',
+        targeting_changes_detail: map.targeting_changes_detail || '',
+      }))
+      if (map.changes_made_note) setChangeNote(map.changes_made_note)
+      setTargetingFields(prev => ({
+        ...prev,
+        audiences_adjusted: map.audiences_adjusted || '',
+        bid_changes: map.bid_changes || '',
+        other_targeting: map.other_targeting || '',
+        targeting_reason: map.targeting_reason || '',
+      }))
+      if (map.audiences_adjusted || map.bid_changes || map.other_targeting || map.targeting_reason) {
+        setTargetingPanelOpen(true)
+      }
+    }).catch(console.error)
+  }, [sessionId])
+
   // Auto-save slide fields
   useEffect(() => {
     const anyFilled = Object.values(debouncedFields).some(v => v !== '')
@@ -63,14 +93,12 @@ export default function Slide4({ session, sessionId, onNext, onBack, isLastSlide
   useEffect(() => {
     if (!debouncedChangeNote) return
     setChangeLogStatus('saving')
-    saveChangeLog({
+    saveSlideResponse({
       session_id: sessionId,
-      team_member: session.team_member,
-      account_name: session.account_name,
-      date: session.date,
-      section: SECTION_NAME,
-      change_type: 'performance_note',
-      changes_made_note: debouncedChangeNote,
+      slide_number: SLIDE_NUMBER,
+      section_name: SECTION_NAME,
+      field_key: 'changes_made_note',
+      field_value: debouncedChangeNote,
     })
       .then(() => { setChangeLogStatus('saved'); resetStatus(setChangeLogStatus) })
       .catch(err => { console.error(err); setChangeLogStatus('error'); resetStatus(setChangeLogStatus) })
@@ -83,6 +111,15 @@ export default function Slide4({ session, sessionId, onNext, onBack, isLastSlide
     if (!audiences_adjusted && !bid_changes && !other_targeting && !targeting_reason) return
 
     setTargetingStatus('saving')
+
+    // Save to slide_responses
+    Promise.all([
+      saveSlideResponse({ session_id: sessionId, slide_number: SLIDE_NUMBER, section_name: SECTION_NAME, field_key: 'audiences_adjusted', field_value: audiences_adjusted }),
+      saveSlideResponse({ session_id: sessionId, slide_number: SLIDE_NUMBER, section_name: SECTION_NAME, field_key: 'bid_changes', field_value: bid_changes }),
+      saveSlideResponse({ session_id: sessionId, slide_number: SLIDE_NUMBER, section_name: SECTION_NAME, field_key: 'other_targeting', field_value: other_targeting }),
+      saveSlideResponse({ session_id: sessionId, slide_number: SLIDE_NUMBER, section_name: SECTION_NAME, field_key: 'targeting_reason', field_value: targeting_reason }),
+    ]).catch(console.error)
+
     saveChangeLog({
       session_id: sessionId,
       team_member: session.team_member,
@@ -305,7 +342,10 @@ export default function Slide4({ session, sessionId, onNext, onBack, isLastSlide
       <div className="flex justify-between pt-2 pb-6">
         <button
           onClick={onBack}
-          className="px-6 py-2.5 rounded-lg font-medium text-sm transition-all bg-[#2a2a2a] text-[#c5c1b9] border border-white/10 hover:border-[#575ECF]"
+          className="px-6 py-2.5 rounded-lg font-medium text-sm transition-all text-[#c5c1b9]"
+          style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)' }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = '#575ECF'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
         >
           ← Back
         </button>

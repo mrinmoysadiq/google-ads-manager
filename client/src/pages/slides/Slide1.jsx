@@ -1,30 +1,51 @@
-import { useState, useEffect, useCallback } from 'react'
-import toast from 'react-hot-toast'
-import { saveSlideResponse, saveChangeLog } from '../../utils/api'
+import { useState, useEffect } from 'react'
+import { saveSlideResponse, getSlideResponses } from '../../utils/api'
 import { useDebounce } from '../../hooks/useDebounce'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import LastActionBox from '../../components/LastActionBox'
 
 const SLIDE_NUMBER = 1
-const SECTION_NAME = 'Spend & Conversions'
+const SECTION_NAME = 'Daily Performance'
 
 export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlide }) {
   const [fields, setFields] = useState({
     spend_yesterday: '',
     conversions_yesterday: '',
+    conversion_rate_yesterday: '',
     cpr_yesterday: '',
     conversions_7d: '',
+    conversion_rate_7d: '',
     cpr_7d: '',
     conversions_14d: '',
+    conversion_rate_14d: '',
     cpr_14d: '',
     observations: '',
   })
-  const [changeNote, setChangeNote] = useState('')
   const [saveStatus, setSaveStatus] = useState('idle')
-  const [changeLogSaveStatus, setChangeLogSaveStatus] = useState('idle')
+
+  // Load persistent data on mount
+  useEffect(() => {
+    getSlideResponses(sessionId).then(responses => {
+      const map = {}
+      responses.forEach(r => { map[r.field_key] = r.field_value || '' })
+      setFields(prev => ({
+        ...prev,
+        spend_yesterday: map.spend_yesterday || '',
+        conversions_yesterday: map.conversions_yesterday || '',
+        conversion_rate_yesterday: map.conversion_rate_yesterday || '',
+        cpr_yesterday: map.cpr_yesterday || '',
+        conversions_7d: map.conversions_7d || '',
+        conversion_rate_7d: map.conversion_rate_7d || '',
+        cpr_7d: map.cpr_7d || '',
+        conversions_14d: map.conversions_14d || '',
+        conversion_rate_14d: map.conversion_rate_14d || '',
+        cpr_14d: map.cpr_14d || '',
+        observations: map.observations || '',
+      }))
+    }).catch(console.error)
+  }, [sessionId])
 
   const debouncedFields = useDebounce(fields, 1000)
-  const debouncedChangeNote = useDebounce(changeNote, 1000)
 
   const resetSaveStatus = (setter) => {
     setTimeout(() => setter('idle'), 2000)
@@ -56,31 +77,6 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
         resetSaveStatus(setSaveStatus)
       })
   }, [debouncedFields])
-
-  // Auto-save change log note
-  useEffect(() => {
-    if (!debouncedChangeNote) return
-
-    setChangeLogSaveStatus('saving')
-    saveChangeLog({
-      session_id: sessionId,
-      team_member: session.team_member,
-      account_name: session.account_name,
-      date: session.date,
-      section: SECTION_NAME,
-      change_type: 'performance_note',
-      changes_made_note: debouncedChangeNote,
-    })
-      .then(() => {
-        setChangeLogSaveStatus('saved')
-        resetSaveStatus(setChangeLogSaveStatus)
-      })
-      .catch(err => {
-        console.error(err)
-        setChangeLogSaveStatus('error')
-        resetSaveStatus(setChangeLogSaveStatus)
-      })
-  }, [debouncedChangeNote])
 
   const handleField = (key, value) => {
     setFields(prev => ({ ...prev, [key]: value }))
@@ -125,10 +121,10 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
             </div>
           </div>
 
-          {/* Yesterday Conversions + CPR */}
+          {/* Yesterday — 3 columns */}
           <div>
             <label className={labelClass}>Yesterday</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Conversions</label>
                 <input
@@ -141,7 +137,23 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                 />
               </div>
               <div>
-                <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result (CPR)</label>
+                <label className="block text-xs text-[#8a8680] mb-1">Conversion Rate (%)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    placeholder="0.00"
+                    value={fields.conversion_rate_yesterday}
+                    onChange={e => handleField('conversion_rate_yesterday', e.target.value)}
+                    className={inputClass + ' pr-7'}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">%</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result ($)</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">$</span>
                   <input
@@ -158,10 +170,10 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
             </div>
           </div>
 
-          {/* 7-day */}
+          {/* 7-day — 3 columns */}
           <div>
             <label className={labelClass}>Last 7 Days</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Conversions</label>
                 <input
@@ -174,7 +186,23 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                 />
               </div>
               <div>
-                <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result (CPR)</label>
+                <label className="block text-xs text-[#8a8680] mb-1">Conversion Rate (%)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    placeholder="0.00"
+                    value={fields.conversion_rate_7d}
+                    onChange={e => handleField('conversion_rate_7d', e.target.value)}
+                    className={inputClass + ' pr-7'}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">%</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result ($)</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">$</span>
                   <input
@@ -191,10 +219,10 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
             </div>
           </div>
 
-          {/* 14-day */}
+          {/* 14-day — 3 columns */}
           <div>
             <label className={labelClass}>Last 14 Days</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Conversions</label>
                 <input
@@ -207,7 +235,23 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                 />
               </div>
               <div>
-                <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result (CPR)</label>
+                <label className="block text-xs text-[#8a8680] mb-1">Conversion Rate (%)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    placeholder="0.00"
+                    value={fields.conversion_rate_14d}
+                    onChange={e => handleField('conversion_rate_14d', e.target.value)}
+                    className={inputClass + ' pr-7'}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">%</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result ($)</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">$</span>
                   <input
@@ -238,33 +282,13 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
         </div>
       </div>
 
-      {/* Changes Made */}
-      <div className="rounded-xl p-6" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-[#c5c1b9]">Changes Made</h3>
-          <AutoSaveIndicator saveStatus={changeLogSaveStatus} />
-        </div>
-        <div>
-          <label className={labelClass}>Notes on changes or actions taken</label>
-          <textarea
-            rows={4}
-            placeholder="Describe any changes made or actions taken based on performance data..."
-            value={changeNote}
-            onChange={e => setChangeNote(e.target.value)}
-            className={inputClass + ' resize-none'}
-          />
-        </div>
-      </div>
-
       {/* Navigation */}
       <div className="flex justify-between pt-2 pb-6">
         <button
           onClick={onBack}
           disabled={isFirstSlide}
           className={`px-6 py-2.5 rounded-lg font-medium text-sm transition-all ${
-            isFirstSlide
-              ? 'cursor-not-allowed'
-              : ''
+            isFirstSlide ? 'cursor-not-allowed' : ''
           }`}
           style={isFirstSlide
             ? { backgroundColor: '#2a2a2a', color: '#555', border: '1px solid rgba(255,255,255,0.05)' }
