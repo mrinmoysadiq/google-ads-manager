@@ -1,72 +1,82 @@
-import jsPDF from 'jspdf'
+import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
+function ordinalDate(dateStr) {
+  if (!dateStr) return ''
+  try {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    const d = new Date(year, month - 1, day)
+    const dayNum = d.getDate()
+    const suffix =
+      dayNum >= 11 && dayNum <= 13 ? 'th'
+      : dayNum % 10 === 1 ? 'st'
+      : dayNum % 10 === 2 ? 'nd'
+      : dayNum % 10 === 3 ? 'rd'
+      : 'th'
+    const monthName = d.toLocaleString('en-US', { month: 'long' })
+    return `${dayNum}${suffix} ${monthName}`
+  } catch {
+    return dateStr
+  }
+}
+
 export function generateSessionPDF(session, slideResponsesMap) {
-  const doc = new jsPDF()
-  const accent = [87, 94, 207] // #575ECF
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const accent = [87, 94, 207]
+  const pageW = 210
+  const margin = 14
 
-  // Header
-  doc.setFillColor(...accent)
-  doc.rect(0, 0, 210, 28, 'F')
+  // ── HEADER BANNER ──
+  doc.setFillColor(accent[0], accent[1], accent[2])
+  doc.rect(0, 0, pageW, 30, 'F')
   doc.setTextColor(255, 255, 255)
-  doc.setFontSize(16)
+  doc.setFontSize(15)
   doc.setFont('helvetica', 'bold')
-  doc.text('Google Ads Daily Session Report', 14, 12)
+  doc.text('Google Ads Daily Session Report', margin, 13)
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  doc.text('Infinix Online — Ads Manager', margin, 21)
+
+  // ── SESSION META ──
+  let y = 38
   doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Infinix Online — Daily Management System', 14, 20)
+  doc.setTextColor(40, 40, 40)
 
-  // Session info box
-  doc.setTextColor(50, 50, 50)
-  doc.setFontSize(9)
-  let y = 36
-  doc.setFont('helvetica', 'bold')
-  doc.text('Account:', 14, y)
-  doc.setFont('helvetica', 'normal')
-  doc.text(session.account_name || '', 45, y)
-
-  doc.setFont('helvetica', 'bold')
-  doc.text('Team Member:', 100, y)
-  doc.setFont('helvetica', 'normal')
-  doc.text(session.team_member || '', 135, y)
-
-  y += 7
-  doc.setFont('helvetica', 'bold')
-  doc.text('Date:', 14, y)
-  doc.setFont('helvetica', 'normal')
-  doc.text(session.date || '', 45, y)
-
-  doc.setFont('helvetica', 'bold')
-  doc.text('Session ID:', 100, y)
-  doc.setFont('helvetica', 'normal')
-  doc.text(String(session.id || ''), 135, y)
-
-  y += 7
-  doc.setFont('helvetica', 'bold')
-  doc.text('Status:', 14, y)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Completed', 45, y)
-
-  y += 12
-
-  // Helper to render a section
-  const renderSection = (title, fields) => {
-    if (y > 250) { doc.addPage(); y = 20 }
-
-    // Section title bar
-    doc.setFillColor(...accent)
-    doc.rect(14, y, 182, 8, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(10)
+  const meta = [
+    ['Account', session.account_name || '—'],
+    ['Team Member', session.team_member || '—'],
+    ['Date', ordinalDate(session.date)],
+    ['Status', 'Completed'],
+  ]
+  meta.forEach(([label, value]) => {
     doc.setFont('helvetica', 'bold')
-    doc.text(title, 18, y + 5.5)
-    y += 13
+    doc.text(label + ':', margin, y)
+    doc.setFont('helvetica', 'normal')
+    doc.text(value, margin + 32, y)
+    y += 6
+  })
+  y += 4
 
-    if (fields.length === 0) {
-      doc.setTextColor(150, 150, 150)
-      doc.setFontSize(9)
+  // ── SECTION RENDERER ──
+  const renderSection = (title, rows) => {
+    if (y > 255) { doc.addPage(); y = 18 }
+
+    // Section header bar
+    doc.setFillColor(accent[0], accent[1], accent[2])
+    doc.rect(margin, y, pageW - margin * 2, 8, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.text(title, margin + 3, y + 5.5)
+    y += 11
+
+    const filteredRows = rows.filter(([, v]) => v && String(v).trim() !== '')
+
+    if (filteredRows.length === 0) {
+      doc.setTextColor(160, 160, 160)
+      doc.setFontSize(8)
       doc.setFont('helvetica', 'italic')
-      doc.text('No data recorded for this section.', 18, y)
+      doc.text('No data recorded for this section.', margin + 3, y)
       y += 8
       return
     }
@@ -74,48 +84,78 @@ export function generateSessionPDF(session, slideResponsesMap) {
     autoTable(doc, {
       startY: y,
       head: [['Field', 'Value']],
-      body: fields.map(([k, v]) => [k, v || '—']),
-      margin: { left: 14, right: 14 },
-      styles: { fontSize: 8, cellPadding: 3, textColor: [50, 50, 50] },
-      headStyles: { fillColor: [230, 231, 248], textColor: [50, 50, 50], fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [248, 248, 252] },
-      columnStyles: { 0: { cellWidth: 70, fontStyle: 'bold' }, 1: { cellWidth: 112 } },
+      body: filteredRows,
+      margin: { left: margin, right: margin },
+      styles: {
+        fontSize: 8,
+        cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 },
+        textColor: [40, 40, 40],
+        overflow: 'linebreak',
+      },
+      headStyles: {
+        fillColor: [220, 222, 245],
+        textColor: [40, 40, 40],
+        fontStyle: 'bold',
+        fontSize: 8,
+      },
+      alternateRowStyles: { fillColor: [248, 248, 253] },
+      columnStyles: {
+        0: { cellWidth: 60, fontStyle: 'bold' },
+        1: { cellWidth: pageW - margin * 2 - 60 },
+      },
+      didDrawPage: () => { y = doc.lastAutoTable.finalY },
     })
-    y = doc.lastAutoTable.finalY + 10
+    y = doc.lastAutoTable.finalY + 8
   }
 
-  // Slide 1 — Daily Performance Review
+  // ── SLIDE 1 — Daily Performance ──
   const s1 = slideResponsesMap[1] || {}
   renderSection('1. Daily Performance Review', [
     ['Spend Yesterday', s1.spend_yesterday ? `$${s1.spend_yesterday}` : ''],
     ['Conversions Yesterday', s1.conversions_yesterday || ''],
     ['Conversion Rate Yesterday', s1.conversion_rate_yesterday ? `${s1.conversion_rate_yesterday}%` : ''],
     ['Cost Per Conversion Yesterday', s1.cpr_yesterday ? `$${s1.cpr_yesterday}` : ''],
-    ['Conversions (7 days)', s1.conversions_7d || ''],
-    ['Conversion Rate (7 days)', s1.conversion_rate_7d ? `${s1.conversion_rate_7d}%` : ''],
-    ['Cost Per Conversion (7 days)', s1.cpr_7d ? `$${s1.cpr_7d}` : ''],
-    ['Conversions (14 days)', s1.conversions_14d || ''],
-    ['Conversion Rate (14 days)', s1.conversion_rate_14d ? `${s1.conversion_rate_14d}%` : ''],
-    ['Cost Per Conversion (14 days)', s1.cpr_14d ? `$${s1.cpr_14d}` : ''],
+    ['Conversions (7 Days)', s1.conversions_7d || ''],
+    ['Conversion Rate (7 Days)', s1.conversion_rate_7d ? `${s1.conversion_rate_7d}%` : ''],
+    ['Cost Per Conversion (7 Days)', s1.cpr_7d ? `$${s1.cpr_7d}` : ''],
+    ['Conversions (14 Days)', s1.conversions_14d || ''],
+    ['Conversion Rate (14 Days)', s1.conversion_rate_14d ? `${s1.conversion_rate_14d}%` : ''],
+    ['Cost Per Conversion (14 Days)', s1.cpr_14d ? `$${s1.cpr_14d}` : ''],
     ['Observations', s1.observations || ''],
-  ].filter(([, v]) => v))
+  ])
 
-  // Slide 2 — Search Term Analysis
+  // ── SLIDE 2 — Search Term Analysis ──
   const s2 = slideResponsesMap[2] || {}
   renderSection('2. Search Term Analysis', [
     ['Negative Keywords Added', s2.keywords_paused || ''],
     ['Negative Keyword Reason', s2.pause_reason || ''],
     ['New Keywords Added', s2.keywords_added || ''],
     ['Match Type', s2.add_match_type || ''],
-    ['Add Reason', s2.add_reason || ''],
-  ].filter(([, v]) => v))
+    ['Reason for Adding', s2.add_reason || ''],
+  ])
 
-  // Slide 3 — Asset & Landing Page Audit
+  // ── SLIDE 3 — Assets & Landing Page ──
   const s3 = slideResponsesMap[3] || {}
+
+  // Parse asset snapshot for a readable summary
+  let assetSummary = ''
+  if (s3.asset_status_snapshot) {
+    try {
+      const assets = JSON.parse(s3.asset_status_snapshot)
+      const disapproved = assets.filter(a => a.approvalStatus === 'Disapproved').map(a => a.type)
+      const pending = assets.filter(a => a.approvalStatus === 'Pending').map(a => a.type)
+      const parts = []
+      if (disapproved.length) parts.push(`Disapproved: ${disapproved.join(', ')}`)
+      if (pending.length) parts.push(`Pending: ${pending.join(', ')}`)
+      assetSummary = parts.length ? parts.join(' | ') : 'All assets reviewed'
+    } catch { assetSummary = s3.asset_status_snapshot }
+  }
+
   renderSection('3. Ad Assets & Landing Page Audit', [
-    ['Asset Status Snapshot', s3.asset_status_snapshot || ''],
+    ['Asset Status Summary', assetSummary],
+    ['Disapproved Asset Type', s3.disapproved_asset_type || ''],
     ['Disapproved Asset Issue', s3.disapproved_asset_issue || ''],
-    ['Disapproved Asset Action', s3.disapproved_asset_action || ''],
+    ['Resolution Taken', s3.disapproved_asset_action || ''],
     ['Account Sitelink Issues', s3.account_sitelink_issues || ''],
     ['Account Sitelink Action', s3.account_sitelink_action || ''],
     ['Campaign Sitelink Issues', s3.campaign_sitelink_issues || ''],
@@ -123,34 +163,28 @@ export function generateSessionPDF(session, slideResponsesMap) {
     ['Landing Page Issues', s3.lp_issue_description || ''],
     ['Escalated To', s3.lp_escalated_to || ''],
     ['LP Issue Status', s3.lp_issue_status || ''],
-  ].filter(([, v]) => v))
+  ])
 
-  // Slide 4 — Audience & Targeting
-  const s4 = slideResponsesMap[4] || {}
-  renderSection('4. Audience & Targeting Review', [
-    ['Reviewed Audiences', s4.reviewed_audiences || ''],
-    ['Underperforming Audiences', s4.underperforming_detail || ''],
-    ['Bid Adjustments Made', s4.bid_adjustments || ''],
-    ['Bid Audience Segments', s4.bid_audience_segments || ''],
-    ['Bid Percentages', s4.bid_percentages || ''],
-    ['Targeting Changes', s4.targeting_changes_detail || ''],
-    ['Audiences Adjusted', s4.audiences_adjusted || ''],
-    ['Bid Changes', s4.bid_changes || ''],
-    ['Other Targeting', s4.other_targeting || ''],
-    ['Targeting Reason', s4.targeting_reason || ''],
-    ['Changes Made', s4.changes_made_note || ''],
-  ].filter(([, v]) => v))
-
-  // Footer on each page
-  const pageCount = doc.internal.getNumberOfPages()
-  for (let i = 1; i <= pageCount; i++) {
+  // ── FOOTER on every page ──
+  const totalPages = doc.internal.getNumberOfPages()
+  for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i)
     doc.setFontSize(7)
-    doc.setTextColor(150, 150, 150)
-    doc.text(`Generated by Infinix Online — Google Ads Daily Manager | Page ${i} of ${pageCount}`, 14, 290)
-    doc.text(new Date().toLocaleString(), 160, 290)
+    doc.setTextColor(160, 160, 160)
+    doc.text(
+      `Infinix Online — Google Ads Daily Manager  |  Page ${i} of ${totalPages}`,
+      margin, 290
+    )
+    doc.text(
+      `Generated: ${new Date().toLocaleString()}`,
+      pageW - margin, 290,
+      { align: 'right' }
+    )
   }
 
-  const filename = `session-${(session.account_name || 'account').replace(/\s+/g, '-').toLowerCase()}-${session.date || 'date'}.pdf`
+  // ── FILENAME: "Client Alpha - 17th March.pdf" ──
+  const accountSlug = (session.account_name || 'Account').replace(/[^a-zA-Z0-9 ]/g, '').trim()
+  const dateLabel = ordinalDate(session.date)
+  const filename = `${accountSlug} - ${dateLabel}.pdf`
   doc.save(filename)
 }
