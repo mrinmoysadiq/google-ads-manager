@@ -2,12 +2,14 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const dbDir = path.join(__dirname);
+// Use persistent disk path on Render (/var/data), fallback to local for development
+const dbDir = process.env.RENDER ? '/var/data' : path.join(__dirname);
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
 const dbPath = path.join(dbDir, 'ads_manager.db');
+console.log(`Database path: ${dbPath}`);
 const db = new Database(dbPath);
 
 // Enable WAL mode for better performance
