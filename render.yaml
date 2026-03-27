@@ -1,0 +1,37 @@
+services:
+  # ── Backend API (Node.js + Express + SQLite) ────────────────────────────────
+  - type: web
+    name: google-ads-manager-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node index.js
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000          # Render assigns this port automatically
+      # Set CORS_ORIGIN manually in Render dashboard after frontend is deployed.
+      # Value should be your frontend URL, e.g. https://google-ads-manager-ui.onrender.com
+      - key: CORS_ORIGIN
+        sync: false
+
+  # ── Frontend (React/Vite Static Site) ───────────────────────────────────────
+  - type: web
+    name: google-ads-manager-ui
+    runtime: static
+    rootDir: client
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    plan: free
+    envVars:
+      # Set VITE_API_URL manually in Render dashboard after backend is deployed.
+      # Value should be your backend URL + /api, e.g. https://google-ads-manager-api.onrender.com/api
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      # Redirect all routes to index.html so React Router works correctly
+      - type: rewrite
+        source: /*
+        destination: /index.html
