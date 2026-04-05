@@ -132,6 +132,55 @@ function initializeDatabase() {
     });
     console.log('Seeded team members');
   }
+
+  // ── Weekly Learning Tracker tables ──────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS learning_roles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS learning_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      role_id INTEGER REFERENCES learning_roles(id),
+      manager_id INTEGER REFERENCES learning_users(id),
+      joined_week TEXT NOT NULL,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS learning_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES learning_users(id),
+      week TEXT NOT NULL,
+      what_learned TEXT NOT NULL,
+      source_type TEXT NOT NULL,
+      source_detail TEXT,
+      how_to_apply TEXT NOT NULL,
+      is_late INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS learning_threads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entry_id INTEGER NOT NULL REFERENCES learning_entries(id),
+      author_id INTEGER NOT NULL REFERENCES learning_users(id),
+      message TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS learning_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      key TEXT NOT NULL UNIQUE,
+      value TEXT NOT NULL
+    );
+  `);
+
+  // Seed default learning settings
+  db.prepare("INSERT OR IGNORE INTO learning_settings (key, value) VALUES ('deadline_day', 'Friday')").run();
+  console.log('Learning tables initialized');
 }
 
 module.exports = { db, initializeDatabase };

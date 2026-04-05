@@ -6,6 +6,11 @@ import ChecklistWrapper from './pages/ChecklistWrapper'
 import SessionComplete from './pages/SessionComplete'
 import ChangeLog from './pages/ChangeLog'
 import Admin from './pages/Admin'
+import LearningHome from './pages/learning/LearningHome'
+import LearningSubmit from './pages/learning/LearningSubmit'
+import LearningHistory from './pages/learning/LearningHistory'
+import LearningManagerDashboard from './pages/learning/LearningManagerDashboard'
+import LearningAdmin from './pages/learning/LearningAdmin'
 
 export default function App() {
   return (
@@ -18,6 +23,11 @@ export default function App() {
           <Route path="/complete/:sessionId" element={<SessionComplete />} />
           <Route path="/changelog" element={<ChangeLog />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/learning" element={<LearningHome />} />
+          <Route path="/learning/submit" element={<LearningSubmit />} />
+          <Route path="/learning/history/:userId" element={<LearningHistory />} />
+          <Route path="/learning/manager/:managerId" element={<LearningManagerDashboard />} />
+          <Route path="/learning/admin" element={<LearningAdmin />} />
         </Routes>
       </main>
       <Toaster

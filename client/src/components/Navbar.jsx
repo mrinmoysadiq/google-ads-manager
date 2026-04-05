@@ -27,6 +27,16 @@ export default function Navbar() {
           {/* Navigation Links */}
           <div className="flex items-center gap-1">
             <Link
+              to="/learning"
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/learning')
+                  ? 'text-[#575ECF] bg-[#575ECF]/10'
+                  : 'text-[#8a8680] hover:text-[#c5c1b9] hover:bg-white/5'
+              }`}
+            >
+              Learning
+            </Link>
+            <Link
               to="/changelog"
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 isActive('/changelog')
