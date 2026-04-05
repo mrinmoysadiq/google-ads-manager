@@ -228,10 +228,11 @@ function UsersSection({ roles, users, setUsers }) {
         role_id: newUser.role_id || null,
         manager_id: newUser.manager_id || null,
       })
+      // Keep form open with cleared name/role so user can immediately add more
+      // users and pick the newly added person as a manager
       setUsers(prev => [...prev, user].sort((a, b) => a.name.localeCompare(b.name)))
-      setNewUser({ name: '', role_id: null, manager_id: null })
-      setShowAddForm(false)
-      toast.success(`${user.name} added! Joined week: ${weekLabel(user.joined_week)}`)
+      setNewUser(prev => ({ name: '', role_id: null, manager_id: prev.manager_id }))
+      toast.success(`${user.name} added! You can now assign them as a manager below.`)
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to add user')
     } finally {
@@ -304,9 +305,16 @@ function UsersSection({ roles, users, setUsers }) {
       {/* Add Form */}
       {showAddForm && (
         <div className="rounded-xl p-5 mb-5 border" style={{ backgroundColor: 'rgba(87,94,207,0.06)', borderColor: 'rgba(87,94,207,0.2)' }}>
-          <p className="text-sm font-semibold text-[#c5c1b9] mb-4">
+          <p className="text-sm font-semibold text-[#c5c1b9] mb-1">
             New User — joined week will be set to <span style={{ color: '#575ECF' }}>{weekLabel(currentWeek)}</span>
           </p>
+          {users.filter(u => u.active).length === 0 && (
+            <div className="flex items-center gap-2 mb-4 text-xs rounded-lg px-3 py-2" style={{ backgroundColor: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.15)', color: '#fbbf24' }}>
+              <span>💡</span>
+              <span>Tip: Add the manager first (no manager needed), then add team members and assign the manager.</span>
+            </div>
+          )}
+          {users.filter(u => u.active).length > 0 && <div className="mb-4" />}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div>
               <label className={labelClass}>Name *</label>
@@ -332,13 +340,25 @@ function UsersSection({ roles, users, setUsers }) {
             </div>
             <div>
               <label className={labelClass}>Manager</label>
-              <Select
-                options={managerOptions(null)}
-                value={managerOptions(null).find(o => o.value === newUser.manager_id) || managerOptions(null)[0]}
-                onChange={opt => setNewUser(p => ({ ...p, manager_id: opt ? opt.value : null }))}
-                styles={selectStyles}
-                isSearchable={false}
-              />
+              {users.filter(u => u.active).length === 0 ? (
+                <div
+                  className="w-full rounded-lg px-3 py-2.5 text-sm border flex items-center gap-2"
+                  style={{ backgroundColor: '#1b1b1b', borderColor: 'rgba(255,255,255,0.06)', color: '#8a8680' }}
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-xs italic">Add a user first, then assign as manager</span>
+                </div>
+              ) : (
+                <Select
+                  options={managerOptions(null)}
+                  value={managerOptions(null).find(o => o.value === newUser.manager_id) || managerOptions(null)[0]}
+                  onChange={opt => setNewUser(p => ({ ...p, manager_id: opt ? opt.value : null }))}
+                  styles={selectStyles}
+                  isSearchable={false}
+                />
+              )}
             </div>
           </div>
           <div className="flex gap-2 justify-end">
