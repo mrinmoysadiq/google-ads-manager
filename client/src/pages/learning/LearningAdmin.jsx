@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import Select from 'react-select'
 import toast from 'react-hot-toast'
 import {
   getSettings, updateSetting,
@@ -9,11 +10,41 @@ import {
 import { getISOWeek, weekLabel } from '../../utils/weekUtils'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-const SOURCE_TYPES = ['Article', 'Video/YouTube', 'Course', 'Book', 'Colleague/Mentor', 'On-the-job experience', 'Other']
 
 const cardClass = 'rounded-xl p-6 bg-[#242424] border border-white/8'
 const inputClass = 'w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none transition-colors bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#575ECF]'
 const labelClass = 'block text-sm font-medium text-[#8a8680] mb-1.5'
+
+// Shared react-select styles (dark theme)
+const selectStyles = {
+  control: (base, { isFocused }) => ({
+    ...base,
+    backgroundColor: '#2a2a2a',
+    borderColor: isFocused ? '#575ECF' : 'rgba(255,255,255,0.1)',
+    boxShadow: 'none',
+    '&:hover': { borderColor: '#575ECF' },
+    minHeight: '42px',
+  }),
+  menu: (base) => ({
+    ...base,
+    backgroundColor: '#2a2a2a',
+    border: '1px solid rgba(255,255,255,0.12)',
+    zIndex: 100,
+  }),
+  option: (base, { isSelected, isFocused }) => ({
+    ...base,
+    backgroundColor: isSelected ? '#575ECF' : isFocused ? 'rgba(87,94,207,0.15)' : 'transparent',
+    color: '#c5c1b9',
+    cursor: 'pointer',
+    fontSize: '14px',
+  }),
+  singleValue: (base) => ({ ...base, color: '#c5c1b9' }),
+  placeholder: (base) => ({ ...base, color: '#8a8680' }),
+  input: (base) => ({ ...base, color: '#c5c1b9' }),
+  dropdownIndicator: (base) => ({ ...base, color: '#8a8680' }),
+  indicatorSeparator: (base) => ({ ...base, backgroundColor: 'rgba(255,255,255,0.1)' }),
+  clearIndicator: (base) => ({ ...base, color: '#8a8680', '&:hover': { color: '#c5c1b9' } }),
+}
 
 function SectionHeader({ title, subtitle }) {
   return (
@@ -78,15 +109,10 @@ function SettingsSection() {
   )
 }
 
-// ── Roles Section ─────────────────────────────────────────────────────────────
-function RolesSection() {
-  const [roles, setRoles] = useState([])
+// ── Roles Section — receives shared roles state from parent ───────────────────
+function RolesSection({ roles, setRoles }) {
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    getRoles().then(setRoles).catch(() => toast.error('Failed to load roles'))
-  }, [])
 
   const handleAdd = async () => {
     if (!newName.trim()) return
@@ -172,22 +198,26 @@ function RolesSection() {
   )
 }
 
-// ── Users Section ─────────────────────────────────────────────────────────────
-function UsersSection() {
-  const [users, setUsers] = useState([])
-  const [roles, setRoles] = useState([])
-  const [loading, setLoading] = useState(true)
+// ── Users Section — receives shared roles + users state from parent ───────────
+function UsersSection({ roles, users, setUsers }) {
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
-  const [newUser, setNewUser] = useState({ name: '', role_id: '', manager_id: '' })
+  const [newUser, setNewUser] = useState({ name: '', role_id: null, manager_id: null })
   const [editUser, setEditUser] = useState({})
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    Promise.all([getLearningUsers(), getRoles()])
-      .then(([u, r]) => { setUsers(u); setRoles(r); setLoading(false) })
-      .catch(() => { toast.error('Failed to load users'); setLoading(false) })
-  }, [])
+  const currentWeek = getISOWeek()
+
+  // Build react-select option lists from shared state
+  const roleOptions = [
+    { value: null, label: '— No role —' },
+    ...roles.map(r => ({ value: r.id, label: r.name })),
+  ]
+
+  const managerOptions = (excludeId) => [
+    { value: null, label: '— No manager —' },
+    ...users.filter(u => u.active && u.id !== excludeId).map(u => ({ value: u.id, label: u.name + (u.role_name ? ` · ${u.role_name}` : '') })),
+  ]
 
   const handleAdd = async () => {
     if (!newUser.name.trim()) return toast.error('Name is required')
@@ -199,9 +229,9 @@ function UsersSection() {
         manager_id: newUser.manager_id || null,
       })
       setUsers(prev => [...prev, user].sort((a, b) => a.name.localeCompare(b.name)))
-      setNewUser({ name: '', role_id: '', manager_id: '' })
+      setNewUser({ name: '', role_id: null, manager_id: null })
       setShowAddForm(false)
-      toast.success('User added! Joined week: ' + weekLabel(user.joined_week))
+      toast.success(`${user.name} added! Joined week: ${weekLabel(user.joined_week)}`)
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to add user')
     } finally {
@@ -211,7 +241,7 @@ function UsersSection() {
 
   const startEdit = (user) => {
     setEditingId(user.id)
-    setEditUser({ role_id: user.role_id || '', manager_id: user.manager_id || '' })
+    setEditUser({ role_id: user.role_id || null, manager_id: user.manager_id || null })
   }
 
   const handleEditSave = async (user) => {
@@ -241,18 +271,17 @@ function UsersSection() {
     }
   }
 
-  const currentWeek = getISOWeek()
-
-  if (loading) return (
-    <div className={cardClass}>
-      <div className="flex items-center justify-center py-10">
-        <svg className="w-7 h-7 animate-spin text-[#575ECF]" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-      </div>
-    </div>
-  )
+  const inlineSelectStyles = {
+    ...selectStyles,
+    control: (base, { isFocused }) => ({
+      ...selectStyles.control(base, { isFocused }),
+      minHeight: '34px',
+      fontSize: '13px',
+    }),
+    singleValue: (base) => ({ ...base, color: '#c5c1b9', fontSize: '13px' }),
+    placeholder: (base) => ({ ...base, color: '#8a8680', fontSize: '13px' }),
+    option: (base, state) => ({ ...selectStyles.option(base, state), fontSize: '13px' }),
+  }
 
   return (
     <div className={cardClass}>
@@ -274,9 +303,11 @@ function UsersSection() {
 
       {/* Add Form */}
       {showAddForm && (
-        <div className="rounded-xl p-4 mb-5 border" style={{ backgroundColor: 'rgba(87,94,207,0.06)', borderColor: 'rgba(87,94,207,0.2)' }}>
-          <p className="text-sm font-semibold text-[#c5c1b9] mb-4">New User — joined week will be set to current week ({weekLabel(currentWeek)})</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div className="rounded-xl p-5 mb-5 border" style={{ backgroundColor: 'rgba(87,94,207,0.06)', borderColor: 'rgba(87,94,207,0.2)' }}>
+          <p className="text-sm font-semibold text-[#c5c1b9] mb-4">
+            New User — joined week will be set to <span style={{ color: '#575ECF' }}>{weekLabel(currentWeek)}</span>
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div>
               <label className={labelClass}>Name *</label>
               <input
@@ -286,36 +317,33 @@ function UsersSection() {
                 onChange={e => setNewUser(p => ({ ...p, name: e.target.value }))}
                 onKeyDown={e => e.key === 'Enter' && handleAdd()}
                 className={inputClass}
+                autoFocus
               />
             </div>
             <div>
               <label className={labelClass}>Role</label>
-              <select
-                value={newUser.role_id}
-                onChange={e => setNewUser(p => ({ ...p, role_id: e.target.value }))}
-                className={inputClass}
-                style={{ backgroundColor: '#2a2a2a' }}
-              >
-                <option value="">— No role —</option>
-                {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
+              <Select
+                options={roleOptions}
+                value={roleOptions.find(o => o.value === newUser.role_id) || roleOptions[0]}
+                onChange={opt => setNewUser(p => ({ ...p, role_id: opt ? opt.value : null }))}
+                styles={selectStyles}
+                isSearchable={false}
+              />
             </div>
             <div>
               <label className={labelClass}>Manager</label>
-              <select
-                value={newUser.manager_id}
-                onChange={e => setNewUser(p => ({ ...p, manager_id: e.target.value }))}
-                className={inputClass}
-                style={{ backgroundColor: '#2a2a2a' }}
-              >
-                <option value="">— No manager —</option>
-                {users.filter(u => u.active).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
+              <Select
+                options={managerOptions(null)}
+                value={managerOptions(null).find(o => o.value === newUser.manager_id) || managerOptions(null)[0]}
+                onChange={opt => setNewUser(p => ({ ...p, manager_id: opt ? opt.value : null }))}
+                styles={selectStyles}
+                isSearchable={false}
+              />
             </div>
           </div>
           <div className="flex gap-2 justify-end">
             <button
-              onClick={() => { setShowAddForm(false); setNewUser({ name: '', role_id: '', manager_id: '' }) }}
+              onClick={() => { setShowAddForm(false); setNewUser({ name: '', role_id: null, manager_id: null }) }}
               className="px-4 py-2 rounded-lg text-sm font-medium text-[#c5c1b9] transition-colors"
               style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)' }}
             >
@@ -326,6 +354,8 @@ function UsersSection() {
               disabled={saving || !newUser.name.trim()}
               className="px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-colors"
               style={{ backgroundColor: '#575ECF' }}
+              onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = '#6B72D8' }}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = '#575ECF'}
             >
               {saving ? 'Adding…' : 'Add User'}
             </button>
@@ -352,34 +382,32 @@ function UsersSection() {
                   <td className="px-4 py-3">
                     <span className={`font-medium ${user.active ? 'text-[#c5c1b9]' : 'line-through text-[#8a8680]'}`}>{user.name}</span>
                   </td>
-                  <td className="px-4 py-3 text-[#8a8680]">
+                  <td className="px-4 py-3" style={{ minWidth: '170px' }}>
                     {editingId === user.id ? (
-                      <select
-                        value={editUser.role_id}
-                        onChange={e => setEditUser(p => ({ ...p, role_id: e.target.value }))}
-                        className="rounded-lg px-2 py-1 text-xs bg-[#1b1b1b] border border-white/10 text-[#c5c1b9] focus:outline-none focus:border-[#575ECF]"
-                      >
-                        <option value="">— None —</option>
-                        {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                      </select>
+                      <Select
+                        options={roleOptions}
+                        value={roleOptions.find(o => o.value === editUser.role_id) || roleOptions[0]}
+                        onChange={opt => setEditUser(p => ({ ...p, role_id: opt ? opt.value : null }))}
+                        styles={inlineSelectStyles}
+                        isSearchable={false}
+                        menuPosition="fixed"
+                      />
                     ) : (
-                      user.role_name || <span className="text-[#8a8680]/50 italic">None</span>
+                      <span className="text-[#8a8680]">{user.role_name || <span className="italic opacity-50">None</span>}</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-[#8a8680]">
+                  <td className="px-4 py-3" style={{ minWidth: '200px' }}>
                     {editingId === user.id ? (
-                      <select
-                        value={editUser.manager_id}
-                        onChange={e => setEditUser(p => ({ ...p, manager_id: e.target.value }))}
-                        className="rounded-lg px-2 py-1 text-xs bg-[#1b1b1b] border border-white/10 text-[#c5c1b9] focus:outline-none focus:border-[#575ECF]"
-                      >
-                        <option value="">— None —</option>
-                        {users.filter(u => u.id !== user.id && u.active).map(u => (
-                          <option key={u.id} value={u.id}>{u.name}</option>
-                        ))}
-                      </select>
+                      <Select
+                        options={managerOptions(user.id)}
+                        value={managerOptions(user.id).find(o => o.value === editUser.manager_id) || managerOptions(user.id)[0]}
+                        onChange={opt => setEditUser(p => ({ ...p, manager_id: opt ? opt.value : null }))}
+                        styles={inlineSelectStyles}
+                        isSearchable={false}
+                        menuPosition="fixed"
+                      />
                     ) : (
-                      user.manager_name || <span className="text-[#8a8680]/50 italic">None</span>
+                      <span className="text-[#8a8680]">{user.manager_name || <span className="italic opacity-50">None</span>}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-[#8a8680] text-xs">{user.joined_week}</td>
@@ -421,18 +449,32 @@ function UsersSection() {
   )
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ── Main Page — owns shared roles + users state ───────────────────────────────
 export default function LearningAdmin() {
+  const [roles, setRoles] = useState([])
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([getLearningUsers(), getRoles()])
+      .then(([u, r]) => {
+        setUsers(u)
+        setRoles(r)
+        setLoading(false)
+      })
+      .catch(() => {
+        toast.error('Failed to load data')
+        setLoading(false)
+      })
+  }, [])
+
   return (
     <div className="min-h-screen bg-[#1b1b1b]">
       <div className="max-w-5xl mx-auto px-4 py-8">
+
+        {/* Breadcrumb */}
         <div className="flex items-center gap-3 mb-8">
-          <Link
-            to="/learning"
-            className="text-sm text-[#8a8680] hover:text-[#c5c1b9] transition-colors"
-          >
-            ← Learning
-          </Link>
+          <Link to="/learning" className="text-sm text-[#8a8680] hover:text-[#c5c1b9] transition-colors">← Learning</Link>
           <span className="text-[#8a8680]">/</span>
           <span className="text-sm text-[#c5c1b9] font-medium">Admin</span>
         </div>
@@ -442,11 +484,21 @@ export default function LearningAdmin() {
           <p className="text-[#8a8680] text-sm mt-1">Manage settings, roles, and users for the weekly learning tracker</p>
         </div>
 
-        <div className="space-y-6">
-          <SettingsSection />
-          <RolesSection />
-          <UsersSection />
-        </div>
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <svg className="w-8 h-8 animate-spin text-[#575ECF]" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <SettingsSection />
+            {/* Roles and Users share the same roles/users state so dropdowns stay in sync */}
+            <RolesSection roles={roles} setRoles={setRoles} />
+            <UsersSection roles={roles} users={users} setUsers={setUsers} />
+          </div>
+        )}
       </div>
     </div>
   )
