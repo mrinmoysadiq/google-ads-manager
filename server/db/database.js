@@ -181,6 +181,74 @@ function initializeDatabase() {
   // Seed default learning settings
   db.prepare("INSERT OR IGNORE INTO learning_settings (key, value) VALUES ('deadline_day', 'Friday')").run();
   console.log('Learning tables initialized');
+
+  // ── Outreach CRM tables ──────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS outreach_specialists (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      manager_id INTEGER REFERENCES outreach_specialists(id),
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_industries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_leads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      specialist_id INTEGER NOT NULL REFERENCES outreach_specialists(id),
+      company_name TEXT NOT NULL,
+      contact_name TEXT,
+      job_title TEXT,
+      website TEXT,
+      industry_id INTEGER REFERENCES outreach_industries(id),
+      location TEXT,
+      status TEXT NOT NULL DEFAULT 'Contacted',
+      next_followup_date TEXT,
+      status_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_touchpoints (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL REFERENCES outreach_leads(id) ON DELETE CASCADE,
+      touchpoint_number INTEGER NOT NULL,
+      date TEXT,
+      channel TEXT,
+      message_body TEXT,
+      loom_url TEXT,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(lead_id, touchpoint_number)
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL REFERENCES outreach_leads(id) ON DELETE CASCADE,
+      old_status TEXT,
+      new_status TEXT NOT NULL,
+      changed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Seed default industries if empty
+  const industryCount = db.prepare('SELECT COUNT(*) as cnt FROM outreach_industries').get();
+  if (industryCount.cnt === 0) {
+    const insertIndustry = db.prepare('INSERT INTO outreach_industries (name) VALUES (?)');
+    [
+      'Home Services', 'HVAC', 'Plumbing', 'Roofing', 'Landscaping',
+      'Dental Clinic', 'Chiropractic', 'Med Spa', 'Legal Services',
+      'Real Estate', 'Financial Services', 'E-commerce', 'SaaS',
+      'Fitness & Wellness', 'Education', 'Automotive', 'Other'
+    ].forEach(name => insertIndustry.run(name));
+    console.log('Seeded outreach industries');
+  }
+  console.log('Outreach tables initialized');
 }
 
 module.exports = { db, initializeDatabase };

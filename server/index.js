@@ -7,6 +7,7 @@ const slidesRouter = require('./routes/slides');
 const changelogRouter = require('./routes/changelog');
 const adminRouter = require('./routes/admin');
 const learningRouter = require('./routes/learning');
+const outreachRouter = require('./routes/outreach');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -29,6 +30,7 @@ app.use('/api/slides', slidesRouter);
 app.use('/api/changelog', changelogRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/learning', learningRouter);
+app.use('/api/outreach', outreachRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

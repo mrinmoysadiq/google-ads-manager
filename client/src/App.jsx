@@ -12,6 +12,8 @@ import LearningSubmit from './pages/learning/LearningSubmit'
 import LearningHistory from './pages/learning/LearningHistory'
 import LearningManagerDashboard from './pages/learning/LearningManagerDashboard'
 import LearningAdmin from './pages/learning/LearningAdmin'
+import OutreachHome from './pages/outreach/OutreachHome'
+import OutreachAdmin from './pages/outreach/OutreachAdmin'
 
 export default function App() {
   return (
@@ -35,6 +37,10 @@ export default function App() {
           <Route path="/learning/history/:userId" element={<LearningHistory />} />
           <Route path="/learning/manager/:managerId" element={<LearningManagerDashboard />} />
           <Route path="/learning/admin" element={<LearningAdmin />} />
+
+          {/* ── Outreach CRM module ────────────────────────────────────── */}
+          <Route path="/outreach" element={<OutreachHome />} />
+          <Route path="/outreach/admin" element={<OutreachAdmin />} />
         </Routes>
       </main>
       <Toaster
