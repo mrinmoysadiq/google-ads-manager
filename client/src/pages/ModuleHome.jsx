@@ -150,7 +150,6 @@ export default function ModuleHome() {
             </svg>
           }
         />
-      </div>
 
         {/* Outreach CRM */}
         <ModuleCard
