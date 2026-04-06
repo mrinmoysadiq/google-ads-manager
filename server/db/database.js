@@ -249,6 +249,15 @@ function initializeDatabase() {
     console.log('Seeded outreach industries');
   }
   console.log('Outreach tables initialized');
+
+  // Column migrations — safe to run every startup (errors ignored if column exists)
+  const columnMigrations = [
+    'ALTER TABLE outreach_leads ADD COLUMN source_url TEXT',
+    'ALTER TABLE outreach_leads ADD COLUMN source_image TEXT',
+  ];
+  columnMigrations.forEach(sql => {
+    try { db.exec(sql); } catch (e) { /* column already exists */ }
+  });
 }
 
 module.exports = { db, initializeDatabase };

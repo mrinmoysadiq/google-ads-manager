@@ -73,6 +73,77 @@ const selectStyles = {
   clearIndicator: (base) => ({ ...base, color: '#8a8680' }),
 }
 
+// ─── Helper: ImagePasteZone ────────────────────────────────────────────────────
+
+function ImagePasteZone({ value, onChange }) {
+  const zoneRef = useRef(null)
+
+  const handlePaste = useCallback((e) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault()
+        const blob = item.getAsFile()
+        const reader = new FileReader()
+        reader.onload = (ev) => onChange(ev.target.result)
+        reader.readAsDataURL(blob)
+        break
+      }
+    }
+  }, [onChange])
+
+  // Listen globally so user doesn't need to click the zone first
+  useEffect(() => {
+    document.addEventListener('paste', handlePaste)
+    return () => document.removeEventListener('paste', handlePaste)
+  }, [handlePaste])
+
+  if (value) {
+    return (
+      <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+        <img
+          src={value}
+          alt="Source screenshot"
+          style={{ maxWidth: '100%', maxHeight: '180px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', display: 'block' }}
+        />
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          style={{
+            position: 'absolute', top: '6px', right: '6px',
+            background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none',
+            borderRadius: '50%', width: '22px', height: '22px',
+            fontSize: '13px', cursor: 'pointer', lineHeight: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >✕</button>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      ref={zoneRef}
+      style={{
+        border: '1px dashed rgba(255,255,255,0.15)',
+        borderRadius: '8px',
+        padding: '20px',
+        textAlign: 'center',
+        color: '#555',
+        fontSize: '12px',
+        cursor: 'default',
+        backgroundColor: 'rgba(255,255,255,0.02)',
+        userSelect: 'none',
+      }}
+    >
+      <div style={{ fontSize: '20px', marginBottom: '6px', opacity: 0.4 }}>🖼</div>
+      <div>Paste a screenshot anywhere</div>
+      <div style={{ marginTop: '3px', opacity: 0.6 }}>⌘V / Ctrl+V</div>
+    </div>
+  )
+}
+
 // ─── Helper: SavedIndicator ────────────────────────────────────────────────────
 
 function SavedIndicator({ show }) {
@@ -416,6 +487,8 @@ export default function LeadDrawer({
     location: '',
     specialist_id: defaultSpecialistId || '',
     next_followup: '',
+    source_url: '',
+    source_image: null,
   })
   const [creating, setCreating] = useState(false)
 
@@ -489,6 +562,8 @@ export default function LeadDrawer({
         location: createForm.location || undefined,
         specialist_id: createForm.specialist_id || undefined,
         next_followup: createForm.next_followup || undefined,
+        source_url: createForm.source_url || undefined,
+        source_image: createForm.source_image || undefined,
       }
       const newLead = await createLead(payload)
       toast.success('Lead created')
@@ -699,6 +774,31 @@ export default function LeadDrawer({
                     className={inputClass}
                     value={createForm.next_followup}
                     onChange={e => setCreateForm(v => ({ ...v, next_followup: e.target.value }))}
+                  />
+                </div>
+
+                {/* Source URL */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>
+                    Source URL <span style={{ color: '#555', fontWeight: 400 }}>(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={createForm.source_url}
+                    onChange={e => setCreateForm(v => ({ ...v, source_url: e.target.value }))}
+                    placeholder="LinkedIn profile, website, etc."
+                  />
+                </div>
+
+                {/* Source Image */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>
+                    Source Image <span style={{ color: '#555', fontWeight: 400 }}>(optional)</span>
+                  </label>
+                  <ImagePasteZone
+                    value={createForm.source_image}
+                    onChange={v => setCreateForm(prev => ({ ...prev, source_image: v }))}
                   />
                 </div>
               </div>
@@ -973,6 +1073,35 @@ export default function LeadDrawer({
                           className={inputClass}
                           defaultValue={lead.next_followup ? lead.next_followup.slice(0, 10) : ''}
                           onBlur={e => saveField('next_followup', e.target.value || null)}
+                        />
+                      </div>
+
+                      {/* Source URL — full width */}
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Source URL <SavedIndicator show={saved.source_url} />
+                        </label>
+                        <input
+                          key={lead.source_url}
+                          type="text"
+                          className={inputClass}
+                          defaultValue={lead.source_url || ''}
+                          onBlur={e => saveField('source_url', e.target.value || null)}
+                          placeholder="LinkedIn profile, website, etc."
+                        />
+                      </div>
+
+                      {/* Source Image — full width */}
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Source Image <SavedIndicator show={saved.source_image} />
+                        </label>
+                        <ImagePasteZone
+                          value={lead.source_image || null}
+                          onChange={v => {
+                            setLead(prev => ({ ...prev, source_image: v }))
+                            saveField('source_image', v)
+                          }}
                         />
                       </div>
 
