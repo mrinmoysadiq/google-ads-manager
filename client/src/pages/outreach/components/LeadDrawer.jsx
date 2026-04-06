@@ -621,7 +621,7 @@ export default function LeadDrawer({
 
   const touchpointsByNumber = {}
   ;(lead?.touchpoints || []).forEach(tp => {
-    touchpointsByNumber[tp.number] = tp
+    touchpointsByNumber[tp.touchpoint_number] = tp
   })
 
   // Default open TP1 if none have data
