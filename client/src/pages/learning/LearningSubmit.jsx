@@ -4,6 +4,7 @@ import Select from 'react-select'
 import toast from 'react-hot-toast'
 import { getEntries, createEntry } from '../../utils/learningApi'
 import { getISOWeek, getWeekRange, weekLabel, isFridayPassed } from '../../utils/weekUtils'
+import BulletTextarea from '../../components/BulletTextarea'
 
 const LS_KEY = 'learning_selected_user'
 const MIN_CHARS = 300
@@ -242,7 +243,7 @@ export default function LearningSubmit() {
             {/* What did you learn */}
             <div>
               <label className={labelClass}>What did you learn? *</label>
-              <textarea
+              <BulletTextarea
                 rows={6}
                 placeholder="Describe what you learned in detail. Include the key concepts, insights, or skills you gained. (minimum 300 characters)"
                 value={form.what_learned}
@@ -293,7 +294,7 @@ export default function LearningSubmit() {
             {/* How to apply */}
             <div>
               <label className={labelClass}>How will you apply this? *</label>
-              <textarea
+              <BulletTextarea
                 rows={4}
                 placeholder="Describe specifically how you plan to apply this knowledge in your work…"
                 value={form.how_to_apply}
