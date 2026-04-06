@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import Navbar from './components/Navbar'
+import ModuleHome from './pages/ModuleHome'
 import SessionStart from './pages/SessionStart'
 import ChecklistWrapper from './pages/ChecklistWrapper'
 import SessionComplete from './pages/SessionComplete'
@@ -18,11 +19,17 @@ export default function App() {
       <Navbar />
       <main className="pt-0">
         <Routes>
-          <Route path="/" element={<SessionStart />} />
+          {/* ── Hub ───────────────────────────────────────────────────── */}
+          <Route path="/" element={<ModuleHome />} />
+
+          {/* ── Google Ads Audit module ────────────────────────────────── */}
+          <Route path="/audit" element={<SessionStart />} />
           <Route path="/checklist/:sessionId" element={<ChecklistWrapper />} />
           <Route path="/complete/:sessionId" element={<SessionComplete />} />
           <Route path="/changelog" element={<ChangeLog />} />
           <Route path="/admin" element={<Admin />} />
+
+          {/* ── Weekly Learning module ─────────────────────────────────── */}
           <Route path="/learning" element={<LearningHome />} />
           <Route path="/learning/submit" element={<LearningSubmit />} />
           <Route path="/learning/history/:userId" element={<LearningHistory />} />
