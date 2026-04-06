@@ -5,7 +5,7 @@ import infinixLogo from '../assets/infinix-logo.svg'
 function InfinixLogo() {
   return (
     <div className="flex items-center">
-      <img src={infinixLogo} alt="Infinix" style={{ height: '36px', width: 'auto' }} />
+      <img src={infinixLogo} alt="Infinix" style={{ height: '28px', width: 'auto' }} />
     </div>
   )
 }
