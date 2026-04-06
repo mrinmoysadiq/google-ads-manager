@@ -189,62 +189,68 @@ function StatusBadge({ status, onChange }) {
 
 // ─── Sub-component: TouchpointSection ────────────────────────────────────────
 
-function TouchpointSection({ leadId, number, initialData }) {
-  const [open, setOpen] = useState(false)
-  const [data, setData] = useState({
-    date: initialData?.date || '',
+function TouchpointSection({ leadId, number, initialData, defaultOpen }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const [open, setOpen] = useState(defaultOpen || false)
+  const [fields, setFields] = useState({
+    date: initialData?.date || today,
     channel: initialData?.channel || '',
     message_body: initialData?.message_body || '',
     loom_url: initialData?.loom_url || '',
     notes: initialData?.notes || '',
   })
-  const [saved, setSaved] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [savedOk, setSavedOk] = useState(false)
+  const [errors, setErrors] = useState({})
 
-  const hasData = data.date || data.channel || data.message_body
-
-  const markSaved = (field) => {
-    setSaved(v => ({ ...v, [field]: true }))
-    setTimeout(() => setSaved(v => ({ ...v, [field]: false })), 1500)
-  }
-
-  const save = useCallback(async (field, value) => {
-    try {
-      await upsertTouchpoint(leadId, number, { ...data, [field]: value })
-      markSaved(field)
-    } catch {
-      toast.error('Failed to save touchpoint')
-    }
-  }, [leadId, number, data])
-
-  const handleBlur = (field, value) => {
-    setData(v => ({ ...v, [field]: value }))
-    save(field, value)
-  }
-
+  const hasData = initialData?.date || initialData?.channel || initialData?.message_body
   const channelOptions = CHANNELS.map(c => ({ value: c, label: c }))
 
-  // Header summary
   const summary = hasData
-    ? [data.date && fmtDate(data.date), data.channel, data.message_body ? data.message_body.slice(0, 40) + (data.message_body.length > 40 ? '…' : '') : null]
+    ? [initialData.date && fmtDate(initialData.date), initialData.channel,
+       initialData.message_body ? initialData.message_body.slice(0, 40) + (initialData.message_body.length > 40 ? '…' : '') : null]
         .filter(Boolean).join(' · ')
     : null
 
+  const handleSave = async () => {
+    const newErrors = {}
+    if (!fields.channel) newErrors.channel = true
+    if (!fields.message_body.trim()) newErrors.message_body = true
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      toast.error('Channel and Message Body are required')
+      return
+    }
+    setErrors({})
+    setSaving(true)
+    try {
+      await upsertTouchpoint(leadId, number, fields)
+      setSavedOk(true)
+      toast.success(`Touchpoint ${number} saved`)
+      setTimeout(() => setSavedOk(false), 2500)
+    } catch {
+      toast.error('Failed to save touchpoint')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const labelStyle = (hasError) => ({
+    display: 'block', fontSize: '11px', marginBottom: '4px',
+    textTransform: 'uppercase', letterSpacing: '0.05em',
+    color: hasError ? '#ef4444' : '#8a8680',
+  })
+
   return (
-    <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', overflow: 'hidden', marginBottom: '8px' }}>
+    <div style={{ border: `1px solid ${open ? 'rgba(87,94,207,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: '8px', overflow: 'hidden', marginBottom: '8px' }}>
       {/* Header */}
       <button
         onClick={() => setOpen(v => !v)}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          width: '100%',
-          padding: '10px 14px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          width: '100%', padding: '10px 14px',
           background: open ? 'rgba(87,94,207,0.08)' : 'rgba(255,255,255,0.03)',
-          border: 'none',
-          cursor: 'pointer',
-          textAlign: 'left',
-          gap: '8px',
+          border: 'none', cursor: 'pointer', textAlign: 'left', gap: '8px',
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -264,89 +270,75 @@ function TouchpointSection({ leadId, number, initialData }) {
       {open && (
         <div style={{ padding: '14px', backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-          {/* Date */}
+          {/* Date — defaults to today */}
           <div>
-            <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Date <SavedIndicator show={saved.date} />
-            </label>
+            <label style={labelStyle(false)}>Date</label>
             <input
               type="date"
               className={inputClass}
-              defaultValue={data.date}
-              onBlur={e => handleBlur('date', e.target.value)}
+              value={fields.date}
+              onChange={e => setFields(v => ({ ...v, date: e.target.value }))}
             />
           </div>
 
-          {/* Channel */}
+          {/* Channel — mandatory */}
           <div>
-            <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Channel <SavedIndicator show={saved.channel} />
+            <label style={labelStyle(errors.channel)}>
+              Channel <span style={{ color: '#ef4444' }}>*</span>
             </label>
             <Select
-              styles={selectStyles}
+              styles={{
+                ...selectStyles,
+                control: (base, state) => ({
+                  ...selectStyles.control(base, state),
+                  borderColor: errors.channel ? '#ef4444' : state.isFocused ? '#575ECF' : 'rgba(255,255,255,0.1)',
+                }),
+              }}
               options={channelOptions}
-              value={data.channel ? { value: data.channel, label: data.channel } : null}
+              value={fields.channel ? { value: fields.channel, label: fields.channel } : null}
               onChange={opt => {
-                const val = opt?.value || ''
-                setData(v => ({ ...v, channel: val }))
-                upsertTouchpoint(leadId, number, { ...data, channel: val })
-                  .then(() => markSaved('channel'))
-                  .catch(() => toast.error('Failed to save'))
+                setFields(v => ({ ...v, channel: opt?.value || '' }))
+                if (errors.channel) setErrors(v => ({ ...v, channel: false }))
               }}
               placeholder="Select channel…"
               isClearable
             />
           </div>
 
-          {/* Message Body */}
+          {/* Message Body — mandatory */}
           <div>
-            <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Message Body <SavedIndicator show={saved.message_body} />
+            <label style={labelStyle(errors.message_body)}>
+              Message Body <span style={{ color: '#ef4444' }}>*</span>
             </label>
             <textarea
               className={inputClass}
               rows={4}
-              defaultValue={data.message_body}
-              onBlur={e => handleBlur('message_body', e.target.value)}
-              style={{ resize: 'vertical' }}
+              value={fields.message_body}
+              onChange={e => {
+                setFields(v => ({ ...v, message_body: e.target.value }))
+                if (errors.message_body && e.target.value.trim()) setErrors(v => ({ ...v, message_body: false }))
+              }}
+              style={{ resize: 'vertical', borderColor: errors.message_body ? '#ef4444' : undefined }}
+              placeholder="Write your outreach message here…"
             />
           </div>
 
           {/* Loom URL */}
           <div>
-            <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Loom URL <SavedIndicator show={saved.loom_url} />
-            </label>
+            <label style={labelStyle(false)}>Loom URL</label>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <input
-                type="url"
+                type="text"
                 className={inputClass}
-                defaultValue={data.loom_url}
+                value={fields.loom_url}
+                onChange={e => setFields(v => ({ ...v, loom_url: e.target.value }))}
                 placeholder="https://loom.com/share/…"
-                onBlur={e => {
-                  setData(v => ({ ...v, loom_url: e.target.value }))
-                  handleBlur('loom_url', e.target.value)
-                }}
                 style={{ flex: 1 }}
               />
-              {data.loom_url && (
-                <a
-                  href={data.loom_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    backgroundColor: 'rgba(87,94,207,0.15)',
-                    color: '#575ECF',
-                    border: '1px solid rgba(87,94,207,0.3)',
-                    borderRadius: '6px',
-                    padding: '6px 12px',
-                    fontSize: '12px',
-                    textDecoration: 'none',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                  }}
-                >
-                  ▶ View Loom
+              {fields.loom_url && (
+                <a href={fields.loom_url} target="_blank" rel="noopener noreferrer"
+                  style={{ backgroundColor: 'rgba(87,94,207,0.15)', color: '#575ECF', border: '1px solid rgba(87,94,207,0.3)', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  ▶ View
                 </a>
               )}
             </div>
@@ -354,16 +346,37 @@ function TouchpointSection({ leadId, number, initialData }) {
 
           {/* Notes */}
           <div>
-            <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Notes <SavedIndicator show={saved.notes} />
-            </label>
+            <label style={labelStyle(false)}>Notes</label>
             <textarea
               className={inputClass}
               rows={2}
-              defaultValue={data.notes}
-              onBlur={e => handleBlur('notes', e.target.value)}
+              value={fields.notes}
+              onChange={e => setFields(v => ({ ...v, notes: e.target.value }))}
               style={{ resize: 'vertical' }}
+              placeholder="Any additional notes…"
             />
+          </div>
+
+          {/* Save button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                backgroundColor: savedOk ? 'rgba(34,197,94,0.15)' : '#575ECF',
+                color: savedOk ? '#22c55e' : '#fff',
+                border: savedOk ? '1px solid rgba(34,197,94,0.3)' : 'none',
+                borderRadius: '7px',
+                padding: '8px 20px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: saving ? 'not-allowed' : 'pointer',
+                opacity: saving ? 0.7 : 1,
+                transition: 'all 0.2s',
+              }}
+            >
+              {saving ? 'Saving…' : savedOk ? '✓ Saved' : 'Save Touchpoint'}
+            </button>
           </div>
 
         </div>
@@ -632,11 +645,11 @@ export default function LeadDrawer({
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Website</label>
                   <input
-                    type="url"
+                    type="text"
                     className={inputClass}
                     value={createForm.website}
                     onChange={e => setCreateForm(v => ({ ...v, website: e.target.value }))}
-                    placeholder="https://example.com"
+                    placeholder="example.com or https://example.com"
                   />
                 </div>
 
@@ -823,11 +836,11 @@ export default function LeadDrawer({
                   </div>
                 </div>
 
-                {/* ── Tab body ────────────────────────────────────────────────── */}
+                {/* ── Tab body — always mounted, hidden via display:none ────── */}
                 <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
 
                   {/* ── DETAILS TAB ─────────────────────────────────────────── */}
-                  {activeTab === 'details' && (
+                  <div style={{ display: activeTab === 'details' ? 'block' : 'none' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
                       {/* Contact Name */}
@@ -868,14 +881,14 @@ export default function LeadDrawer({
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                           <input
                             key={lead.website}
-                            type="url"
+                            type="text"
                             className={inputClass}
                             defaultValue={lead.website || ''}
                             onBlur={e => {
                               setLead(prev => ({ ...prev, website: e.target.value }))
                               saveField('website', e.target.value)
                             }}
-                            placeholder="https://example.com"
+                            placeholder="example.com or https://example.com"
                             style={{ flex: 1 }}
                           />
                           {lead.website && (
@@ -964,25 +977,23 @@ export default function LeadDrawer({
                       </div>
 
                     </div>
-                  )}
+                  </div>
 
                   {/* ── TOUCHPOINTS TAB ─────────────────────────────────────── */}
-                  {activeTab === 'touchpoints' && (
-                    <div>
-                      {[1, 2, 3, 4, 5].map(n => (
-                        <TouchpointSection
-                          key={`${leadId}-tp-${n}`}
-                          leadId={leadId}
-                          number={n}
-                          initialData={touchpointsByNumber[n] || null}
-                          defaultOpen={n === 1 && !anyTpData}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  <div style={{ display: activeTab === 'touchpoints' ? 'block' : 'none' }}>
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <TouchpointSection
+                        key={`${leadId}-tp-${n}`}
+                        leadId={leadId}
+                        number={n}
+                        initialData={touchpointsByNumber[n] || null}
+                        defaultOpen={n === 1}
+                      />
+                    ))}
+                  </div>
 
                   {/* ── HISTORY TAB ─────────────────────────────────────────── */}
-                  {activeTab === 'history' && (
+                  <div style={{ display: activeTab === 'history' ? 'block' : 'none' }}>
                     <div>
                       {!lead.history || lead.history.length === 0 ? (
                         <div style={{
@@ -1053,7 +1064,7 @@ export default function LeadDrawer({
                         </div>
                       )}
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* ── Footer ──────────────────────────────────────────────────── */}
@@ -1085,24 +1096,16 @@ export default function LeadDrawer({
                     Delete Lead
                   </button>
 
-                  <button
-                    onClick={handleCopySummary}
-                    style={{
-                      backgroundColor: 'rgba(87,94,207,0.12)',
-                      color: '#575ECF',
-                      border: '1px solid rgba(87,94,207,0.3)',
-                      borderRadius: '7px',
-                      padding: '7px 16px',
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      fontWeight: 500,
-                      transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(87,94,207,0.2)' }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'rgba(87,94,207,0.12)' }}
-                  >
-                    Copy Summary
-                  </button>
+                  {activeTab === 'details' && (
+                    <span style={{ color: '#555', fontSize: '11px', fontStyle: 'italic' }}>
+                      Fields auto-save on change
+                    </span>
+                  )}
+                  {activeTab === 'touchpoints' && (
+                    <span style={{ color: '#555', fontSize: '11px', fontStyle: 'italic' }}>
+                      Use "Save Touchpoint" inside each section
+                    </span>
+                  )}
                 </div>
               </>
             ) : (

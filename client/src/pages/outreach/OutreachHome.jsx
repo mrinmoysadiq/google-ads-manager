@@ -24,7 +24,7 @@ const selectStyles = {
 
 export default function OutreachHome() {
   const [tab, setTab] = useState('pipeline') // pipeline | dashboard
-  const [viewMode, setViewMode] = useState(() => localStorage.getItem(LS_VIEW_KEY) || 'table')
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem(LS_VIEW_KEY) || 'kanban')
   const [specialists, setSpecialists] = useState([])
   const [industries, setIndustries] = useState([])
   const [selectedSpecialist, setSelectedSpecialist] = useState(null) // null = All

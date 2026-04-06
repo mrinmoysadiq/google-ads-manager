@@ -1,25 +1,11 @@
 import { Link, useLocation } from 'react-router-dom'
+import infinixLogo from '../assets/infinix-logo.svg'
 
 // ── Infinix brand logo (compact navbar version) ───────────────────────────────
 function InfinixLogo() {
   return (
-    <div className="flex items-center gap-2.5">
-      <svg width="38" height="24" viewBox="0 0 38 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path
-          d="M19 12C19 12 14.5 3 9 3C4.9 3 2 6.6 2 12C2 17.4 4.9 21 9 21C14.5 21 19 12 19 12Z"
-          stroke="#96D400" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" fill="none"
-        />
-        <path
-          d="M19 12C19 12 23.5 3 29 3C33.1 3 36 6.6 36 12C36 17.4 33.1 21 29 21C23.5 21 19 12 19 12Z"
-          stroke="#96D400" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" fill="none"
-        />
-      </svg>
-      <span
-        className="font-black tracking-[0.16em] text-white select-none text-base leading-none"
-        style={{ fontFamily: 'Inter, sans-serif' }}
-      >
-        INFINIX
-      </span>
+    <div className="flex items-center">
+      <img src={infinixLogo} alt="Infinix" style={{ height: '36px', width: 'auto' }} />
     </div>
   )
 }

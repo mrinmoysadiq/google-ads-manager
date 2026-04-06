@@ -1,25 +1,11 @@
 import { Link } from 'react-router-dom'
+import infinixLogo from '../assets/infinix-logo.svg'
 
-// ── Infinix brand SVG logo (reused here at large size) ────────────────────────
+// ── Infinix brand logo (large hero version) ───────────────────────────────────
 function InfinixLogoLarge() {
   return (
-    <div className="flex items-center gap-4">
-      <svg width="64" height="40" viewBox="0 0 64 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path
-          d="M32 20C32 20 25 5 14 5C6.8 5 2 11 2 20C2 29 6.8 35 14 35C25 35 32 20 32 20Z"
-          stroke="#96D400" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" fill="none"
-        />
-        <path
-          d="M32 20C32 20 39 5 50 5C57.2 5 62 11 62 20C62 29 57.2 35 50 35C39 35 32 20 32 20Z"
-          stroke="#96D400" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" fill="none"
-        />
-      </svg>
-      <span
-        className="font-black tracking-[0.18em] text-white select-none"
-        style={{ fontSize: '2.4rem', fontFamily: 'Inter, sans-serif', letterSpacing: '0.18em' }}
-      >
-        INFINIX
-      </span>
+    <div className="flex items-center justify-center">
+      <img src={infinixLogo} alt="Infinix" style={{ height: '96px', width: 'auto' }} />
     </div>
   )
 }

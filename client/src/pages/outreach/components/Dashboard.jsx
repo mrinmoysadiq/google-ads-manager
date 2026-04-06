@@ -191,7 +191,10 @@ export default function Dashboard({ specialistId, specialists, onLeadClick }) {
   const startedTrial = m.started_trial || 0;
   const totalContacted = m.total_contacted || totalLeads;
 
-  const byChannel = m.by_channel || [];
+  // Server returns by_channel as { LinkedIn: 3, Email: 2, ... } — convert to array
+  const byChannel = m.by_channel
+    ? Object.entries(m.by_channel).map(([channel, count]) => ({ channel, count }))
+    : [];
   const bySpecialist = m.by_specialist || [];
 
   const sortedChannels = [...byChannel].sort((a, b) => (b.count || 0) - (a.count || 0));
@@ -564,25 +567,25 @@ export default function Dashboard({ specialistId, specialists, onLeadClick }) {
                   <tbody>
                     {bySpecialist.map((sp, idx) => {
                       const closedRate =
-                        sp.total_leads > 0
-                          ? (((sp.closed || 0) / sp.total_leads) * 100).toFixed(1) + '%'
+                        (sp.total || 0) > 0
+                          ? (((sp.closed || 0) / (sp.total || 0)) * 100).toFixed(1) + '%'
                           : '0%';
                       return (
                         <tr
-                          key={sp.specialist_id || idx}
+                          key={idx}
                           style={{
                             borderBottom: '1px solid rgba(255,255,255,0.04)',
                           }}
                         >
-                          <td style={{ ...primaryText, padding: '8px 12px' }}>{sp.specialist_name || '—'}</td>
+                          <td style={{ ...primaryText, padding: '8px 12px' }}>{sp.name || '—'}</td>
                           <td style={{ ...mutedText, padding: '8px 12px', textAlign: 'right' }}>
-                            {sp.total_leads || 0}
+                            {sp.total || 0}
                           </td>
                           <td style={{ ...mutedText, padding: '8px 12px', textAlign: 'right' }}>
                             {sp.responded || 0}
                           </td>
                           <td style={{ ...mutedText, padding: '8px 12px', textAlign: 'right' }}>
-                            {sp.appointments_booked || 0}
+                            {sp.booked || 0}
                           </td>
                           <td style={{ ...mutedText, padding: '8px 12px', textAlign: 'right' }}>
                             {sp.closed || 0}
