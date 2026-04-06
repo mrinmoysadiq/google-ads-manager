@@ -103,8 +103,8 @@ const DETAIL_FIELD_LABELS = {
 }
 
 const defaultManualForm = () => ({
-  account_name: '',
-  team_member: '',
+  account_name: null,
+  team_member: null,
   date: new Date().toISOString().slice(0, 10),
   section: null,
   change_type: null,
@@ -241,7 +241,7 @@ export default function ChangeLog() {
 
   const handleManualSubmit = async () => {
     const errs = {}
-    if (!manualForm.account_name.trim()) errs.account_name = true
+    if (!manualForm.account_name) errs.account_name = true
     if (!manualForm.date) errs.date = true
     if (!manualForm.section) errs.section = true
     if (!manualForm.change_type) errs.change_type = true
@@ -255,8 +255,8 @@ export default function ChangeLog() {
     setSubmitting(true)
     try {
       await saveManualChangeLog({
-        account_name: manualForm.account_name.trim(),
-        team_member: manualForm.team_member.trim() || null,
+        account_name: manualForm.account_name.value,
+        team_member: manualForm.team_member?.value || null,
         date: manualForm.date,
         section: manualForm.section.value,
         change_type: manualForm.change_type.value,
@@ -685,12 +685,12 @@ export default function ChangeLog() {
                 <label className="block text-xs font-semibold text-[#8a8680] mb-1.5">
                   Account <span className="text-red-400">*</span>
                 </label>
-                <input
-                  type="text"
-                  placeholder="Account name..."
+                <Select
+                  options={accounts}
                   value={manualForm.account_name}
-                  onChange={e => { setManualForm(p => ({ ...p, account_name: e.target.value })); setManualErrors(p => { const n = { ...p }; delete n.account_name; return n }) }}
-                  style={modalInputStyle(manualErrors.account_name)}
+                  onChange={v => { setManualForm(p => ({ ...p, account_name: v })); setManualErrors(p => { const n = { ...p }; delete n.account_name; return n }) }}
+                  placeholder="Select account..."
+                  styles={modalSelectStyles(manualErrors.account_name)}
                 />
                 {manualErrors.account_name && <p className="text-red-400 text-xs mt-1">Required</p>}
               </div>
@@ -698,12 +698,13 @@ export default function ChangeLog() {
               {/* Team Member */}
               <div>
                 <label className="block text-xs font-semibold text-[#8a8680] mb-1.5">Team Member</label>
-                <input
-                  type="text"
-                  placeholder="Your name (optional)..."
+                <Select
+                  options={teamMembers}
                   value={manualForm.team_member}
-                  onChange={e => setManualForm(p => ({ ...p, team_member: e.target.value }))}
-                  style={modalInputStyle(false)}
+                  onChange={v => setManualForm(p => ({ ...p, team_member: v }))}
+                  placeholder="Select team member (optional)..."
+                  styles={modalSelectStyles(false)}
+                  isClearable
                 />
               </div>
 
