@@ -231,6 +231,29 @@ router.get('/export', (req, res) => {
   }
 });
 
+// POST /manual — create a manual change log entry (no audit session required)
+router.post('/manual', (req, res) => {
+  try {
+    const { team_member, account_name, date, section, change_type, changes_made_note } = req.body;
+
+    if (!account_name || !date || !section || !change_type) {
+      return res.status(400).json({ error: 'account_name, date, section, and change_type are required' });
+    }
+
+    const result = db.prepare(`
+      INSERT INTO change_log (
+        session_id, team_member, account_name, date, section, change_type, changes_made_note
+      ) VALUES (0, ?, ?, ?, ?, ?, ?)
+    `).run(team_member || null, account_name, date, section, change_type, changes_made_note || null);
+
+    const inserted = db.prepare('SELECT * FROM change_log WHERE id = ?').get(result.lastInsertRowid);
+    return res.status(201).json(inserted);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save manual change log' });
+  }
+});
+
 // GET /last-action — most recent change log for account+section
 router.get('/last-action', (req, res) => {
   try {

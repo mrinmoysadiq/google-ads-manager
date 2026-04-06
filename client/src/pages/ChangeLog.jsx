@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
-import { getChangeLogs, exportChangeLogs, getAccounts, getTeamMembers } from '../utils/api'
+import { getChangeLogs, exportChangeLogs, getAccounts, getTeamMembers, saveManualChangeLog } from '../utils/api'
 
 const CHANGE_TYPE_OPTIONS = [
   { value: 'performance_note', label: 'Performance Note' },
@@ -9,6 +9,29 @@ const CHANGE_TYPE_OPTIONS = [
   { value: 'keyword_added', label: 'Keyword Added' },
   { value: 'ad_copy_change', label: 'Ad Copy Change' },
   { value: 'audience_targeting_change', label: 'Audience/Targeting Change' },
+]
+
+const MANUAL_CHANGE_TYPE_OPTIONS = [
+  { value: 'manual_budget_change', label: 'Budget Change' },
+  { value: 'manual_bid_change', label: 'Bid Strategy Change' },
+  { value: 'manual_campaign_status', label: 'Campaign Status Change' },
+  { value: 'manual_keyword_change', label: 'Keyword Change' },
+  { value: 'manual_ad_change', label: 'Ad Copy Change' },
+  { value: 'manual_targeting_change', label: 'Targeting / Audience Change' },
+  { value: 'manual_asset_change', label: 'Asset Change' },
+  { value: 'manual_sitelink_change', label: 'Sitelink Change' },
+  { value: 'manual_landing_page', label: 'Landing Page Issue' },
+  { value: 'manual_other', label: 'Other Change' },
+]
+
+const MANUAL_SECTION_OPTIONS = [
+  { value: 'Daily Performance', label: 'Daily Performance' },
+  { value: 'Search Term Analysis', label: 'Search Term Analysis' },
+  { value: 'Asset & Landing Page Audit', label: 'Asset & Landing Page Audit' },
+  { value: 'Campaign Settings', label: 'Campaign Settings' },
+  { value: 'Bidding & Budget', label: 'Bidding & Budget' },
+  { value: 'Audience & Targeting', label: 'Audience & Targeting' },
+  { value: 'Other', label: 'Other' },
 ]
 
 const SECTION_OPTIONS = [
@@ -25,6 +48,21 @@ const CHANGE_TYPE_LABELS = {
   keyword_added: 'Keyword Added',
   ad_copy_change: 'Ad Copy Change',
   audience_targeting_change: 'Audience/Targeting',
+  disapproved_asset_action: 'Disapproved Asset',
+  not_available_asset: 'Asset Not Available',
+  account_sitelink_issue: 'Account Sitelink Issue',
+  campaign_sitelink_issue: 'Campaign Sitelink Issue',
+  landing_page_issue: 'Landing Page Issue',
+  manual_budget_change: 'Budget Change',
+  manual_bid_change: 'Bid Strategy Change',
+  manual_campaign_status: 'Campaign Status Change',
+  manual_keyword_change: 'Keyword Change',
+  manual_ad_change: 'Ad Copy Change',
+  manual_targeting_change: 'Targeting / Audience Change',
+  manual_asset_change: 'Asset Change',
+  manual_sitelink_change: 'Sitelink Change',
+  manual_landing_page: 'Landing Page Issue',
+  manual_other: 'Other Change',
 }
 
 const CHANGE_TYPE_COLORS = {
@@ -33,7 +71,14 @@ const CHANGE_TYPE_COLORS = {
   keyword_added: { backgroundColor: 'rgba(74,222,128,0.15)', color: '#4ade80' },
   ad_copy_change: { backgroundColor: 'rgba(167,139,250,0.15)', color: '#a78bfa' },
   audience_targeting_change: { backgroundColor: 'rgba(248,113,113,0.15)', color: '#f87171' },
+  disapproved_asset_action: { backgroundColor: 'rgba(248,113,113,0.15)', color: '#f87171' },
+  not_available_asset: { backgroundColor: 'rgba(251,191,36,0.15)', color: '#fbbf24' },
+  account_sitelink_issue: { backgroundColor: 'rgba(251,191,36,0.15)', color: '#fbbf24' },
+  campaign_sitelink_issue: { backgroundColor: 'rgba(251,191,36,0.15)', color: '#fbbf24' },
+  landing_page_issue: { backgroundColor: 'rgba(248,113,113,0.15)', color: '#f87171' },
 }
+
+const MANUAL_COLOR = { backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981' }
 
 const DETAIL_FIELD_LABELS = {
   team_member: 'Team Member',
@@ -56,6 +101,15 @@ const DETAIL_FIELD_LABELS = {
   targeting_reason: 'Targeting Reason',
   created_at: 'Logged At',
 }
+
+const defaultManualForm = () => ({
+  account_name: '',
+  team_member: '',
+  date: new Date().toISOString().slice(0, 10),
+  section: null,
+  change_type: null,
+  changes_made_note: '',
+})
 
 export default function ChangeLog() {
   const [logs, setLogs] = useState([])
@@ -81,6 +135,12 @@ export default function ChangeLog() {
 
   // Modal
   const [selectedEntry, setSelectedEntry] = useState(null)
+
+  // Manual entry form
+  const [showManualModal, setShowManualModal] = useState(false)
+  const [manualForm, setManualForm] = useState(defaultManualForm())
+  const [manualErrors, setManualErrors] = useState({})
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     Promise.all([getAccounts(), getTeamMembers()])
@@ -179,6 +239,42 @@ export default function ChangeLog() {
     }
   }
 
+  const handleManualSubmit = async () => {
+    const errs = {}
+    if (!manualForm.account_name.trim()) errs.account_name = true
+    if (!manualForm.date) errs.date = true
+    if (!manualForm.section) errs.section = true
+    if (!manualForm.change_type) errs.change_type = true
+    if (!manualForm.changes_made_note.trim()) errs.changes_made_note = true
+
+    if (Object.keys(errs).length > 0) {
+      setManualErrors(errs)
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await saveManualChangeLog({
+        account_name: manualForm.account_name.trim(),
+        team_member: manualForm.team_member.trim() || null,
+        date: manualForm.date,
+        section: manualForm.section.value,
+        change_type: manualForm.change_type.value,
+        changes_made_note: manualForm.changes_made_note.trim(),
+      })
+      toast.success('Change logged successfully!')
+      setShowManualModal(false)
+      setManualForm(defaultManualForm())
+      setManualErrors({})
+      fetchLogs(appliedFilters, 1)
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to log change. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const formatDate = (dateStr) => {
     if (!dateStr) return ''
     try {
@@ -213,6 +309,14 @@ export default function ChangeLog() {
     multiValueLabel: (base) => ({ ...base, color: '#c5c1b9' }),
   }
 
+  const modalSelectStyles = (hasErr) => ({
+    ...selectStyles,
+    control: (base, state) => ({
+      ...selectStyles.control(base, state),
+      borderColor: hasErr ? 'rgba(248,113,113,0.6)' : (state.isFocused ? '#575ECF' : 'rgba(255,255,255,0.12)'),
+    }),
+  })
+
   const startIndex = (page - 1) * 25 + 1
   const endIndex = Math.min(page * 25, total)
 
@@ -227,6 +331,19 @@ export default function ChangeLog() {
     outline: 'none',
   }
 
+  const modalInputStyle = (hasErr) => ({
+    backgroundColor: '#2a2a2a',
+    border: `1px solid ${hasErr ? 'rgba(248,113,113,0.6)' : 'rgba(255,255,255,0.12)'}`,
+    color: '#c5c1b9',
+    borderRadius: '8px',
+    padding: '8px 12px',
+    fontSize: '13px',
+    width: '100%',
+    outline: 'none',
+  })
+
+  const isManualEntry = (log) => log.change_type && log.change_type.startsWith('manual_')
+
   return (
     <div className="min-h-screen bg-[#1b1b1b]"><div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
@@ -234,19 +351,33 @@ export default function ChangeLog() {
           <h1 className="text-2xl font-bold text-[#c5c1b9]">Change Log</h1>
           <p className="text-[#8a8680] text-sm mt-1">Track all changes made across accounts</p>
         </div>
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50"
-          style={{ backgroundColor: '#575ECF' }}
-          onMouseEnter={e => { if (!exporting) e.currentTarget.style.backgroundColor = '#6B72D8' }}
-          onMouseLeave={e => { if (!exporting) e.currentTarget.style.backgroundColor = '#575ECF' }}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          {exporting ? 'Exporting...' : 'Export CSV'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setManualForm(defaultManualForm()); setManualErrors({}); setShowManualModal(true) }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+            style={{ backgroundColor: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(16,185,129,0.2)' }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'rgba(16,185,129,0.12)' }}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Log Manual Change
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+            style={{ backgroundColor: '#575ECF' }}
+            onMouseEnter={e => { if (!exporting) e.currentTarget.style.backgroundColor = '#6B72D8' }}
+            onMouseLeave={e => { if (!exporting) e.currentTarget.style.backgroundColor = '#575ECF' }}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -373,14 +504,21 @@ export default function ChangeLog() {
               <tbody>
                 {logs.map((log, i) => (
                   <tr key={log.id} style={{ backgroundColor: i % 2 === 0 ? '#242424' : '#2a2a2a', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <td className="px-4 py-3 whitespace-nowrap" style={{ color: '#c5c1b9' }}>{formatDate(log.date)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap" style={{ color: '#c5c1b9' }}>
+                      <div>{formatDate(log.date)}</div>
+                      {isManualEntry(log) && (
+                        <span className="text-xs px-1.5 py-0.5 rounded mt-0.5 inline-block font-medium" style={{ backgroundColor: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
+                          manual
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-medium" style={{ color: '#c5c1b9' }}>{log.account_name}</td>
                     <td className="px-4 py-3" style={{ color: '#c5c1b9' }}>{log.team_member}</td>
                     <td className="px-4 py-3 text-xs" style={{ color: '#8a8680' }}>{log.section}</td>
                     <td className="px-4 py-3">
                       <span
                         className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                        style={CHANGE_TYPE_COLORS[log.change_type] || { backgroundColor: 'rgba(255,255,255,0.08)', color: '#c5c1b9' }}
+                        style={CHANGE_TYPE_COLORS[log.change_type] || (isManualEntry(log) ? MANUAL_COLOR : { backgroundColor: 'rgba(255,255,255,0.08)', color: '#c5c1b9' })}
                       >
                         {CHANGE_TYPE_LABELS[log.change_type] || log.change_type}
                       </span>
@@ -449,10 +587,16 @@ export default function ChangeLog() {
       {selectedEntry && (
         <div className="fixed inset-0 flex items-center justify-center z-50 px-4" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}>
           <div className="rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.12)' }}>
-            {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
               <div>
-                <h3 className="text-lg font-bold text-[#c5c1b9]">Change Log Details</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-[#c5c1b9]">Change Log Details</h3>
+                  {isManualEntry(selectedEntry) && (
+                    <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
+                      Manual Entry
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-[#8a8680]">
                   {selectedEntry.account_name} — {formatDate(selectedEntry.date)}
                 </p>
@@ -469,8 +613,6 @@ export default function ChangeLog() {
                 </svg>
               </button>
             </div>
-
-            {/* Modal Body */}
             <div className="overflow-y-auto flex-1 px-6 py-4">
               <div className="space-y-3">
                 {Object.entries(DETAIL_FIELD_LABELS).map(([key, label]) => {
@@ -485,7 +627,7 @@ export default function ChangeLog() {
                         {key === 'change_type' ? (
                           <span
                             className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                            style={CHANGE_TYPE_COLORS[value] || { backgroundColor: 'rgba(255,255,255,0.08)', color: '#c5c1b9' }}
+                            style={CHANGE_TYPE_COLORS[value] || (isManualEntry(selectedEntry) ? MANUAL_COLOR : { backgroundColor: 'rgba(255,255,255,0.08)', color: '#c5c1b9' })}
                           >
                             {CHANGE_TYPE_LABELS[value] || value}
                           </span>
@@ -498,8 +640,6 @@ export default function ChangeLog() {
                 })}
               </div>
             </div>
-
-            {/* Modal Footer */}
             <div className="px-6 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#1b1b1b' }}>
               <button
                 onClick={() => setSelectedEntry(null)}
@@ -509,6 +649,148 @@ export default function ChangeLog() {
                 onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Entry Modal */}
+      {showManualModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 px-4" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}>
+          <div className="rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.12)' }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <div>
+                <h3 className="text-lg font-bold text-[#c5c1b9]">Log Manual Change</h3>
+                <p className="text-sm text-[#8a8680]">Record a Google Ads change made outside the audit.</p>
+              </div>
+              <button
+                onClick={() => setShowManualModal(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full transition-colors"
+                style={{ color: '#8a8680' }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#c5c1b9' }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#8a8680' }}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+              {/* Account */}
+              <div>
+                <label className="block text-xs font-semibold text-[#8a8680] mb-1.5">
+                  Account <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Account name..."
+                  value={manualForm.account_name}
+                  onChange={e => { setManualForm(p => ({ ...p, account_name: e.target.value })); setManualErrors(p => { const n = { ...p }; delete n.account_name; return n }) }}
+                  style={modalInputStyle(manualErrors.account_name)}
+                />
+                {manualErrors.account_name && <p className="text-red-400 text-xs mt-1">Required</p>}
+              </div>
+
+              {/* Team Member */}
+              <div>
+                <label className="block text-xs font-semibold text-[#8a8680] mb-1.5">Team Member</label>
+                <input
+                  type="text"
+                  placeholder="Your name (optional)..."
+                  value={manualForm.team_member}
+                  onChange={e => setManualForm(p => ({ ...p, team_member: e.target.value }))}
+                  style={modalInputStyle(false)}
+                />
+              </div>
+
+              {/* Date */}
+              <div>
+                <label className="block text-xs font-semibold text-[#8a8680] mb-1.5">
+                  Date <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={manualForm.date}
+                  onChange={e => { setManualForm(p => ({ ...p, date: e.target.value })); setManualErrors(p => { const n = { ...p }; delete n.date; return n }) }}
+                  style={modalInputStyle(manualErrors.date)}
+                />
+                {manualErrors.date && <p className="text-red-400 text-xs mt-1">Required</p>}
+              </div>
+
+              {/* Section */}
+              <div>
+                <label className="block text-xs font-semibold text-[#8a8680] mb-1.5">
+                  Section / Area <span className="text-red-400">*</span>
+                </label>
+                <Select
+                  options={MANUAL_SECTION_OPTIONS}
+                  value={manualForm.section}
+                  onChange={v => { setManualForm(p => ({ ...p, section: v })); setManualErrors(p => { const n = { ...p }; delete n.section; return n }) }}
+                  placeholder="Select section..."
+                  styles={modalSelectStyles(manualErrors.section)}
+                />
+                {manualErrors.section && <p className="text-red-400 text-xs mt-1">Required</p>}
+              </div>
+
+              {/* Change Type */}
+              <div>
+                <label className="block text-xs font-semibold text-[#8a8680] mb-1.5">
+                  Change Type <span className="text-red-400">*</span>
+                </label>
+                <Select
+                  options={MANUAL_CHANGE_TYPE_OPTIONS}
+                  value={manualForm.change_type}
+                  onChange={v => { setManualForm(p => ({ ...p, change_type: v })); setManualErrors(p => { const n = { ...p }; delete n.change_type; return n }) }}
+                  placeholder="Select change type..."
+                  styles={modalSelectStyles(manualErrors.change_type)}
+                />
+                {manualErrors.change_type && <p className="text-red-400 text-xs mt-1">Required</p>}
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-semibold text-[#8a8680] mb-1.5">
+                  Description <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  placeholder="Describe the change you made in Google Ads..."
+                  value={manualForm.changes_made_note}
+                  onChange={e => { setManualForm(p => ({ ...p, changes_made_note: e.target.value })); setManualErrors(p => { const n = { ...p }; delete n.changes_made_note; return n }) }}
+                  className="resize-none focus:outline-none"
+                  style={{
+                    ...modalInputStyle(manualErrors.changes_made_note),
+                    resize: 'none',
+                  }}
+                />
+                {manualErrors.changes_made_note && <p className="text-red-400 text-xs mt-1">Required</p>}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 flex gap-3" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#1b1b1b' }}>
+              <button
+                onClick={() => setShowManualModal(false)}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors text-[#c5c1b9]"
+                style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#575ECF'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleManualSubmit}
+                disabled={submitting}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50"
+                style={{ backgroundColor: '#10b981' }}
+                onMouseEnter={e => { if (!submitting) e.currentTarget.style.backgroundColor = '#059669' }}
+                onMouseLeave={e => { if (!submitting) e.currentTarget.style.backgroundColor = '#10b981' }}
+              >
+                {submitting ? 'Saving...' : 'Log Change'}
               </button>
             </div>
           </div>

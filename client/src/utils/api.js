@@ -18,6 +18,7 @@ export const getSlideResponses = (sessionId) => api.get(`/slides/${sessionId}`).
 
 // Change log
 export const saveChangeLog = (data) => api.post('/changelog', data).then(r => r.data)
+export const saveManualChangeLog = (data) => api.post('/changelog/manual', data).then(r => r.data)
 
 export const getChangeLogs = (filters = {}) => {
   const params = new URLSearchParams()

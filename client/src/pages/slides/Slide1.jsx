@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import toast from 'react-hot-toast'
 import { saveSlideResponse, getSlideResponses } from '../../utils/api'
 import { useDebounce } from '../../hooks/useDebounce'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
@@ -6,6 +7,19 @@ import LastActionBox from '../../components/LastActionBox'
 
 const SLIDE_NUMBER = 1
 const SECTION_NAME = 'Daily Performance'
+
+const MANDATORY_FIELDS = [
+  'spend_yesterday',
+  'conversions_yesterday',
+  'conversion_rate_yesterday',
+  'cpr_yesterday',
+  'conversions_7d',
+  'conversion_rate_7d',
+  'cpr_7d',
+  'conversions_14d',
+  'conversion_rate_14d',
+  'cpr_14d',
+]
 
 export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlide }) {
   const [fields, setFields] = useState({
@@ -22,12 +36,12 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
     observations: '',
   })
   const [saveStatus, setSaveStatus] = useState('idle')
+  const [errors, setErrors] = useState({})
 
   // Load persistent data on mount
   useEffect(() => {
     if (!sessionId) return
     getSlideResponses(sessionId).then(grouped => {
-      // Server returns object grouped by slide_number key
       const slideData = grouped[SLIDE_NUMBER] || []
       const map = {}
       slideData.forEach(r => { map[r.field_key] = r.field_value || '' })
@@ -83,9 +97,30 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
 
   const handleField = (key, value) => {
     setFields(prev => ({ ...prev, [key]: value }))
+    if (errors[key]) setErrors(prev => { const e = { ...prev }; delete e[key]; return e })
   }
 
-  const inputClass = 'w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none transition-colors bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#575ECF]'
+  const handleNext = () => {
+    const newErrors = {}
+    MANDATORY_FIELDS.forEach(key => {
+      if (fields[key] === '' || fields[key] === null || fields[key] === undefined) {
+        newErrors[key] = true
+      }
+    })
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      toast.error('Please fill in all required fields before continuing.')
+      return
+    }
+    setErrors({})
+    onNext()
+  }
+
+  const inputClass = (key) =>
+    `w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none transition-colors bg-[#2a2a2a] text-[#c5c1b9] focus:border-[#575ECF] border ${
+      errors[key] ? 'border-red-500' : 'border-white/10'
+    }`
+
   const labelClass = 'block text-sm font-semibold text-[#8a8680] mb-1.5'
 
   return (
@@ -109,7 +144,9 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
         <div className="space-y-5">
           {/* Yesterday Spend */}
           <div>
-            <label className={labelClass}>Spend Yesterday (USD)</label>
+            <label className={labelClass}>
+              Spend Yesterday (USD) <span className="text-red-400 ml-0.5">*</span>
+            </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">$</span>
               <input
@@ -119,14 +156,17 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                 placeholder="0.00"
                 value={fields.spend_yesterday}
                 onChange={e => handleField('spend_yesterday', e.target.value)}
-                className={inputClass + ' pl-7'}
+                className={inputClass('spend_yesterday') + ' pl-7'}
               />
             </div>
+            {errors.spend_yesterday && <p className="text-red-400 text-xs mt-1">This field is required.</p>}
           </div>
 
           {/* Yesterday — 3 columns */}
           <div>
-            <label className={labelClass}>Yesterday</label>
+            <label className={labelClass}>
+              Yesterday <span className="text-red-400 ml-0.5">*</span>
+            </label>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Conversions</label>
@@ -136,8 +176,9 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                   placeholder="0"
                   value={fields.conversions_yesterday}
                   onChange={e => handleField('conversions_yesterday', e.target.value)}
-                  className={inputClass}
+                  className={inputClass('conversions_yesterday')}
                 />
+                {errors.conversions_yesterday && <p className="text-red-400 text-xs mt-1">Required</p>}
               </div>
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Conversion Rate (%)</label>
@@ -150,10 +191,11 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                     placeholder="0.00"
                     value={fields.conversion_rate_yesterday}
                     onChange={e => handleField('conversion_rate_yesterday', e.target.value)}
-                    className={inputClass + ' pr-7'}
+                    className={inputClass('conversion_rate_yesterday') + ' pr-7'}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">%</span>
                 </div>
+                {errors.conversion_rate_yesterday && <p className="text-red-400 text-xs mt-1">Required</p>}
               </div>
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result ($)</label>
@@ -166,16 +208,19 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                     placeholder="0.00"
                     value={fields.cpr_yesterday}
                     onChange={e => handleField('cpr_yesterday', e.target.value)}
-                    className={inputClass + ' pl-7'}
+                    className={inputClass('cpr_yesterday') + ' pl-7'}
                   />
                 </div>
+                {errors.cpr_yesterday && <p className="text-red-400 text-xs mt-1">Required</p>}
               </div>
             </div>
           </div>
 
           {/* 7-day — 3 columns */}
           <div>
-            <label className={labelClass}>Last 7 Days</label>
+            <label className={labelClass}>
+              Last 7 Days <span className="text-red-400 ml-0.5">*</span>
+            </label>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Conversions</label>
@@ -185,8 +230,9 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                   placeholder="0"
                   value={fields.conversions_7d}
                   onChange={e => handleField('conversions_7d', e.target.value)}
-                  className={inputClass}
+                  className={inputClass('conversions_7d')}
                 />
+                {errors.conversions_7d && <p className="text-red-400 text-xs mt-1">Required</p>}
               </div>
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Conversion Rate (%)</label>
@@ -199,10 +245,11 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                     placeholder="0.00"
                     value={fields.conversion_rate_7d}
                     onChange={e => handleField('conversion_rate_7d', e.target.value)}
-                    className={inputClass + ' pr-7'}
+                    className={inputClass('conversion_rate_7d') + ' pr-7'}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">%</span>
                 </div>
+                {errors.conversion_rate_7d && <p className="text-red-400 text-xs mt-1">Required</p>}
               </div>
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result ($)</label>
@@ -215,16 +262,19 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                     placeholder="0.00"
                     value={fields.cpr_7d}
                     onChange={e => handleField('cpr_7d', e.target.value)}
-                    className={inputClass + ' pl-7'}
+                    className={inputClass('cpr_7d') + ' pl-7'}
                   />
                 </div>
+                {errors.cpr_7d && <p className="text-red-400 text-xs mt-1">Required</p>}
               </div>
             </div>
           </div>
 
           {/* 14-day — 3 columns */}
           <div>
-            <label className={labelClass}>Last 14 Days</label>
+            <label className={labelClass}>
+              Last 14 Days <span className="text-red-400 ml-0.5">*</span>
+            </label>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Conversions</label>
@@ -234,8 +284,9 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                   placeholder="0"
                   value={fields.conversions_14d}
                   onChange={e => handleField('conversions_14d', e.target.value)}
-                  className={inputClass}
+                  className={inputClass('conversions_14d')}
                 />
+                {errors.conversions_14d && <p className="text-red-400 text-xs mt-1">Required</p>}
               </div>
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Conversion Rate (%)</label>
@@ -248,10 +299,11 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                     placeholder="0.00"
                     value={fields.conversion_rate_14d}
                     onChange={e => handleField('conversion_rate_14d', e.target.value)}
-                    className={inputClass + ' pr-7'}
+                    className={inputClass('conversion_rate_14d') + ' pr-7'}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8a8680] text-sm">%</span>
                 </div>
+                {errors.conversion_rate_14d && <p className="text-red-400 text-xs mt-1">Required</p>}
               </div>
               <div>
                 <label className="block text-xs text-[#8a8680] mb-1">Cost Per Result ($)</label>
@@ -264,9 +316,10 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
                     placeholder="0.00"
                     value={fields.cpr_14d}
                     onChange={e => handleField('cpr_14d', e.target.value)}
-                    className={inputClass + ' pl-7'}
+                    className={inputClass('cpr_14d') + ' pl-7'}
                   />
                 </div>
+                {errors.cpr_14d && <p className="text-red-400 text-xs mt-1">Required</p>}
               </div>
             </div>
           </div>
@@ -279,7 +332,7 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
               placeholder="Note any trends, anomalies, or performance observations..."
               value={fields.observations}
               onChange={e => handleField('observations', e.target.value)}
-              className={inputClass + ' resize-none'}
+              className="w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none transition-colors bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#575ECF] resize-none"
             />
           </div>
         </div>
@@ -303,7 +356,7 @@ export default function Slide1({ session, sessionId, onNext, onBack, isFirstSlid
           ← Back
         </button>
         <button
-          onClick={onNext}
+          onClick={handleNext}
           className="px-8 py-2.5 text-white rounded-lg font-medium text-sm transition-all"
           style={{ backgroundColor: '#575ECF' }}
           onMouseEnter={e => e.currentTarget.style.backgroundColor = '#6B72D8'}
