@@ -4,10 +4,19 @@ const { db } = require('../db/database');
 const { Parser } = require('json2csv');
 
 const STATUSES = [
-  'Contacted', 'Responded', 'Interested', 'Appointment Booked',
+  'New Lead',
+  'Touchpoint 1', 'Touchpoint 2', 'Touchpoint 3', 'Touchpoint 4', 'Touchpoint 5',
+  'Responded', 'Interested', 'Appointment Booked',
   'No Show', 'Meeting Done - Not Interested', 'Started Trial',
   'Closed / Booked as Client', 'Disqualified / Dead',
 ];
+
+function getMaxTouchpoints() {
+  try {
+    const setting = db.prepare("SELECT value FROM outreach_settings WHERE key = 'max_touchpoints'").get();
+    return setting ? Math.max(1, Math.min(20, parseInt(setting.value) || 5)) : 5;
+  } catch { return 5; }
+}
 
 const RESPONDED_OR_BEYOND = [
   'Responded', 'Interested', 'Appointment Booked', 'No Show',
@@ -265,7 +274,9 @@ router.post('/leads', (req, res) => {
 
     // Seed status history entry
     db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status) VALUES (?, ?, ?)')
-      .run(result.lastInsertRowid, null, 'Contacted');
+      .run(result.lastInsertRowid, null, 'New Lead');
+    // Set initial status to 'New Lead'
+    db.prepare("UPDATE outreach_leads SET status = 'New Lead' WHERE id = ?").run(result.lastInsertRowid);
 
     const created = db.prepare(`
       SELECT l.*, s.name as specialist_name, i.name as industry_name
@@ -303,7 +314,11 @@ router.get('/leads/:id', (req, res) => {
       'SELECT * FROM outreach_status_history WHERE lead_id = ? ORDER BY changed_at DESC'
     ).all(id);
 
-    res.json({ ...lead, touchpoints, history });
+    const responses = db.prepare(
+      'SELECT * FROM outreach_lead_responses WHERE lead_id = ? ORDER BY created_at DESC'
+    ).all(id);
+
+    res.json({ ...lead, touchpoints, history, responses });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch lead' });
@@ -409,7 +424,8 @@ router.put('/leads/:leadId/touchpoints/:number', (req, res) => {
     const { leadId, number } = req.params;
     const { date, channel, message_body, loom_url, notes } = req.body;
     const num = parseInt(number);
-    if (num < 1 || num > 5) return res.status(400).json({ error: 'Touchpoint number must be 1–5' });
+    const maxTp = getMaxTouchpoints();
+    if (num < 1 || num > maxTp) return res.status(400).json({ error: `Touchpoint number must be 1–${maxTp}` });
 
     db.prepare(`
       INSERT INTO outreach_touchpoints (lead_id, touchpoint_number, date, channel, message_body, loom_url, notes)
@@ -710,6 +726,158 @@ router.get('/export/pdf', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to generate report' });
+  }
+});
+
+// ─── PIPELINE STAGES ──────────────────────────────────────────────────────────
+
+router.get('/pipeline-stages', (req, res) => {
+  try {
+    const stages = db.prepare('SELECT * FROM outreach_pipeline_stages ORDER BY order_index ASC, id ASC').all();
+    res.json(stages);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch pipeline stages' });
+  }
+});
+
+router.post('/pipeline-stages', (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
+    const maxOrder = db.prepare('SELECT MAX(order_index) as mx FROM outreach_pipeline_stages').get();
+    const nextOrder = (maxOrder.mx || 0) + 1;
+    const result = db.prepare('INSERT INTO outreach_pipeline_stages (name, order_index) VALUES (?, ?)').run(name.trim(), nextOrder);
+    const created = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json(created);
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE')) {
+      return res.status(409).json({ error: 'A stage with this name already exists' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create stage' });
+  }
+});
+
+router.patch('/pipeline-stages/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, order_index, active } = req.body;
+    const existing = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ error: 'Stage not found' });
+    db.prepare(`
+      UPDATE outreach_pipeline_stages SET
+        name = COALESCE(?, name),
+        order_index = COALESCE(?, order_index),
+        active = COALESCE(?, active)
+      WHERE id = ?
+    `).run(
+      name !== undefined ? (name || null) : null,
+      order_index !== undefined ? order_index : null,
+      active !== undefined ? active : null,
+      id
+    );
+    const updated = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE id = ?').get(id);
+    res.json(updated);
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE')) {
+      return res.status(409).json({ error: 'A stage with this name already exists' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update stage' });
+  }
+});
+
+router.delete('/pipeline-stages/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const stage = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE id = ?').get(id);
+    if (!stage) return res.status(404).json({ error: 'Stage not found' });
+    const used = db.prepare('SELECT COUNT(*) as cnt FROM outreach_leads WHERE status = ?').get(stage.name);
+    if (used.cnt > 0) {
+      return res.status(409).json({ error: `Cannot delete: ${used.cnt} lead(s) are in this stage` });
+    }
+    db.prepare('DELETE FROM outreach_pipeline_stages WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete stage' });
+  }
+});
+
+// ─── SETTINGS ─────────────────────────────────────────────────────────────────
+
+router.get('/settings', (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM outreach_settings').all();
+    const result = {};
+    rows.forEach(s => { result[s.key] = s.value; });
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+router.patch('/settings', (req, res) => {
+  try {
+    const updates = req.body;
+    const stmt = db.prepare('INSERT OR REPLACE INTO outreach_settings (key, value) VALUES (?, ?)');
+    Object.entries(updates).forEach(([key, value]) => stmt.run(key, String(value)));
+    const rows = db.prepare('SELECT * FROM outreach_settings').all();
+    const result = {};
+    rows.forEach(s => { result[s.key] = s.value; });
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// ─── LEAD RESPONSES ───────────────────────────────────────────────────────────
+
+router.get('/leads/:leadId/responses', (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const responses = db.prepare(
+      'SELECT * FROM outreach_lead_responses WHERE lead_id = ? ORDER BY created_at DESC'
+    ).all(leadId);
+    res.json(responses);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch responses' });
+  }
+});
+
+router.post('/leads/:leadId/responses', (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const { date, channel, message_body, notes } = req.body;
+    if (!channel || !channel.trim()) return res.status(400).json({ error: 'Channel is required' });
+    if (!message_body || !message_body.trim()) return res.status(400).json({ error: 'Message body is required' });
+    const lead = db.prepare('SELECT id FROM outreach_leads WHERE id = ?').get(leadId);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    const result = db.prepare(
+      'INSERT INTO outreach_lead_responses (lead_id, date, channel, message_body, notes) VALUES (?, ?, ?, ?, ?)'
+    ).run(leadId, date || null, channel.trim(), message_body.trim(), notes || null);
+    const created = db.prepare('SELECT * FROM outreach_lead_responses WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json(created);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save response' });
+  }
+});
+
+router.delete('/leads/:leadId/responses/:id', (req, res) => {
+  try {
+    const { leadId, id } = req.params;
+    const existing = db.prepare('SELECT id FROM outreach_lead_responses WHERE id = ? AND lead_id = ?').get(id, leadId);
+    if (!existing) return res.status(404).json({ error: 'Response not found' });
+    db.prepare('DELETE FROM outreach_lead_responses WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete response' });
   }
 });
 

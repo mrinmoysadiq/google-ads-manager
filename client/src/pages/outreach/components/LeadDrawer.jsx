@@ -7,11 +7,19 @@ import {
   deleteLead,
   upsertTouchpoint,
   createLead,
+  createLeadResponse,
+  deleteLeadResponse,
 } from '../../../utils/outreachApi'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const STATUS_COLORS = {
+  'New Lead':                        { bg: 'rgba(87,94,207,0.15)',  color: '#575ECF' },
+  'Touchpoint 1':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
+  'Touchpoint 2':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
+  'Touchpoint 3':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
+  'Touchpoint 4':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
+  'Touchpoint 5':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
   'Contacted':                       { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' },
   'Responded':                       { bg: 'rgba(59,130,246,0.15)',  color: '#3b82f6' },
   'Interested':                      { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7' },
@@ -22,18 +30,6 @@ const STATUS_COLORS = {
   'Closed / Booked as Client':       { bg: 'rgba(34,197,94,0.15)',   color: '#22c55e' },
   'Disqualified / Dead':             { bg: 'rgba(55,65,81,0.2)',     color: '#6b7280' },
 }
-
-const STATUSES = [
-  'Contacted',
-  'Responded',
-  'Interested',
-  'Appointment Booked',
-  'No Show',
-  'Meeting Done - Not Interested',
-  'Started Trial',
-  'Closed / Booked as Client',
-  'Disqualified / Dead',
-]
 
 const CHANNELS = [
   'LinkedIn', 'Email', 'WhatsApp', 'Facebook',
@@ -180,7 +176,7 @@ function fmtDateTime(iso) {
 
 // ─── Sub-component: StatusBadge with dropdown ────────────────────────────────
 
-function StatusBadge({ status, onChange }) {
+function StatusBadge({ status, onChange, stages = [] }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const colors = STATUS_COLORS[status] || { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' }
@@ -226,8 +222,8 @@ function StatusBadge({ status, onChange }) {
           minWidth: '240px',
           boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
         }}>
-          {STATUSES.map(s => {
-            const c = STATUS_COLORS[s] || {}
+          {stages.map(s => {
+            const c = STATUS_COLORS[s] || { color: '#8a8680' }
             return (
               <button
                 key={s}
@@ -260,7 +256,7 @@ function StatusBadge({ status, onChange }) {
 
 // ─── Sub-component: TouchpointSection ────────────────────────────────────────
 
-function TouchpointSection({ leadId, number, initialData, defaultOpen }) {
+function TouchpointSection({ leadId, number, initialData, defaultOpen, onStageChange }) {
   const today = new Date().toISOString().slice(0, 10)
   const [open, setOpen] = useState(defaultOpen || false)
   const [fields, setFields] = useState({
@@ -283,22 +279,43 @@ function TouchpointSection({ leadId, number, initialData, defaultOpen }) {
         .filter(Boolean).join(' · ')
     : null
 
-  const handleSave = async () => {
+  const validate = () => {
     const newErrors = {}
     if (!fields.channel) newErrors.channel = true
     if (!fields.message_body.trim()) newErrors.message_body = true
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       toast.error('Channel and Message Body are required')
-      return
+      return false
     }
     setErrors({})
+    return true
+  }
+
+  const handleSave = async () => {
+    if (!validate()) return
     setSaving(true)
     try {
       await upsertTouchpoint(leadId, number, fields)
       setSavedOk(true)
       toast.success(`Touchpoint ${number} saved`)
       setTimeout(() => setSavedOk(false), 2500)
+    } catch {
+      toast.error('Failed to save touchpoint')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSaveAndChangeStage = async () => {
+    if (!validate()) return
+    setSaving(true)
+    try {
+      await upsertTouchpoint(leadId, number, fields)
+      setSavedOk(true)
+      toast.success(`Touchpoint ${number} saved`)
+      setTimeout(() => setSavedOk(false), 2500)
+      if (onStageChange) await onStageChange(number)
     } catch {
       toast.error('Failed to save touchpoint')
     } finally {
@@ -428,8 +445,29 @@ function TouchpointSection({ leadId, number, initialData, defaultOpen }) {
             />
           </div>
 
-          {/* Save button */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
+          {/* Save buttons */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '4px', flexWrap: 'wrap' }}>
+            {onStageChange && (
+              <button
+                onClick={handleSaveAndChangeStage}
+                disabled={saving}
+                style={{
+                  backgroundColor: 'rgba(20,184,166,0.15)',
+                  color: '#14b8a6',
+                  border: '1px solid rgba(20,184,166,0.3)',
+                  borderRadius: '7px',
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  opacity: saving ? 0.7 : 1,
+                  transition: 'all 0.2s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Save & Change Stage
+              </button>
+            )}
             <button
               onClick={handleSave}
               disabled={saving}
@@ -456,6 +494,214 @@ function TouchpointSection({ leadId, number, initialData, defaultOpen }) {
   )
 }
 
+// ─── Sub-component: ResponsesSection ─────────────────────────────────────────
+
+function ResponsesSection({ leadId, initialResponses = [] }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const [responses, setResponses] = useState(initialResponses)
+  const [form, setForm] = useState({ date: today, channel: '', message_body: '', notes: '' })
+  const [saving, setSaving] = useState(false)
+  const [errors, setErrors] = useState({})
+  const channelOptions = CHANNELS.map(c => ({ value: c, label: c }))
+
+  const labelStyle = (hasError) => ({
+    display: 'block', fontSize: '11px', marginBottom: '4px',
+    textTransform: 'uppercase', letterSpacing: '0.05em',
+    color: hasError ? '#ef4444' : '#8a8680',
+  })
+
+  const handleAdd = async () => {
+    const newErrors = {}
+    if (!form.channel) newErrors.channel = true
+    if (!form.message_body.trim()) newErrors.message_body = true
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      toast.error('Channel and message are required')
+      return
+    }
+    setErrors({})
+    setSaving(true)
+    try {
+      const created = await createLeadResponse(leadId, form)
+      setResponses(prev => [created, ...prev])
+      setForm({ date: today, channel: '', message_body: '', notes: '' })
+      toast.success('Response saved')
+    } catch {
+      toast.error('Failed to save response')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    try {
+      await deleteLeadResponse(leadId, id)
+      setResponses(prev => prev.filter(r => r.id !== id))
+      toast.success('Response deleted')
+    } catch {
+      toast.error('Failed to delete response')
+    }
+  }
+
+  return (
+    <div>
+      {/* Add response form */}
+      <div style={{ backgroundColor: '#242424', borderRadius: '10px', padding: '16px', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <h4 style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 600, marginBottom: '14px' }}>Log a Response</h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div>
+            <label style={labelStyle(false)}>Date</label>
+            <input
+              type="date"
+              className={inputClass}
+              value={form.date}
+              onChange={e => setForm(v => ({ ...v, date: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label style={labelStyle(errors.channel)}>
+              Channel <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <Select
+              styles={{
+                ...selectStyles,
+                control: (base, state) => ({
+                  ...selectStyles.control(base, state),
+                  borderColor: errors.channel ? '#ef4444' : state.isFocused ? '#575ECF' : 'rgba(255,255,255,0.1)',
+                }),
+              }}
+              options={channelOptions}
+              value={form.channel ? { value: form.channel, label: form.channel } : null}
+              onChange={opt => {
+                setForm(v => ({ ...v, channel: opt?.value || '' }))
+                if (errors.channel) setErrors(v => ({ ...v, channel: false }))
+              }}
+              placeholder="Select channel…"
+              isClearable
+            />
+          </div>
+          <div>
+            <label style={labelStyle(errors.message_body)}>
+              Response Message <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <textarea
+              className={inputClass}
+              rows={3}
+              value={form.message_body}
+              onChange={e => {
+                setForm(v => ({ ...v, message_body: e.target.value }))
+                if (errors.message_body && e.target.value.trim()) setErrors(v => ({ ...v, message_body: false }))
+              }}
+              style={{ resize: 'vertical', borderColor: errors.message_body ? '#ef4444' : undefined }}
+              placeholder="What did the lead say…"
+            />
+          </div>
+          <div>
+            <label style={labelStyle(false)}>Notes</label>
+            <textarea
+              className={inputClass}
+              rows={2}
+              value={form.notes}
+              onChange={e => setForm(v => ({ ...v, notes: e.target.value }))}
+              style={{ resize: 'vertical' }}
+              placeholder="Additional notes…"
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={handleAdd}
+              disabled={saving}
+              style={{
+                backgroundColor: '#575ECF',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '7px',
+                padding: '8px 20px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: saving ? 'not-allowed' : 'pointer',
+                opacity: saving ? 0.7 : 1,
+              }}
+            >
+              {saving ? 'Saving…' : 'Log Response'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Response list */}
+      {responses.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '32px 24px', color: '#555', fontSize: '13px' }}>
+          No responses logged yet
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {responses.map(r => (
+            <div
+              key={r.id}
+              style={{
+                backgroundColor: '#242424',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                    {r.channel && (
+                      <span style={{
+                        backgroundColor: 'rgba(59,130,246,0.15)',
+                        color: '#3b82f6',
+                        borderRadius: '12px',
+                        padding: '2px 8px',
+                        fontSize: '11px',
+                        fontWeight: 500,
+                      }}>
+                        {r.channel}
+                      </span>
+                    )}
+                    {r.date && (
+                      <span style={{ color: '#555', fontSize: '11px' }}>{fmtDate(r.date)}</span>
+                    )}
+                    <span style={{ color: '#444', fontSize: '11px' }}>{fmtDateTime(r.created_at)}</span>
+                  </div>
+                  <p style={{ color: '#c5c1b9', fontSize: '13px', lineHeight: 1.5, margin: 0, wordBreak: 'break-word' }}>
+                    {r.message_body}
+                  </p>
+                  {r.notes && (
+                    <p style={{ color: '#8a8680', fontSize: '12px', marginTop: '6px', fontStyle: 'italic' }}>
+                      {r.notes}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleDelete(r.id)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#555',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.backgroundColor = 'transparent' }}
+                  title="Delete response"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function LeadDrawer({
@@ -466,6 +712,8 @@ export default function LeadDrawer({
   onDeleted,
   specialists = [],
   industries = [],
+  stages = [],
+  maxTouchpoints = 5,
 }) {
   const [visible, setVisible] = useState(false)
   const [mode, setMode] = useState(initialLeadId === null ? 'create' : 'edit')
@@ -540,6 +788,17 @@ export default function LeadDrawer({
       markSaved('status')
     } catch {
       toast.error('Failed to update status')
+    }
+  }
+
+  const handleTpStageChange = async (number) => {
+    const stageName = `Touchpoint ${number}`
+    try {
+      const updated = await updateLead(leadId, { status: stageName })
+      setLead(prev => ({ ...prev, ...updated }))
+      toast.success(`Stage changed to ${stageName}`)
+    } catch {
+      toast.error('Failed to change stage')
     }
   }
 
@@ -895,7 +1154,7 @@ export default function LeadDrawer({
 
                       {/* Status + meta */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
-                        <StatusBadge status={lead.status} onChange={handleStatusChange} />
+                        <StatusBadge status={lead.status} onChange={handleStatusChange} stages={stages.length > 0 ? stages.map(s => s.name) : Object.keys(STATUS_COLORS)} />
                         <span style={{ color: '#555', fontSize: '11px' }}>
                           Created {fmtDate(lead.created_at)}
                           {lead.specialist_name ? ` · ${lead.specialist_name}` : ''}
@@ -913,7 +1172,7 @@ export default function LeadDrawer({
 
                   {/* Tabs */}
                   <div style={{ display: 'flex', gap: '4px', marginTop: '16px' }}>
-                    {['details', 'touchpoints', 'history'].map(tab => (
+                    {['details', 'touchpoints', 'responses', 'history'].map(tab => (
                       <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
@@ -1110,15 +1369,24 @@ export default function LeadDrawer({
 
                   {/* ── TOUCHPOINTS TAB ─────────────────────────────────────── */}
                   <div style={{ display: activeTab === 'touchpoints' ? 'block' : 'none' }}>
-                    {[1, 2, 3, 4, 5].map(n => (
+                    {Array.from({ length: maxTouchpoints }, (_, i) => i + 1).map(n => (
                       <TouchpointSection
                         key={`${leadId}-tp-${n}`}
                         leadId={leadId}
                         number={n}
                         initialData={touchpointsByNumber[n] || null}
                         defaultOpen={n === 1}
+                        onStageChange={handleTpStageChange}
                       />
                     ))}
+                  </div>
+
+                  {/* ── RESPONSES TAB ───────────────────────────────────────── */}
+                  <div style={{ display: activeTab === 'responses' ? 'block' : 'none' }}>
+                    <ResponsesSection
+                      leadId={leadId}
+                      initialResponses={lead.responses || []}
+                    />
                   </div>
 
                   {/* ── HISTORY TAB ─────────────────────────────────────────── */}

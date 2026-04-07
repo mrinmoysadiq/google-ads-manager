@@ -39,3 +39,17 @@ export const getExportPdfUrl = (params) => {
   const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v))).toString()
   return `${api.defaults.baseURL}/outreach/export/pdf${qs ? '?' + qs : ''}`
 }
+
+// Pipeline Stages
+export const getPipelineStages = () => api.get('/outreach/pipeline-stages').then(r => r.data)
+export const createPipelineStage = (data) => api.post('/outreach/pipeline-stages', data).then(r => r.data)
+export const updatePipelineStage = (id, data) => api.patch(`/outreach/pipeline-stages/${id}`, data).then(r => r.data)
+export const deletePipelineStage = (id) => api.delete(`/outreach/pipeline-stages/${id}`).then(r => r.data)
+
+// Settings
+export const getSettings = () => api.get('/outreach/settings').then(r => r.data)
+export const updateSettings = (data) => api.patch('/outreach/settings', data).then(r => r.data)
+
+// Lead Responses
+export const createLeadResponse = (leadId, data) => api.post(`/outreach/leads/${leadId}/responses`, data).then(r => r.data)
+export const deleteLeadResponse = (leadId, id) => api.delete(`/outreach/leads/${leadId}/responses/${id}`).then(r => r.data)

@@ -234,6 +234,29 @@ function initializeDatabase() {
       new_status TEXT NOT NULL,
       changed_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS outreach_pipeline_stages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_lead_responses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL REFERENCES outreach_leads(id) ON DELETE CASCADE,
+      date TEXT,
+      channel TEXT NOT NULL,
+      message_body TEXT NOT NULL,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Seed default industries if empty
@@ -248,6 +271,22 @@ function initializeDatabase() {
     ].forEach(name => insertIndustry.run(name));
     console.log('Seeded outreach industries');
   }
+  // Seed pipeline stages if empty
+  const stageCount = db.prepare('SELECT COUNT(*) as cnt FROM outreach_pipeline_stages').get();
+  if (stageCount.cnt === 0) {
+    const insertStage = db.prepare('INSERT INTO outreach_pipeline_stages (name, order_index) VALUES (?, ?)');
+    [
+      'New Lead', 'Touchpoint 1', 'Touchpoint 2', 'Touchpoint 3', 'Touchpoint 4', 'Touchpoint 5',
+      'Responded', 'Interested', 'Appointment Booked', 'No Show',
+      'Meeting Done - Not Interested', 'Started Trial',
+      'Closed / Booked as Client', 'Disqualified / Dead',
+    ].forEach((name, i) => insertStage.run(name, i + 1));
+    console.log('Seeded outreach pipeline stages');
+  }
+
+  // Seed default outreach settings
+  db.prepare("INSERT OR IGNORE INTO outreach_settings (key, value) VALUES ('max_touchpoints', '5')").run();
+
   console.log('Outreach tables initialized');
 
   // Column migrations — safe to run every startup (errors ignored if column exists)
@@ -255,6 +294,9 @@ function initializeDatabase() {
     'ALTER TABLE outreach_leads ADD COLUMN source_url TEXT',
     'ALTER TABLE outreach_leads ADD COLUMN source_image TEXT',
   ];
+  // Migrate old 'Contacted' status to 'New Lead' (one-time)
+  try { db.exec("UPDATE outreach_leads SET status = 'New Lead' WHERE status = 'Contacted'"); } catch (e) { /* ignore */ }
+  try { db.exec("UPDATE outreach_status_history SET new_status = 'New Lead' WHERE new_status = 'Contacted'"); } catch (e) { /* ignore */ }
   columnMigrations.forEach(sql => {
     try { db.exec(sql); } catch (e) { /* column already exists */ }
   });

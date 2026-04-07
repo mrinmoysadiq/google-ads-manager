@@ -10,6 +10,12 @@ import {
   createIndustry,
   updateIndustry,
   deleteIndustry,
+  getPipelineStages,
+  createPipelineStage,
+  updatePipelineStage,
+  deletePipelineStage,
+  getSettings,
+  updateSettings,
 } from '../../utils/outreachApi';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -612,27 +618,218 @@ function IndustriesSection({ industries, setIndustries }) {
   );
 }
 
+// ─── Section: Pipeline Stages ─────────────────────────────────────────────────
+
+function PipelineStagesSection({ stages, setStages }) {
+  const [newName, setNewName] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState('');
+
+  const handleAdd = async () => {
+    if (!newName.trim()) return;
+    setAdding(true);
+    try {
+      const created = await createPipelineStage({ name: newName.trim() });
+      setStages(prev => [...prev, created]);
+      setNewName('');
+      toast.success('Stage added');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to add stage');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleEditSave = async (stage) => {
+    if (!editName.trim() || editName.trim() === stage.name) {
+      setEditingId(null);
+      return;
+    }
+    try {
+      const updated = await updatePipelineStage(stage.id, { name: editName.trim() });
+      setStages(prev => prev.map(s => s.id === stage.id ? updated : s));
+      setEditingId(null);
+      toast.success('Stage renamed');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to rename stage');
+    }
+  };
+
+  const handleToggleActive = async (stage) => {
+    try {
+      const updated = await updatePipelineStage(stage.id, { active: stage.active ? 0 : 1 });
+      setStages(prev => prev.map(s => s.id === stage.id ? updated : s));
+    } catch {
+      toast.error('Failed to update stage');
+    }
+  };
+
+  const handleDelete = async (stage) => {
+    try {
+      await deletePipelineStage(stage.id);
+      setStages(prev => prev.filter(s => s.id !== stage.id));
+      toast.success('Stage deleted');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete stage');
+    }
+  };
+
+  const handleMove = async (stage, direction) => {
+    const sorted = [...stages].sort((a, b) => a.order_index - b.order_index);
+    const idx = sorted.findIndex(s => s.id === stage.id);
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+    const other = sorted[swapIdx];
+    try {
+      const [a, b] = await Promise.all([
+        updatePipelineStage(stage.id, { order_index: other.order_index }),
+        updatePipelineStage(other.id, { order_index: stage.order_index }),
+      ]);
+      setStages(prev => prev.map(s => s.id === stage.id ? a : s.id === other.id ? b : s));
+    } catch {
+      toast.error('Failed to reorder stages');
+    }
+  };
+
+  const sorted = [...stages].sort((a, b) => a.order_index - b.order_index);
+
+  return (
+    <div className="bg-[#242424] border border-white/[0.08] rounded-xl p-6">
+      <h2 className="text-base font-semibold text-[#c5c1b9] mb-1">Pipeline Stages</h2>
+      <p className="text-xs text-[#8a8680] mb-5">Manage the stages in your pipeline. Stages in use cannot be deleted.</p>
+
+      {/* Add new stage */}
+      <div className="flex gap-2 mb-5">
+        <input
+          className={inputClass}
+          value={newName}
+          onChange={e => setNewName(e.target.value)}
+          placeholder="New stage name…"
+          onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
+        />
+        <Btn variant="primary" size="sm" onClick={handleAdd} disabled={adding || !newName.trim()}>
+          {adding ? <Spinner /> : 'Add'}
+        </Btn>
+      </div>
+
+      {/* Stages list */}
+      {sorted.length === 0 ? (
+        <p className="text-sm text-[#8a8680] text-center py-4">No stages yet</p>
+      ) : (
+        <ul className="divide-y divide-white/[0.05]">
+          {sorted.map((stage, idx) => (
+            <li key={stage.id} className={`flex items-center gap-3 py-3 ${!stage.active ? 'opacity-50' : ''}`}>
+              {/* Reorder buttons */}
+              <div className="flex flex-col gap-0.5">
+                <button
+                  onClick={() => handleMove(stage, 'up')}
+                  disabled={idx === 0}
+                  className="text-[#8a8680] hover:text-[#c5c1b9] disabled:opacity-20 disabled:cursor-not-allowed text-xs leading-none"
+                  title="Move up"
+                >▲</button>
+                <button
+                  onClick={() => handleMove(stage, 'down')}
+                  disabled={idx === sorted.length - 1}
+                  className="text-[#8a8680] hover:text-[#c5c1b9] disabled:opacity-20 disabled:cursor-not-allowed text-xs leading-none"
+                  title="Move down"
+                >▼</button>
+              </div>
+
+              {/* Name / edit */}
+              <div className="flex-1 min-w-0">
+                {editingId === stage.id ? (
+                  <input
+                    autoFocus
+                    className={inputClass + ' py-1'}
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    onBlur={() => handleEditSave(stage)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleEditSave(stage);
+                      if (e.key === 'Escape') setEditingId(null);
+                    }}
+                  />
+                ) : (
+                  <span
+                    className="text-sm text-[#c5c1b9] cursor-pointer hover:text-white"
+                    onClick={() => { setEditingId(stage.id); setEditName(stage.name); }}
+                    title="Click to rename"
+                  >
+                    {stage.name}
+                  </span>
+                )}
+              </div>
+
+              <Badge active={!!stage.active} />
+
+              {/* Active toggle */}
+              <button
+                onClick={() => handleToggleActive(stage)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${stage.active ? 'bg-[#575ECF]' : 'bg-white/10'}`}
+                role="switch"
+                aria-checked={!!stage.active}
+                title={stage.active ? 'Deactivate' : 'Activate'}
+              >
+                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${stage.active ? 'translate-x-4' : 'translate-x-0'}`} />
+              </button>
+
+              <Btn variant="danger" size="sm" onClick={() => handleDelete(stage)} title="Delete stage">
+                Delete
+              </Btn>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ─── Section: Settings ────────────────────────────────────────────────────────
 
-function SettingsSection() {
+function SettingsSection({ settings, setSettings }) {
+  const [maxTp, setMaxTp] = useState(settings.max_touchpoints || '5');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const val = parseInt(maxTp);
+    if (isNaN(val) || val < 1 || val > 20) {
+      toast.error('Max touchpoints must be between 1 and 20');
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await updateSettings({ max_touchpoints: val });
+      setSettings(updated);
+      toast.success('Settings saved');
+    } catch {
+      toast.error('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="bg-[#242424] border border-white/[0.08] rounded-xl p-6">
       <h2 className="text-base font-semibold text-[#c5c1b9] mb-5">Settings</h2>
-      <div className="divide-y divide-white/[0.06]">
-        <div className="flex items-center justify-between py-3">
-          <span className="text-sm text-[#8a8680]">Max touchpoints per lead</span>
-          <span className="text-sm text-[#c5c1b9] font-medium">5 (fixed)</span>
+      <div className="flex items-center gap-4">
+        <div className="flex-1">
+          <label className="block text-sm text-[#8a8680] mb-1">Max touchpoints per lead</label>
+          <p className="text-xs text-[#555] mb-2">Controls how many touchpoint sections appear per lead (1–20)</p>
+          <input
+            type="number"
+            min="1"
+            max="20"
+            className={inputClass}
+            value={maxTp}
+            onChange={e => setMaxTp(e.target.value)}
+            style={{ maxWidth: '120px' }}
+          />
         </div>
-        <div className="flex items-center justify-between py-3">
-          <span className="text-sm text-[#8a8680]">Status options</span>
-          <span className="text-sm text-[#c5c1b9] font-medium">
-            9 predefined stages
-          </span>
-        </div>
-        <div className="py-3">
-          <p className="text-xs text-[#8a8680] italic">
-            Additional settings coming soon.
-          </p>
+        <div className="self-end">
+          <Btn variant="primary" size="md" onClick={handleSave} disabled={saving}>
+            {saving ? <Spinner /> : 'Save'}
+          </Btn>
         </div>
       </div>
     </div>
@@ -644,6 +841,8 @@ function SettingsSection() {
 export default function OutreachAdmin() {
   const [specialists, setSpecialists] = useState([]);
   const [industries, setIndustries] = useState([]);
+  const [stages, setStages] = useState([]);
+  const [settings, setSettings] = useState({ max_touchpoints: '5' });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -651,9 +850,11 @@ export default function OutreachAdmin() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [specs, inds] = await Promise.all([getSpecialists(), getIndustries()]);
+      const [specs, inds, stgs, setts] = await Promise.all([getSpecialists(), getIndustries(), getPipelineStages(), getSettings()]);
       setSpecialists(specs || []);
       setIndustries(inds || []);
+      setStages(stgs || []);
+      setSettings(setts || { max_touchpoints: '5' });
     } catch (err) {
       setLoadError('Failed to load admin data. Please try again.');
       toast.error('Failed to load admin data');
@@ -714,7 +915,14 @@ export default function OutreachAdmin() {
               industries={industries}
               setIndustries={setIndustries}
             />
-            <SettingsSection />
+            <PipelineStagesSection
+              stages={stages}
+              setStages={setStages}
+            />
+            <SettingsSection
+              settings={settings}
+              setSettings={setSettings}
+            />
           </div>
         )}
       </div>

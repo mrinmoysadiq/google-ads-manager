@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
-import { getSpecialists, getIndustries, getLeads, updateLead, createLead, exportCsv } from '../../utils/outreachApi'
+import { getSpecialists, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings } from '../../utils/outreachApi'
 import LeadDrawer from './components/LeadDrawer'
 import PipelineTable from './components/PipelineTable'
 import PipelineKanban from './components/PipelineKanban'
@@ -32,6 +32,8 @@ export default function OutreachHome() {
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 })
   const [loading, setLoading] = useState(true)
   const [overdueCount, setOverdueCount] = useState(0)
+  const [stages, setStages] = useState([])
+  const [maxTouchpoints, setMaxTouchpoints] = useState(5)
 
   // Drawer state
   const [drawerLeadId, setDrawerLeadId] = useState(undefined) // undefined=closed, null=create, number=edit
@@ -46,10 +48,12 @@ export default function OutreachHome() {
 
   // Load metadata
   useEffect(() => {
-    Promise.all([getSpecialists(), getIndustries()])
-      .then(([specs, inds]) => {
+    Promise.all([getSpecialists(), getIndustries(), getPipelineStages(), getSettings()])
+      .then(([specs, inds, stgs, settings]) => {
         setSpecialists(specs.filter(s => s.active))
         setIndustries(inds)
+        setStages(stgs.filter(s => s.active))
+        setMaxTouchpoints(parseInt(settings.max_touchpoints) || 5)
         // Restore selected specialist from localStorage
         const saved = localStorage.getItem(LS_SPECIALIST_KEY)
         if (saved) {
@@ -289,6 +293,7 @@ export default function OutreachHome() {
                 onLeadClick={openDrawer}
                 onStatusChange={handleStatusChange}
                 showSpecialistColumn={showSpecialistColumn}
+                stages={stages}
               />
             )}
           </>
@@ -314,6 +319,8 @@ export default function OutreachHome() {
           onDeleted={handleLeadDeleted}
           specialists={specialists}
           industries={industries}
+          stages={stages}
+          maxTouchpoints={maxTouchpoints}
         />
       )}
     </div>

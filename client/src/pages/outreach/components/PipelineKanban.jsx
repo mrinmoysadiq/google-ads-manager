@@ -1,22 +1,24 @@
 import { useState, useRef } from 'react'
 
-const STATUSES = [
-  'Contacted', 'Responded', 'Interested', 'Appointment Booked',
-  'No Show', 'Meeting Done - Not Interested', 'Started Trial',
-  'Closed / Booked as Client', 'Disqualified / Dead',
-]
-
-const STATUS_COLORS = {
-  'Contacted':                   { bg: 'rgba(138,134,128,0.15)', color: '#8a8680', dot: '#8a8680' },
-  'Responded':                   { bg: 'rgba(59,130,246,0.15)',  color: '#3b82f6', dot: '#3b82f6' },
-  'Interested':                  { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7', dot: '#a855f7' },
-  'Appointment Booked':          { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b', dot: '#f59e0b' },
-  'No Show':                     { bg: 'rgba(239,68,68,0.15)',   color: '#ef4444', dot: '#ef4444' },
-  'Meeting Done - Not Interested':{ bg:'rgba(107,114,128,0.15)', color: '#6b7280', dot: '#6b7280' },
-  'Started Trial':               { bg: 'rgba(6,182,212,0.15)',   color: '#06b6d4', dot: '#06b6d4' },
-  'Closed / Booked as Client':   { bg: 'rgba(34,197,94,0.15)',   color: '#22c55e', dot: '#22c55e' },
-  'Disqualified / Dead':         { bg: 'rgba(55,65,81,0.2)',     color: '#6b7280', dot: '#374151' },
+const DEFAULT_STATUS_COLORS = {
+  'New Lead':                        { bg: 'rgba(87,94,207,0.15)',  color: '#575ECF',  dot: '#575ECF'  },
+  'Touchpoint 1':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6',  dot: '#14b8a6'  },
+  'Touchpoint 2':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6',  dot: '#14b8a6'  },
+  'Touchpoint 3':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6',  dot: '#14b8a6'  },
+  'Touchpoint 4':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6',  dot: '#14b8a6'  },
+  'Touchpoint 5':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6',  dot: '#14b8a6'  },
+  'Contacted':                       { bg: 'rgba(138,134,128,0.15)', color: '#8a8680', dot: '#8a8680'  },
+  'Responded':                       { bg: 'rgba(59,130,246,0.15)',  color: '#3b82f6', dot: '#3b82f6'  },
+  'Interested':                      { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7', dot: '#a855f7'  },
+  'Appointment Booked':              { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b', dot: '#f59e0b'  },
+  'No Show':                         { bg: 'rgba(239,68,68,0.15)',   color: '#ef4444', dot: '#ef4444'  },
+  'Meeting Done - Not Interested':   { bg: 'rgba(107,114,128,0.15)', color: '#6b7280', dot: '#6b7280'  },
+  'Started Trial':                   { bg: 'rgba(6,182,212,0.15)',   color: '#06b6d4', dot: '#06b6d4'  },
+  'Closed / Booked as Client':       { bg: 'rgba(34,197,94,0.15)',   color: '#22c55e', dot: '#22c55e'  },
+  'Disqualified / Dead':             { bg: 'rgba(55,65,81,0.2)',     color: '#6b7280', dot: '#374151'  },
 }
+
+const FALLBACK_COLOR = { bg: 'rgba(138,134,128,0.15)', color: '#8a8680', dot: '#8a8680' }
 
 const CHANNEL_COLORS = {
   'LinkedIn': '#0a66c2', 'Email': '#575ECF', 'WhatsApp': '#25d366',
@@ -33,8 +35,7 @@ function isOverdue(lead) {
 }
 
 function daysOverdue(dateStr) {
-  const diff = Math.floor((new Date() - new Date(dateStr)) / 86400000)
-  return diff
+  return Math.floor((new Date() - new Date(dateStr)) / 86400000)
 }
 
 function formatDate(dateStr) {
@@ -59,9 +60,8 @@ function ChannelPills({ channels }) {
   )
 }
 
-function KanbanCard({ lead, onLeadClick, showSpecialistColumn }) {
+function KanbanCard({ lead, onLeadClick, showSpecialistColumn, maxTouchpoints }) {
   const dragStarted = useRef(false)
-
   const overdue = isOverdue(lead)
   const days = overdue ? daysOverdue(lead.next_followup_date) : 0
   const followupColor = !overdue ? '#c5c1b9' : days >= 3 ? '#ef4444' : '#f59e0b'
@@ -90,7 +90,7 @@ function KanbanCard({ lead, onLeadClick, showSpecialistColumn }) {
       <ChannelPills channels={lead.channels_used} />
       <div className="flex items-center justify-between mt-2">
         <span className="text-xs" style={{ color: '#8a8680' }}>
-          {lead.touchpoint_count || 0}/5 TPs
+          {lead.touchpoint_count || 0}/{maxTouchpoints} TPs
         </span>
         {lead.next_followup_date && (
           <span className="text-xs font-medium" style={{ color: followupColor }}>
@@ -115,12 +115,30 @@ function SkeletonCard() {
   )
 }
 
-export default function PipelineKanban({ leads, loading, onLeadClick, onStatusChange, showSpecialistColumn }) {
+const DEFAULT_STAGES = [
+  'New Lead', 'Touchpoint 1', 'Touchpoint 2', 'Touchpoint 3', 'Touchpoint 4', 'Touchpoint 5',
+  'Responded', 'Interested', 'Appointment Booked', 'No Show',
+  'Meeting Done - Not Interested', 'Started Trial', 'Closed / Booked as Client', 'Disqualified / Dead',
+]
+
+export default function PipelineKanban({ leads, loading, onLeadClick, onStatusChange, showSpecialistColumn, stages, maxTouchpoints = 5 }) {
   const [dragOverStatus, setDragOverStatus] = useState(null)
 
+  const stageNames = stages && stages.length > 0 ? stages.map(s => s.name) : DEFAULT_STAGES
+
   const leadsByStatus = {}
-  STATUSES.forEach(s => { leadsByStatus[s] = [] })
-  leads.forEach(l => { if (leadsByStatus[l.status]) leadsByStatus[l.status].push(l) })
+  stageNames.forEach(s => { leadsByStatus[s] = [] })
+  leads.forEach(l => {
+    if (leadsByStatus[l.status] !== undefined) {
+      leadsByStatus[l.status].push(l)
+    } else {
+      // Lead has a status not in current stages — put in first column or skip
+      if (stageNames.length > 0) {
+        if (!leadsByStatus['__other__']) leadsByStatus['__other__'] = []
+        leadsByStatus['__other__'].push(l)
+      }
+    }
+  })
 
   const handleDragOver = (e, status) => {
     e.preventDefault()
@@ -142,9 +160,9 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
 
   return (
     <div className="overflow-x-auto pb-4" style={{ minHeight: 400 }}>
-      <div className="flex gap-3" style={{ minWidth: STATUSES.length * 236 + 'px' }}>
-        {STATUSES.map(status => {
-          const sc = STATUS_COLORS[status] || {}
+      <div className="flex gap-3" style={{ minWidth: stageNames.length * 236 + 'px' }}>
+        {stageNames.map(status => {
+          const sc = DEFAULT_STATUS_COLORS[status] || FALLBACK_COLOR
           const colLeads = leadsByStatus[status] || []
           const isDragTarget = dragOverStatus === status
 
@@ -163,7 +181,6 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
                 transition: 'border-color 0.15s, background-color 0.15s',
               }}
             >
-              {/* Column header */}
               <div className="px-3 pt-3 pb-2.5 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: sc.dot }} />
@@ -172,13 +189,9 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
                 <span className="text-xs font-bold ml-1 flex-shrink-0" style={{ color: '#8a8680' }}>{colLeads.length}</span>
               </div>
 
-              {/* Cards */}
               <div className="flex-1 p-2 space-y-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
                 {loading ? (
-                  <>
-                    <SkeletonCard />
-                    <SkeletonCard />
-                  </>
+                  <><SkeletonCard /><SkeletonCard /></>
                 ) : colLeads.length === 0 ? (
                   <div className="flex items-center justify-center h-16">
                     <span className="text-xs" style={{ color: '#444' }}>No leads</span>
@@ -190,11 +203,10 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
                       lead={lead}
                       onLeadClick={onLeadClick}
                       showSpecialistColumn={showSpecialistColumn}
+                      maxTouchpoints={maxTouchpoints}
                     />
                   ))
                 )}
-
-                {/* Drop target indicator */}
                 {isDragTarget && (
                   <div className="rounded-lg border-2 border-dashed h-14 flex items-center justify-center" style={{ borderColor: 'rgba(87,94,207,0.4)' }}>
                     <span className="text-xs" style={{ color: '#575ECF' }}>Drop here</span>
