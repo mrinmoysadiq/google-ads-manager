@@ -152,6 +152,22 @@ export default function ModuleHome() {
             </svg>
           }
         />
+
+        {/* Facebook / Meta Ads Checklist */}
+        <ModuleCard
+          href="/facebook"
+          accentColor="#1877f2"
+          accentAlpha="rgba(24,119,242,0.18)"
+          title="Facebook / Meta Ads"
+          description="Run your daily Meta Ads checklist — verify campaign health, flag issues with screenshots, log spend, and export a branded PDF report."
+          tags={['Daily Checklist', 'PDF Export', 'Issue Tracking']}
+          cta="Start Checklist"
+          icon={
+            <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="#1877f2" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          }
+        />
       </div>
 
       {/* Footer note */}
