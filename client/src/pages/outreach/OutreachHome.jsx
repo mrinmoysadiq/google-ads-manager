@@ -119,6 +119,10 @@ export default function OutreachHome() {
     }
   }
 
+  const handleLeadUpdated = (updatedLead) => {
+    setLeads(prev => prev.map(l => l.id === updatedLead.id ? { ...l, status: updatedLead.status } : l))
+  }
+
   const handleLeadSaved = () => { fetchLeads() }
   const handleLeadDeleted = (id) => {
     setLeads(prev => prev.filter(l => l.id !== id))
@@ -317,6 +321,7 @@ export default function OutreachHome() {
           onClose={() => setDrawerLeadId(undefined)}
           onSaved={handleLeadSaved}
           onDeleted={handleLeadDeleted}
+          onLeadUpdated={handleLeadUpdated}
           specialists={specialists}
           industries={industries}
           stages={stages}

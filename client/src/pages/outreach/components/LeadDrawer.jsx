@@ -710,6 +710,7 @@ export default function LeadDrawer({
   onClose,
   onSaved,
   onDeleted,
+  onLeadUpdated,
   specialists = [],
   industries = [],
   stages = [],
@@ -786,6 +787,7 @@ export default function LeadDrawer({
       const updated = await updateLead(leadId, { status: newStatus })
       setLead(prev => ({ ...prev, ...updated }))
       markSaved('status')
+      if (onLeadUpdated) onLeadUpdated(updated)
     } catch {
       toast.error('Failed to update status')
     }
@@ -797,6 +799,7 @@ export default function LeadDrawer({
       const updated = await updateLead(leadId, { status: stageName })
       setLead(prev => ({ ...prev, ...updated }))
       toast.success(`Stage changed to ${stageName}`)
+      if (onLeadUpdated) onLeadUpdated(updated)
     } catch {
       toast.error('Failed to change stage')
     }
