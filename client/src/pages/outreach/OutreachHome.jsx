@@ -2,11 +2,17 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
-import { getSpecialists, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings } from '../../utils/outreachApi'
+import { getSpecialists, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, upsertTouchpoint } from '../../utils/outreachApi'
 import LeadDrawer from './components/LeadDrawer'
 import PipelineTable from './components/PipelineTable'
 import PipelineKanban from './components/PipelineKanban'
 import Dashboard from './components/Dashboard'
+import TouchpointQuickModal from './components/TouchpointQuickModal'
+
+function getTouchpointNumber(status) {
+  const m = status && status.match(/^Touchpoint (\d+)$/)
+  return m ? parseInt(m[1]) : null
+}
 
 const LS_SPECIALIST_KEY = 'outreach_specialist'
 const LS_VIEW_KEY = 'outreach_view'
@@ -34,6 +40,7 @@ export default function OutreachHome() {
   const [overdueCount, setOverdueCount] = useState(0)
   const [stages, setStages] = useState([])
   const [maxTouchpoints, setMaxTouchpoints] = useState(5)
+  const [tpModal, setTpModal] = useState({ open: false, leadId: null, number: null, status: null, modalKey: 0 })
 
   // Drawer state
   const [drawerLeadId, setDrawerLeadId] = useState(undefined) // undefined=closed, null=create, number=edit
@@ -109,7 +116,13 @@ export default function OutreachHome() {
   }
 
   const handleStatusChange = async (leadId, newStatus) => {
-    // Optimistic update
+    const tpNum = getTouchpointNumber(newStatus)
+    if (tpNum !== null) {
+      // Open touchpoint modal instead of immediately moving
+      setTpModal({ open: true, leadId, number: tpNum, status: newStatus, modalKey: Date.now() })
+      return
+    }
+    // Non-touchpoint stage: optimistic update
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: newStatus } : l))
     try {
       await updateLead(leadId, { status: newStatus })
@@ -117,6 +130,15 @@ export default function OutreachHome() {
       toast.error('Failed to update status')
       fetchLeads()
     }
+  }
+
+  const handleTpModalSave = async (fields) => {
+    const { leadId, number, status } = tpModal
+    await upsertTouchpoint(leadId, number, fields)
+    await updateLead(leadId, { status })
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l))
+    setTpModal({ open: false, leadId: null, number: null, status: null, modalKey: 0 })
+    toast.success(`Touchpoint ${number} saved — moved to ${status}`)
   }
 
   const handleLeadUpdated = (updatedLead) => {
@@ -326,6 +348,16 @@ export default function OutreachHome() {
           industries={industries}
           stages={stages}
           maxTouchpoints={maxTouchpoints}
+        />
+      )}
+
+      {/* Touchpoint Quick Modal (kanban drag-to-touchpoint-stage) */}
+      {tpModal.open && (
+        <TouchpointQuickModal
+          key={tpModal.modalKey}
+          touchpointNumber={tpModal.number}
+          onSave={handleTpModalSave}
+          onClose={() => setTpModal({ open: false, leadId: null, number: null, status: null, modalKey: 0 })}
         />
       )}
     </div>

@@ -10,6 +10,12 @@ import {
   createLeadResponse,
   deleteLeadResponse,
 } from '../../../utils/outreachApi'
+import TouchpointQuickModal from './TouchpointQuickModal'
+
+function getTouchpointNumber(status) {
+  const m = status && status.match(/^Touchpoint (\d+)$/)
+  return m ? parseInt(m[1]) : null
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -725,6 +731,7 @@ export default function LeadDrawer({
   const [saved, setSaved] = useState({})
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [tpQuickModal, setTpQuickModal] = useState({ open: false, number: null, status: null, modalKey: 0 })
 
   // Create form state
   const [createForm, setCreateForm] = useState({
@@ -783,6 +790,11 @@ export default function LeadDrawer({
   // ── Status change ────────────────────────────────────────────────────────────
 
   const handleStatusChange = async (newStatus) => {
+    const tpNum = getTouchpointNumber(newStatus)
+    if (tpNum !== null) {
+      setTpQuickModal({ open: true, number: tpNum, status: newStatus, modalKey: Date.now() })
+      return
+    }
     try {
       const updated = await updateLead(leadId, { status: newStatus })
       setLead(prev => ({ ...prev, ...updated }))
@@ -791,6 +803,23 @@ export default function LeadDrawer({
     } catch {
       toast.error('Failed to update status')
     }
+  }
+
+  const handleTpQuickModalSave = async (fields) => {
+    const { number, status } = tpQuickModal
+    const savedTp = await upsertTouchpoint(leadId, number, fields)
+    const updated = await updateLead(leadId, { status })
+    setLead(prev => ({
+      ...prev,
+      ...updated,
+      touchpoints: [
+        ...(prev.touchpoints || []).filter(t => t.touchpoint_number !== number),
+        savedTp,
+      ],
+    }))
+    if (onLeadUpdated) onLeadUpdated(updated)
+    setTpQuickModal({ open: false, number: null, status: null, modalKey: 0 })
+    toast.success(`Touchpoint ${number} saved — moved to ${status}`)
   }
 
   const handleTpStageChange = async (number) => {
@@ -1527,6 +1556,17 @@ export default function LeadDrawer({
           </>
         )}
       </div>
+
+      {/* ── Touchpoint Quick Modal (from status badge) ───────────────────────── */}
+      {tpQuickModal.open && (
+        <TouchpointQuickModal
+          key={tpQuickModal.modalKey}
+          touchpointNumber={tpQuickModal.number}
+          initialData={lead ? (lead.touchpoints || []).find(t => t.touchpoint_number === tpQuickModal.number) : null}
+          onSave={handleTpQuickModalSave}
+          onClose={() => setTpQuickModal({ open: false, number: null, status: null, modalKey: 0 })}
+        />
+      )}
 
       {/* ── Delete Confirmation Modal ─────────────────────────────────────────── */}
       {showDeleteModal && (
