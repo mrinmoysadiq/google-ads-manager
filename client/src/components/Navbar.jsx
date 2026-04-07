@@ -23,6 +23,7 @@ export default function Navbar() {
 
   const isLearning = path.startsWith('/learning')
   const isOutreach = path.startsWith('/outreach')
+  const isFacebook = path.startsWith('/facebook')
 
   const auditNavLink = (to, label) => (
     <Link
@@ -82,8 +83,21 @@ export default function Navbar() {
               </Link>
             )}
 
+            {isFacebook && (
+              <Link
+                to="/facebook/admin"
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  path === '/facebook/admin'
+                    ? 'text-[#1877f2] bg-[#1877f2]/10'
+                    : 'text-[#8a8680] hover:text-[#c5c1b9] hover:bg-white/5'
+                }`}
+              >
+                Admin
+              </Link>
+            )}
+
             {/* "Back to modules" pill — shown inside any module */}
-            {(isAudit || isLearning || isOutreach) && (
+            {(isAudit || isLearning || isOutreach || isFacebook) && (
               <Link
                 to="/"
                 className="ml-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-[#8a8680] hover:text-[#c5c1b9]"

@@ -300,6 +300,40 @@ function initializeDatabase() {
   columnMigrations.forEach(sql => {
     try { db.exec(sql); } catch (e) { /* column already exists */ }
   });
+
+  // ── Facebook/Meta Ads tables ─────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fb_media_buyers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS fb_ad_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Seed fb_media_buyers from existing team_members if empty
+  const fbBuyerCount = db.prepare('SELECT COUNT(*) as cnt FROM fb_media_buyers').get();
+  if (fbBuyerCount.cnt === 0) {
+    const members = db.prepare('SELECT name FROM team_members').all();
+    const insertBuyer = db.prepare('INSERT OR IGNORE INTO fb_media_buyers (name) VALUES (?)');
+    members.forEach(m => insertBuyer.run(m.name));
+    console.log('Seeded fb_media_buyers');
+  }
+
+  // Seed fb_ad_accounts if empty
+  const fbAcctCount = db.prepare('SELECT COUNT(*) as cnt FROM fb_ad_accounts').get();
+  if (fbAcctCount.cnt === 0) {
+    const insertAcct = db.prepare('INSERT INTO fb_ad_accounts (name) VALUES (?)');
+    ['FB Account Alpha', 'FB Account Beta'].forEach(n => insertAcct.run(n));
+    console.log('Seeded fb_ad_accounts');
+  }
 }
 
 module.exports = { db, initializeDatabase };

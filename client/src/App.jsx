@@ -14,6 +14,10 @@ import LearningManagerDashboard from './pages/learning/LearningManagerDashboard'
 import LearningAdmin from './pages/learning/LearningAdmin'
 import OutreachHome from './pages/outreach/OutreachHome'
 import OutreachAdmin from './pages/outreach/OutreachAdmin'
+import FbSessionStart from './pages/facebook/FbSessionStart'
+import FbChecklist from './pages/facebook/FbChecklist'
+import FbComplete from './pages/facebook/FbComplete'
+import FbAdmin from './pages/facebook/FbAdmin'
 
 export default function App() {
   return (
@@ -41,6 +45,12 @@ export default function App() {
           {/* ── Outreach CRM module ────────────────────────────────────── */}
           <Route path="/outreach" element={<OutreachHome />} />
           <Route path="/outreach/admin" element={<OutreachAdmin />} />
+
+          {/* ── Facebook/Meta Ads module ───────────────────────────────── */}
+          <Route path="/facebook" element={<FbSessionStart />} />
+          <Route path="/facebook/checklist" element={<FbChecklist />} />
+          <Route path="/facebook/complete" element={<FbComplete />} />
+          <Route path="/facebook/admin" element={<FbAdmin />} />
         </Routes>
       </main>
       <Toaster

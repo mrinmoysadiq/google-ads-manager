@@ -8,6 +8,7 @@ const changelogRouter = require('./routes/changelog');
 const adminRouter = require('./routes/admin');
 const learningRouter = require('./routes/learning');
 const outreachRouter = require('./routes/outreach');
+const facebookRouter = require('./routes/facebook');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -31,6 +32,7 @@ app.use('/api/changelog', changelogRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/learning', learningRouter);
 app.use('/api/outreach', outreachRouter);
+app.use('/api/facebook', facebookRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {
