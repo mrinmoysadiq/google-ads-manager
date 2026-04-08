@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../utils/lmsApi'
 import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import BulletEditor from './components/BulletEditor'
+import RichTextEditor from './components/RichTextEditor'
 
 const STAGES = ['Assigned', 'In Progress', 'Notes Submitted', 'Assessed', 'Needs Revision', 'Completed']
 const STAGE_COLORS = {
@@ -56,7 +56,7 @@ function isOverdue(topic) {
 }
 
 // ── Overview Tab ─────────────────────────────────────────────────────────────
-function OverviewTab({ topic, role, onTopicUpdated }) {
+function OverviewTab({ topic, role, userId, onTopicUpdated }) {
   const [editTitle, setEditTitle] = useState(false)
   const [titleVal, setTitleVal] = useState(topic.title)
   const [editDesc, setEditDesc] = useState(false)
@@ -66,6 +66,8 @@ function OverviewTab({ topic, role, onTopicUpdated }) {
   const [newRes, setNewRes] = useState({ label: '', url: '' })
 
   const isManager = role === 'manager' || role === 'admin'
+  // Employees can edit their own topics (topics they are assigned to)
+  const canEdit = isManager || (role === 'employee' && userId === topic.assignee_id)
 
   async function saveTitle() {
     try {
@@ -107,11 +109,38 @@ function OverviewTab({ topic, role, onTopicUpdated }) {
 
   return (
     <div className="space-y-6">
+      {/* Title */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-medium text-[#8a8680] uppercase tracking-wide">Title</p>
+          {canEdit && !editTitle && (
+            <button onClick={() => setEditTitle(true)} className="text-xs text-[#575ECF]">Edit</button>
+          )}
+        </div>
+        {editTitle ? (
+          <div>
+            <input
+              className="w-full bg-[#1b1b1b] border border-white/10 rounded-lg px-3 py-2 text-sm text-[#c5c1b9] outline-none focus:border-[#575ECF] placeholder-[#8a8680]"
+              value={titleVal}
+              onChange={e => setTitleVal(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && saveTitle()}
+              autoFocus
+            />
+            <div className="flex gap-2 mt-2">
+              <button onClick={saveTitle} className="text-xs px-3 py-1.5 rounded-lg bg-[#575ECF] text-white">Save</button>
+              <button onClick={() => { setEditTitle(false); setTitleVal(topic.title) }} className="text-xs px-3 py-1.5 rounded-lg bg-white/8 text-[#8a8680]">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm font-semibold text-[#c5c1b9]">{topic.title}</p>
+        )}
+      </div>
+
       {/* Description */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <p className="text-xs font-medium text-[#8a8680] uppercase tracking-wide">Description</p>
-          {isManager && !editDesc && (
+          {canEdit && !editDesc && (
             <button onClick={() => setEditDesc(true)} className="text-xs text-[#575ECF]">Edit</button>
           )}
         </div>
@@ -136,7 +165,7 @@ function OverviewTab({ topic, role, onTopicUpdated }) {
       <div>
         <div className="flex items-center justify-between mb-2">
           <p className="text-xs font-medium text-[#8a8680] uppercase tracking-wide">Resources</p>
-          {isManager && (
+          {canEdit && (
             <button onClick={() => setAddingRes(true)} className="text-xs text-[#575ECF]">+ Add</button>
           )}
         </div>
@@ -146,7 +175,7 @@ function OverviewTab({ topic, role, onTopicUpdated }) {
               <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-sm text-[#575ECF] hover:text-[#6B72D8]">
                 {r.label || r.url}
               </a>
-              {isManager && (
+              {canEdit && (
                 <button onClick={() => removeResource(i)} className="text-[#ef4444] ml-1 text-xs">✕</button>
               )}
             </div>
@@ -201,7 +230,8 @@ function OverviewTab({ topic, role, onTopicUpdated }) {
 
 // ── Notes Tab ─────────────────────────────────────────────────────────────────
 function NotesTab({ topic, role, userId, onTopicUpdated }) {
-  const [notes, setNotes] = useState(topic.notes || { key_takeaways: [], how_to_apply: [] })
+  const [ktHtml, setKtHtml] = useState(topic.notes?.key_takeaways || '')
+  const [htaHtml, setHtaHtml] = useState(topic.notes?.how_to_apply || '')
   const [questions, setQuestions] = useState(topic.questions || [])
   const [newQuestion, setNewQuestion] = useState('')
   const [answeringId, setAnsweringId] = useState(null)
@@ -212,14 +242,21 @@ function NotesTab({ topic, role, userId, onTopicUpdated }) {
   const isManager = role === 'manager' || role === 'admin'
   const canEdit = (isEmployee && ['Assigned', 'In Progress', 'Needs Revision'].includes(topic.stage)) || isManager
 
-  function debouncedSave(field, value) {
+  // Debounced save — saves both fields together
+  const ktRef = useRef(ktHtml)
+  const htaRef = useRef(htaHtml)
+  ktRef.current = ktHtml
+  htaRef.current = htaHtml
+
+  function scheduleSave() {
     setSaveStatus('Saving...')
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
       try {
-        const payload = { ...notes, [field]: value }
-        await axios.put(`/api/lms/notes/${topic.id}`, payload)
-        setNotes(n => ({ ...n, [field]: value }))
+        await api.put(`/lms/notes/${topic.id}`, {
+          key_takeaways: ktRef.current,
+          how_to_apply: htaRef.current,
+        })
         setSaveStatus('Saved ✓')
         setTimeout(() => setSaveStatus(''), 2000)
       } catch {
@@ -227,6 +264,9 @@ function NotesTab({ topic, role, userId, onTopicUpdated }) {
       }
     }, 1000)
   }
+
+  function handleKtChange(html) { setKtHtml(html); scheduleSave() }
+  function handleHtaChange(html) { setHtaHtml(html); scheduleSave() }
 
   async function addQuestion() {
     if (!newQuestion.trim()) return
@@ -253,8 +293,12 @@ function NotesTab({ topic, role, userId, onTopicUpdated }) {
   }
 
   async function submitNotes() {
-    const takeaways = notes.key_takeaways || []
-    if (!takeaways.some(b => b.trim())) return toast.error('Add at least one key takeaway first')
+    const text = ktHtml.replace(/<[^>]*>/g, '').trim()
+    if (!text) return toast.error('Add at least one key takeaway first')
+    // Save immediately before submitting
+    try {
+      await api.put(`/lms/notes/${topic.id}`, { key_takeaways: ktHtml, how_to_apply: htaHtml })
+    } catch {}
     try {
       await api.patch(`/lms/topics/${topic.id}/stage`, { new_stage: 'Notes Submitted', changed_by: userId, role })
       onTopicUpdated({ ...topic, stage: 'Notes Submitted' })
@@ -269,25 +313,29 @@ function NotesTab({ topic, role, userId, onTopicUpdated }) {
   return (
     <div className="space-y-6">
       {/* Save indicator */}
-      {saveStatus && <p className="text-xs text-[#8a8680]">{saveStatus}</p>}
+      {saveStatus && (
+        <p className="text-xs" style={{ color: saveStatus.includes('Error') ? '#ef4444' : '#8a8680' }}>
+          {saveStatus}
+        </p>
+      )}
 
       {/* Key Takeaways */}
       <div>
         <p className="text-sm font-medium text-[#c5c1b9] mb-2">Key Takeaways</p>
-        <BulletEditor
-          value={notes.key_takeaways || []}
-          onChange={v => debouncedSave('key_takeaways', v)}
+        <RichTextEditor
+          value={ktHtml}
+          onChange={handleKtChange}
           readOnly={readOnly}
-          placeholder="Add your key takeaways..."
+          placeholder="Add your key takeaways... (use toolbar for headings, bold, bullets)"
         />
       </div>
 
       {/* How I'll Apply */}
       <div>
         <p className="text-sm font-medium text-[#c5c1b9] mb-2">How I'll Apply This</p>
-        <BulletEditor
-          value={notes.how_to_apply || []}
-          onChange={v => debouncedSave('how_to_apply', v)}
+        <RichTextEditor
+          value={htaHtml}
+          onChange={handleHtaChange}
           readOnly={readOnly}
           placeholder="How will you apply what you've learned?"
         />
@@ -470,7 +518,7 @@ function AssessmentTab({ topic, role, userId, onTopicUpdated }) {
 }
 
 // ── Discussion Tab ────────────────────────────────────────────────────────────
-function DiscussionTab({ topic, userId, userName }) {
+function DiscussionTab({ topic, userId, userName, onCommentAdded }) {
   const [comments, setComments] = useState([])
   const [locked, setLocked] = useState(false)
   const [message, setMessage] = useState('')
@@ -498,6 +546,7 @@ function DiscussionTab({ topic, userId, userName }) {
       const { data } = await api.post('/lms/comments', { topic_id: topic.id, author_id: userId, message: message.trim() })
       setComments(c => [...c, data])
       setMessage('')
+      onCommentAdded?.()
     } catch { toast.error('Error sending message') }
     setSending(false)
   }
@@ -581,6 +630,7 @@ export default function LmsTopicDetail() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const [stageMenuOpen, setStageMenuOpen] = useState(false)
+  const [viewedTabs, setViewedTabs] = useState(new Set(['overview']))
 
   const userId = Number(localStorage.getItem('lms_user_id'))
   const role = localStorage.getItem('lms_user_role')
@@ -624,12 +674,21 @@ export default function LmsTopicDetail() {
 
   const overdue = isOverdue(topic)
 
+  const assessmentCount = topic.assessments?.length || 0
+  const [liveCommentCount, setLiveCommentCount] = useState(topic.comments?.length || 0)
+  const discussionCount = liveCommentCount
+
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'notes', label: 'Notes' },
-    { id: 'assessment', label: 'Assessment' },
-    { id: 'discussion', label: 'Discussion' },
+    { id: 'assessment', label: 'Assessment', count: assessmentCount },
+    { id: 'discussion', label: 'Discussion', count: discussionCount },
   ]
+
+  function switchTab(id) {
+    setActiveTab(id)
+    setViewedTabs(v => new Set([...v, id]))
+  }
 
   return (
     <div className="min-h-screen bg-[#1b1b1b]">
@@ -697,25 +756,37 @@ export default function LmsTopicDetail() {
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-[#242424] border border-white/8 rounded-lg p-1">
-          {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className="flex-1 py-2 rounded-md text-sm font-medium transition-colors"
-              style={{
-                backgroundColor: activeTab === t.id ? '#575ECF' : 'transparent',
-                color: activeTab === t.id ? '#fff' : '#8a8680',
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
+          {tabs.map(t => {
+            const isActive = activeTab === t.id
+            const showBadge = !isActive && !viewedTabs.has(t.id) && t.count > 0
+            return (
+              <button
+                key={t.id}
+                onClick={() => switchTab(t.id)}
+                className="flex-1 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
+                style={{
+                  backgroundColor: isActive ? '#575ECF' : 'transparent',
+                  color: isActive ? '#fff' : '#8a8680',
+                }}
+              >
+                {t.label}
+                {showBadge && (
+                  <span
+                    className="text-xs font-bold rounded-full px-1.5 py-0.5 leading-none"
+                    style={{ backgroundColor: '#f59e0b', color: '#fff', minWidth: '18px', textAlign: 'center' }}
+                  >
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
 
         {/* Tab content */}
         <div className="bg-[#242424] border border-white/8 rounded-2xl p-6">
           {activeTab === 'overview' && (
-            <OverviewTab topic={topic} role={role} onTopicUpdated={t => setTopic(prev => ({ ...prev, ...t }))} />
+            <OverviewTab topic={topic} role={role} userId={userId} onTopicUpdated={t => setTopic(prev => ({ ...prev, ...t }))} />
           )}
           {activeTab === 'notes' && (
             <NotesTab
@@ -734,7 +805,12 @@ export default function LmsTopicDetail() {
             />
           )}
           {activeTab === 'discussion' && (
-            <DiscussionTab topic={topic} userId={userId} userName={localStorage.getItem('lms_user_name')} />
+            <DiscussionTab
+              topic={topic}
+              userId={userId}
+              userName={localStorage.getItem('lms_user_name')}
+              onCommentAdded={() => setLiveCommentCount(c => c + 1)}
+            />
           )}
         </div>
       </div>

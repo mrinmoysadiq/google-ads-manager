@@ -18,6 +18,30 @@ function parseResources(raw) {
   try { return JSON.parse(raw); } catch { return []; }
 }
 
+// Convert stored notes content to HTML string (handles both old JSON array and new HTML format)
+function parseNotesContent(raw) {
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      const items = parsed.filter(s => s && s.trim());
+      if (items.length === 0) return '';
+      return '<ul>' + items.map(s => `<li>${s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</li>`).join('') + '</ul>';
+    }
+  } catch {}
+  return raw; // Already an HTML string
+}
+
+// Check if notes content is non-empty (handles both formats)
+function hasNotesContent(raw) {
+  if (!raw) return false;
+  try {
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) return arr.some(s => s && s.trim());
+  } catch {}
+  return raw.replace(/<[^>]*>/g, '').trim().length > 0;
+}
+
 function today() {
   return new Date().toISOString().split('T')[0];
 }
@@ -233,8 +257,8 @@ router.get('/topics/:id', (req, res) => {
       resources: parseResources(topic.resources),
       notes: notes ? {
         ...notes,
-        key_takeaways: parseResources(notes.key_takeaways),
-        how_to_apply: parseResources(notes.how_to_apply),
+        key_takeaways: parseNotesContent(notes.key_takeaways),
+        how_to_apply: parseNotesContent(notes.how_to_apply),
       } : null,
       questions,
       assessments,
@@ -311,10 +335,9 @@ router.patch('/topics/:id/stage', (req, res) => {
   // Notes required for Notes Submitted
   if (new_stage === 'Notes Submitted') {
     const notes = db.prepare('SELECT * FROM lms_notes WHERE topic_id = ?').get(req.params.id);
-    if (!notes) return res.status(400).json({ error: 'Notes must exist before submitting' });
-    const takeaways = parseResources(notes.key_takeaways);
-    const nonEmpty = takeaways.filter(b => b && b.trim());
-    if (nonEmpty.length === 0) return res.status(400).json({ error: 'Add at least one key takeaway before submitting' });
+    if (!notes || !hasNotesContent(notes.key_takeaways)) {
+      return res.status(400).json({ error: 'Add at least one key takeaway before submitting' });
+    }
   }
 
   try {
@@ -344,8 +367,8 @@ router.get('/notes/:topicId', (req, res) => {
     if (!notes) return res.json(null);
     res.json({
       ...notes,
-      key_takeaways: parseResources(notes.key_takeaways),
-      how_to_apply: parseResources(notes.how_to_apply),
+      key_takeaways: parseNotesContent(notes.key_takeaways),
+      how_to_apply: parseNotesContent(notes.how_to_apply),
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -354,20 +377,23 @@ router.get('/notes/:topicId', (req, res) => {
 
 router.put('/notes/:topicId', (req, res) => {
   const { key_takeaways, how_to_apply } = req.body;
+  // Store as raw string (HTML or JSON) — let client decide format
+  const ktStr = typeof key_takeaways === 'string' ? key_takeaways : JSON.stringify(key_takeaways || []);
+  const htaStr = typeof how_to_apply === 'string' ? how_to_apply : JSON.stringify(how_to_apply || []);
   try {
     const existing = db.prepare('SELECT id FROM lms_notes WHERE topic_id = ?').get(req.params.topicId);
     if (existing) {
       db.prepare('UPDATE lms_notes SET key_takeaways=?, how_to_apply=?, updated_at=CURRENT_TIMESTAMP WHERE topic_id=?')
-        .run(JSON.stringify(key_takeaways || []), JSON.stringify(how_to_apply || []), req.params.topicId);
+        .run(ktStr, htaStr, req.params.topicId);
     } else {
       db.prepare('INSERT INTO lms_notes (topic_id, key_takeaways, how_to_apply) VALUES (?, ?, ?)')
-        .run(req.params.topicId, JSON.stringify(key_takeaways || []), JSON.stringify(how_to_apply || []));
+        .run(req.params.topicId, ktStr, htaStr);
     }
     const notes = db.prepare('SELECT * FROM lms_notes WHERE topic_id = ?').get(req.params.topicId);
     res.json({
       ...notes,
-      key_takeaways: parseResources(notes.key_takeaways),
-      how_to_apply: parseResources(notes.how_to_apply),
+      key_takeaways: parseNotesContent(notes.key_takeaways),
+      how_to_apply: parseNotesContent(notes.how_to_apply),
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
