@@ -3,21 +3,22 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../../utils/lmsApi'
 import toast from 'react-hot-toast'
 
-const STAGES = ['Assigned', 'In Progress', 'Notes Submitted', 'Assessed', 'Needs Revision', 'Completed']
-const STAGE_COLORS = {
-  'Assigned': '#8a8680',
-  'In Progress': '#575ECF',
-  'Notes Submitted': '#f59e0b',
-  'Assessed': '#3b82f6',
-  'Needs Revision': '#ef4444',
-  'Completed': '#22c55e',
+const DEFAULT_STAGES = ['Assigned', 'In Progress', 'Notes Submitted', 'Assessed', 'Needs Revision', 'Completed']
+const DEFAULT_COLORS = {
+  'Assigned': '#8a8680', 'In Progress': '#575ECF', 'Notes Submitted': '#f59e0b',
+  'Assessed': '#3b82f6', 'Needs Revision': '#ef4444', 'Completed': '#22c55e',
 }
 
-// Moves an employee can make
+// For employees: only these two forward moves are allowed
 const ALLOWED_TRANSITIONS = [
   ['Assigned', 'In Progress'],
   ['In Progress', 'Notes Submitted'],
 ]
+
+function getStageColor(stagesData, name) {
+  const found = stagesData.find(s => s.name === name)
+  return found?.color || DEFAULT_COLORS[name] || '#8a8680'
+}
 
 function StageBadge({ stage }) {
   const color = STAGE_COLORS[stage] || '#8a8680'
@@ -75,9 +76,8 @@ function TopicCard({ topic, onDragStart, onDragEnd }) {
 }
 
 // ── Kanban Column ─────────────────────────────────────────────────────────────
-function KanbanColumn({ stage, topics, onDrop, dimmed }) {
+function KanbanColumn({ stage, color, topics, onDrop, dimmed }) {
   const [dragOver, setDragOver] = useState(false)
-  const color = STAGE_COLORS[stage]
 
   return (
     <div
@@ -183,15 +183,68 @@ function DashboardTab({ userId }) {
   )
 }
 
+// ── New Topic Modal ───────────────────────────────────────────────────────────
+function NewTopicModal({ userId, onCreated, onClose }) {
+  const [form, setForm] = useState({ title: '', description: '', due_date: '' })
+  const [saving, setSaving] = useState(false)
+
+  async function submit() {
+    if (!form.title.trim()) return toast.error('Title required')
+    setSaving(true)
+    try {
+      await api.post('/lms/topics', {
+        title: form.title.trim(),
+        description: form.description,
+        assignee_id: userId,
+        assigned_by: userId,
+        due_date: form.due_date || null,
+      })
+      toast.success('Topic created!')
+      onCreated()
+      onClose()
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error creating topic')
+    }
+    setSaving(false)
+  }
+
+  const inputCls = 'w-full bg-[#1b1b1b] border border-white/10 rounded-lg px-3 py-2 text-sm text-[#c5c1b9] outline-none focus:border-[#575ECF] placeholder-[#8a8680]'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-[#242424] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <h3 className="text-lg font-bold text-[#c5c1b9] mb-4">New Topic</h3>
+        <div className="space-y-3">
+          <input className={inputCls} placeholder="Topic title *" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} autoFocus />
+          <textarea className={inputCls + ' resize-none h-20'} placeholder="Description (optional)" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          <div>
+            <p className="text-xs text-[#8a8680] mb-1">Due Date (optional)</p>
+            <input className={inputCls} type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={submit} disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#575ECF' }}>
+              Create Topic
+            </button>
+            <button onClick={onClose} className="px-4 py-2.5 rounded-lg text-sm text-[#8a8680] bg-white/8">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LmsEmployee() {
   const { userId } = useParams()
   const navigate = useNavigate()
   const [topics, setTopics] = useState([])
+  const [stagesData, setStagesData] = useState([])
   const [stats, setStats] = useState(null)
   const [activeTab, setActiveTab] = useState('pipeline')
   const [loading, setLoading] = useState(true)
   const [draggingStage, setDraggingStage] = useState(null)
+  const [showNewTopic, setShowNewTopic] = useState(false)
 
   const storedUserId = localStorage.getItem('lms_user_id')
   const userName = localStorage.getItem('lms_user_name')
@@ -204,14 +257,18 @@ export default function LmsEmployee() {
 
   async function loadData() {
     setLoading(true)
-    const [topicsRes, statsRes] = await Promise.all([
+    const [topicsRes, statsRes, stagesRes] = await Promise.all([
       api.get(`/lms/topics?assignee_id=${userId}`),
       api.get(`/lms/dashboard?user_id=${userId}`),
+      api.get('/lms/stages'),
     ])
     setTopics(topicsRes.data)
     setStats(statsRes.data)
+    setStagesData(stagesRes.data.filter(s => s.active))
     setLoading(false)
   }
+
+  const stages = stagesData.length > 0 ? stagesData.map(s => s.name) : DEFAULT_STAGES
 
   function topicsForStage(stage) {
     return topics.filter(t => t.stage === stage)
@@ -277,9 +334,18 @@ export default function LmsEmployee() {
               </div>
             )}
           </div>
-          <button onClick={() => navigate('/learning')} className="text-xs text-[#8a8680] hover:text-[#c5c1b9]">
-            Switch User
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowNewTopic(true)}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+              style={{ backgroundColor: '#575ECF' }}
+            >
+              + New Topic
+            </button>
+            <button onClick={() => navigate('/learning')} className="text-xs text-[#8a8680] hover:text-[#c5c1b9]">
+              Switch User
+            </button>
+          </div>
         </div>
       </div>
 
@@ -302,17 +368,12 @@ export default function LmsEmployee() {
       {/* Pipeline — Kanban */}
       {activeTab === 'pipeline' && (
         <div className="px-4 pb-8 overflow-x-auto">
-          <div
-            className="flex gap-3 min-w-max"
-            onDragStart={e => {
-              const stage = e.dataTransfer?.getData?.('from_stage')
-              setTimeout(() => setDraggingStage(e.target.closest('[draggable]')?.dataset?.stage || null), 0)
-            }}
-          >
-            {STAGES.map(stage => (
+          <div className="flex gap-3 min-w-max">
+            {stages.map(stage => (
               <KanbanColumn
                 key={stage}
                 stage={stage}
+                color={getStageColor(stagesData, stage)}
                 topics={topicsForStage(stage)}
                 onDrop={handleDrop}
                 dimmed={draggingStage ? getDimmed(stage) : false}
@@ -321,7 +382,7 @@ export default function LmsEmployee() {
           </div>
           {topics.length === 0 && (
             <div className="text-center py-16">
-              <p className="text-[#8a8680] text-sm">No topics assigned to you yet.</p>
+              <p className="text-[#8a8680] text-sm">No topics assigned to you yet. Create one with "+ New Topic".</p>
             </div>
           )}
         </div>
@@ -334,6 +395,15 @@ export default function LmsEmployee() {
             <DashboardTab userId={userId} />
           </div>
         </div>
+      )}
+
+      {/* New Topic Modal */}
+      {showNewTopic && (
+        <NewTopicModal
+          userId={Number(storedUserId)}
+          onCreated={loadData}
+          onClose={() => setShowNewTopic(false)}
+        />
       )}
     </div>
   )

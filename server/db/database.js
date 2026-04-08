@@ -384,11 +384,38 @@ function initializeDatabase() {
     );
   `);
 
+  // LMS pipeline stages table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS lms_stages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      color TEXT NOT NULL DEFAULT '#8a8680',
+      order_index INTEGER NOT NULL DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // Seed one admin user if lms_users is empty
   const lmsUserCount = db.prepare('SELECT COUNT(*) as cnt FROM lms_users').get();
   if (lmsUserCount.cnt === 0) {
     db.prepare("INSERT INTO lms_users (name, role) VALUES ('Admin', 'admin')").run();
     console.log('Seeded default LMS admin user');
+  }
+
+  // Seed default stages if empty
+  const lmsStageCount = db.prepare('SELECT COUNT(*) as cnt FROM lms_stages').get();
+  if (lmsStageCount.cnt === 0) {
+    const insertStage = db.prepare('INSERT INTO lms_stages (name, color, order_index) VALUES (?, ?, ?)');
+    [
+      ['Assigned', '#8a8680', 1],
+      ['In Progress', '#575ECF', 2],
+      ['Notes Submitted', '#f59e0b', 3],
+      ['Assessed', '#3b82f6', 4],
+      ['Needs Revision', '#ef4444', 5],
+      ['Completed', '#22c55e', 6],
+    ].forEach(([name, color, order]) => insertStage.run(name, color, order));
+    console.log('Seeded LMS stages');
   }
   console.log('LMS tables initialized');
 

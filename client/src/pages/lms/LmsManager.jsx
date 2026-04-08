@@ -4,14 +4,14 @@ import api from '../../utils/lmsApi'
 import toast from 'react-hot-toast'
 import Select from 'react-select'
 
-const STAGES = ['Assigned', 'In Progress', 'Notes Submitted', 'Assessed', 'Needs Revision', 'Completed']
-const STAGE_COLORS = {
-  'Assigned': '#8a8680',
-  'In Progress': '#575ECF',
-  'Notes Submitted': '#f59e0b',
-  'Assessed': '#3b82f6',
-  'Needs Revision': '#ef4444',
-  'Completed': '#22c55e',
+const DEFAULT_STAGES = ['Assigned', 'In Progress', 'Notes Submitted', 'Assessed', 'Needs Revision', 'Completed']
+const DEFAULT_COLORS = {
+  'Assigned': '#8a8680', 'In Progress': '#575ECF', 'Notes Submitted': '#f59e0b',
+  'Assessed': '#3b82f6', 'Needs Revision': '#ef4444', 'Completed': '#22c55e',
+}
+function getStageColor(stagesData, name) {
+  const found = stagesData?.find(s => s.name === name)
+  return found?.color || DEFAULT_COLORS[name] || '#8a8680'
 }
 
 const selectStyles = {
@@ -28,7 +28,7 @@ function inputCls() {
 }
 
 function StageBadge({ stage }) {
-  const color = STAGE_COLORS[stage] || '#8a8680'
+  const color = DEFAULT_COLORS[stage] || '#8a8680'
   return <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${color}20`, color }}>{stage}</span>
 }
 
@@ -283,7 +283,7 @@ function AssessmentModal({ topic, managerId, onSubmit, onClose }) {
 // ── Kanban Column (Manager) ───────────────────────────────────────────────────
 function ManagerKanbanColumn({ stage, topics, onDrop, onDragStart }) {
   const [dragOver, setDragOver] = useState(false)
-  const color = STAGE_COLORS[stage]
+  const color = DEFAULT_COLORS[stage] || '#8a8680'
   return (
     <div className="flex-shrink-0 w-56 flex flex-col rounded-xl overflow-hidden">
       <div className="px-3 py-2.5 flex items-center justify-between" style={{ backgroundColor: `${color}18`, borderBottom: `2px solid ${color}` }}>
@@ -380,12 +380,12 @@ function EmployeeView({ topics, employees, stats }) {
 
             {isExpanded && (
               <div className="border-t border-white/8">
-                {STAGES.map(stage => {
+                {DEFAULT_STAGES.map(stage => {
                   const stageTopics = empTopics.filter(t => t.stage === stage)
                   if (stageTopics.length === 0) return null
                   return (
                     <div key={stage} className="px-5 py-3 border-b border-white/5 last:border-0">
-                      <p className="text-xs font-medium mb-2" style={{ color: STAGE_COLORS[stage] }}>{stage}</p>
+                      <p className="text-xs font-medium mb-2" style={{ color: DEFAULT_COLORS[stage] || '#8a8680' }}>{stage}</p>
                       <div className="space-y-2">
                         {stageTopics.map(t => (
                           <div key={t.id} className="flex items-center justify-between">
@@ -417,6 +417,7 @@ export default function LmsManager() {
   const [topics, setTopics] = useState([])
   const [users, setUsers] = useState([])
   const [templates, setTemplates] = useState([])
+  const [stagesData, setStagesData] = useState([])
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('kanban')
@@ -436,18 +437,22 @@ export default function LmsManager() {
 
   async function loadAll() {
     setLoading(true)
-    const [topicsRes, usersRes, templatesRes, statsRes] = await Promise.all([
+    const [topicsRes, usersRes, templatesRes, statsRes, stagesRes] = await Promise.all([
       api.get('/lms/topics'),
       api.get('/lms/users'),
       api.get('/lms/templates'),
       api.get('/lms/dashboard'),
+      api.get('/lms/stages'),
     ])
     setTopics(topicsRes.data)
     setUsers(usersRes.data)
     setTemplates(templatesRes.data)
     setStats(statsRes.data)
+    setStagesData(stagesRes.data.filter(s => s.active))
     setLoading(false)
   }
+
+  const stages = stagesData.length > 0 ? stagesData.map(s => s.name) : DEFAULT_STAGES
 
   const employeeOptions = [
     { value: null, label: 'All Employees' },
@@ -551,7 +556,7 @@ export default function LmsManager() {
       {activeTab === 'pipeline' && (
         <div className="px-4 pb-8 overflow-x-auto">
           <div className="flex gap-3 min-w-max">
-            {STAGES.map(stage => (
+            {stages.map(stage => (
               <ManagerKanbanColumn
                 key={stage}
                 stage={stage}
@@ -615,9 +620,9 @@ export default function LmsManager() {
           <div className="bg-[#242424] border border-white/8 rounded-xl p-5">
             <p className="text-sm font-semibold text-[#c5c1b9] mb-4">By Stage</p>
             <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-              {STAGES.map(s => (
+              {stages.map(s => (
                 <div key={s} className="text-center">
-                  <p className="text-xl font-bold" style={{ color: STAGE_COLORS[s] }}>{stats.by_stage[s] || 0}</p>
+                  <p className="text-xl font-bold" style={{ color: DEFAULT_COLORS[s] || '#8a8680' }}>{stats.by_stage[s] || 0}</p>
                   <p className="text-xs text-[#8a8680] mt-0.5">{s}</p>
                 </div>
               ))}

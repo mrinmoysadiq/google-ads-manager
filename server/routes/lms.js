@@ -2,7 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/database');
 
-const STAGES = ['Assigned', 'In Progress', 'Notes Submitted', 'Assessed', 'Needs Revision', 'Completed'];
+const DEFAULT_STAGES = ['Assigned', 'In Progress', 'Notes Submitted', 'Assessed', 'Needs Revision', 'Completed'];
+
+function getStages() {
+  try {
+    const rows = db.prepare('SELECT name FROM lms_stages WHERE active = 1 ORDER BY order_index ASC').all();
+    return rows.length > 0 ? rows.map(r => r.name) : DEFAULT_STAGES;
+  } catch { return DEFAULT_STAGES; }
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -285,6 +292,7 @@ router.patch('/topics/:id', (req, res) => {
 
 router.patch('/topics/:id/stage', (req, res) => {
   const { new_stage, changed_by, role } = req.body;
+  const STAGES = getStages();
   if (!new_stage || !STAGES.includes(new_stage)) return res.status(400).json({ error: 'Invalid stage' });
 
   const topic = db.prepare('SELECT * FROM lms_topics WHERE id = ?').get(req.params.id);
@@ -536,6 +544,7 @@ router.get('/dashboard', (req, res) => {
       }
 
       const byStage = {};
+      const STAGES = getStages();
       STAGES.forEach(s => { byStage[s] = rows.filter(r => r.stage === s).length; });
 
       const overdueTopics = rows
@@ -578,6 +587,62 @@ router.get('/dashboard', (req, res) => {
     });
 
     res.json({ ...aggregate, employees: employeeStats });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Pipeline Stages ───────────────────────────────────────────────────────────
+
+router.get('/stages', (req, res) => {
+  try {
+    const stages = db.prepare('SELECT * FROM lms_stages ORDER BY order_index ASC').all();
+    res.json(stages);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/stages', (req, res) => {
+  const { name, color = '#8a8680' } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
+  try {
+    const maxOrder = db.prepare('SELECT MAX(order_index) as m FROM lms_stages').get().m || 0;
+    const result = db.prepare('INSERT INTO lms_stages (name, color, order_index) VALUES (?, ?, ?)').run(name.trim(), color, maxOrder + 1);
+    res.json(db.prepare('SELECT * FROM lms_stages WHERE id = ?').get(result.lastInsertRowid));
+  } catch (e) {
+    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: 'Stage name already exists' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.patch('/stages/:id', (req, res) => {
+  const stage = db.prepare('SELECT * FROM lms_stages WHERE id = ?').get(req.params.id);
+  if (!stage) return res.status(404).json({ error: 'Stage not found' });
+  const { name, color, order_index, active } = req.body;
+  try {
+    db.prepare('UPDATE lms_stages SET name=?, color=?, order_index=?, active=? WHERE id=?').run(
+      name !== undefined ? name : stage.name,
+      color !== undefined ? color : stage.color,
+      order_index !== undefined ? order_index : stage.order_index,
+      active !== undefined ? (active ? 1 : 0) : stage.active,
+      req.params.id
+    );
+    res.json(db.prepare('SELECT * FROM lms_stages WHERE id = ?').get(req.params.id));
+  } catch (e) {
+    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: 'Stage name already exists' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/stages/:id', (req, res) => {
+  const stage = db.prepare('SELECT * FROM lms_stages WHERE id = ?').get(req.params.id);
+  if (!stage) return res.status(404).json({ error: 'Stage not found' });
+  const topicsInStage = db.prepare('SELECT COUNT(*) as cnt FROM lms_topics WHERE stage = ?').get(stage.name);
+  if (topicsInStage.cnt > 0) return res.status(400).json({ error: `Cannot delete stage with ${topicsInStage.cnt} active topic(s)` });
+  try {
+    db.prepare('DELETE FROM lms_stages WHERE id = ?').run(req.params.id);
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

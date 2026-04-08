@@ -346,6 +346,170 @@ function TemplatesSection() {
   )
 }
 
+// ── Pipeline Stages Section ───────────────────────────────────────────────────
+const COLOR_PRESETS = ['#8a8680', '#575ECF', '#f59e0b', '#3b82f6', '#ef4444', '#22c55e', '#14b8a6', '#a855f7', '#f97316', '#ec4899']
+
+function PipelineStagesSection() {
+  const [stages, setStages] = useState([])
+  const [newName, setNewName] = useState('')
+  const [newColor, setNewColor] = useState('#8a8680')
+  const [editId, setEditId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [editColor, setEditColor] = useState('')
+
+  useEffect(() => { fetchStages() }, [])
+  async function fetchStages() {
+    const { data } = await api.get('/lms/stages')
+    setStages(data)
+  }
+
+  async function addStage() {
+    if (!newName.trim()) return
+    try {
+      await api.post('/lms/stages', { name: newName.trim(), color: newColor })
+      setNewName('')
+      setNewColor('#8a8680')
+      fetchStages()
+      toast.success('Stage added')
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error adding stage')
+    }
+  }
+
+  async function saveEdit(id) {
+    try {
+      await api.patch(`/lms/stages/${id}`, { name: editName.trim(), color: editColor })
+      setEditId(null)
+      fetchStages()
+      toast.success('Stage updated')
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error updating stage')
+    }
+  }
+
+  async function moveStage(id, direction) {
+    const idx = stages.findIndex(s => s.id === id)
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= stages.length) return
+    const current = stages[idx]
+    const swap = stages[swapIdx]
+    await Promise.all([
+      api.patch(`/lms/stages/${current.id}`, { order_index: swap.order_index }),
+      api.patch(`/lms/stages/${swap.id}`, { order_index: current.order_index }),
+    ])
+    fetchStages()
+  }
+
+  async function deleteStage(id) {
+    if (!confirm('Delete this stage? This cannot be undone.')) return
+    try {
+      await api.delete(`/lms/stages/${id}`)
+      fetchStages()
+      toast.success('Stage deleted')
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error deleting stage')
+    }
+  }
+
+  async function toggleActive(stage) {
+    await api.patch(`/lms/stages/${stage.id}`, { active: stage.active ? 0 : 1 })
+    fetchStages()
+  }
+
+  function ColorPicker({ value, onChange }) {
+    return (
+      <div className="flex gap-1.5 flex-wrap">
+        {COLOR_PRESETS.map(c => (
+          <button
+            key={c}
+            onClick={() => onChange(c)}
+            className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110"
+            style={{ backgroundColor: c, borderColor: value === c ? '#fff' : 'transparent' }}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <h2 className="text-lg font-semibold text-[#c5c1b9] mb-4">Pipeline Stages</h2>
+      <p className="text-xs text-[#8a8680] mb-4">Stages appear as kanban columns. Drag order is determined by the order here.</p>
+
+      {/* Add stage */}
+      <div className="bg-[#242424] border border-white/8 rounded-xl p-4 mb-4">
+        <p className="text-sm text-[#8a8680] mb-3">Add new stage</p>
+        <div className="flex gap-2 flex-wrap items-end">
+          <div className="flex-1 min-w-[160px]">
+            <input
+              className={inputCls()}
+              placeholder="Stage name"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addStage()}
+            />
+          </div>
+          <div>
+            <p className="text-xs text-[#8a8680] mb-1">Color</p>
+            <ColorPicker value={newColor} onChange={setNewColor} />
+          </div>
+          <button
+            onClick={addStage}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-white self-end"
+            style={{ backgroundColor: '#575ECF' }}
+          >
+            Add Stage
+          </button>
+        </div>
+      </div>
+
+      {/* Stage list */}
+      <div className="space-y-2">
+        {stages.map((s, i) => (
+          <div key={s.id} className="bg-[#242424] border border-white/8 rounded-xl p-4">
+            {editId === s.id ? (
+              <div className="space-y-3">
+                <input className={inputCls()} value={editName} onChange={e => setEditName(e.target.value)} autoFocus />
+                <div>
+                  <p className="text-xs text-[#8a8680] mb-1">Color</p>
+                  <ColorPicker value={editColor} onChange={setEditColor} />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => saveEdit(s.id)} className="text-xs px-3 py-1.5 rounded-lg bg-[#575ECF] text-white">Save</button>
+                  <button onClick={() => setEditId(null)} className="text-xs px-3 py-1.5 rounded-lg bg-white/8 text-[#8a8680]">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                {/* Color dot + name */}
+                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                <span className="text-sm font-medium text-[#c5c1b9] flex-1">{s.name}</span>
+                {!s.active && <span className="text-xs text-[#8a8680]">Hidden</span>}
+
+                {/* Actions */}
+                <div className="flex gap-1.5 items-center">
+                  <button onClick={() => moveStage(s.id, 'up')} disabled={i === 0} className="text-[#8a8680] hover:text-[#c5c1b9] disabled:opacity-30 px-1">↑</button>
+                  <button onClick={() => moveStage(s.id, 'down')} disabled={i === stages.length - 1} className="text-[#8a8680] hover:text-[#c5c1b9] disabled:opacity-30 px-1">↓</button>
+                  <button
+                    onClick={() => { setEditId(s.id); setEditName(s.name); setEditColor(s.color) }}
+                    className="text-xs px-2.5 py-1 rounded-lg bg-white/8 text-[#c5c1b9] hover:bg-white/12"
+                  >Edit</button>
+                  <button
+                    onClick={() => toggleActive(s)}
+                    className={`text-xs px-2.5 py-1 rounded-lg ${s.active ? 'bg-white/8 text-[#8a8680]' : 'bg-[#575ECF]/20 text-[#575ECF]'}`}
+                  >{s.active ? 'Hide' : 'Show'}</button>
+                  <button onClick={() => deleteStage(s.id)} className="text-xs px-2.5 py-1 rounded-lg bg-[#ef4444]/20 text-[#ef4444]">Delete</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {stages.length === 0 && <p className="text-center py-8 text-[#8a8680] text-sm">No stages yet</p>}
+      </div>
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LmsAdmin() {
   const navigate = useNavigate()
@@ -359,7 +523,7 @@ export default function LmsAdmin() {
   const tabs = [
     { id: 'users', label: 'Users' },
     { id: 'templates', label: 'Template Library' },
-    { id: 'settings', label: 'Settings' },
+    { id: 'stages', label: 'Pipeline Stages' },
   ]
 
   return (
@@ -391,20 +555,7 @@ export default function LmsAdmin() {
 
         {activeTab === 'users' && <UsersSection />}
         {activeTab === 'templates' && <TemplatesSection />}
-        {activeTab === 'settings' && (
-          <div className="bg-[#242424] border border-white/8 rounded-xl p-6">
-            <h2 className="text-lg font-semibold text-[#c5c1b9] mb-3">Pipeline Stages</h2>
-            <p className="text-sm text-[#8a8680] mb-4">Learning pipeline stages are fixed and cannot be modified.</p>
-            <div className="flex flex-wrap gap-2">
-              {['Assigned', 'In Progress', 'Notes Submitted', 'Assessed', 'Needs Revision', 'Completed'].map((s, i, arr) => (
-                <div key={s} className="flex items-center gap-2">
-                  <span className="text-sm px-3 py-1.5 rounded-full border border-white/12 text-[#c5c1b9]">{s}</span>
-                  {i < arr.length - 1 && <span className="text-[#8a8680]">→</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {activeTab === 'stages' && <PipelineStagesSection />}
       </div>
     </div>
   )
