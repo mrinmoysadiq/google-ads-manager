@@ -236,33 +236,40 @@ function NotesTab({ topic, role, userId, onTopicUpdated }) {
   const [newQuestion, setNewQuestion] = useState('')
   const [answeringId, setAnsweringId] = useState(null)
   const [answerText, setAnswerText] = useState('')
-  const [saveStatus, setSaveStatus] = useState('')
+  const [saveStatus, setSaveStatus] = useState('')   // 'saving' | 'saved' | 'error' | ''
+  const [isSaving, setIsSaving] = useState(false)
   const saveTimer = useRef(null)
   const isEmployee = role === 'employee'
   const isManager = role === 'manager' || role === 'admin'
   const canEdit = (isEmployee && ['Assigned', 'In Progress', 'Needs Revision'].includes(topic.stage)) || isManager
 
-  // Debounced save — saves both fields together
+  // Refs so async save always reads the latest value
   const ktRef = useRef(ktHtml)
   const htaRef = useRef(htaHtml)
   ktRef.current = ktHtml
   htaRef.current = htaHtml
 
+  async function doSave() {
+    setIsSaving(true)
+    setSaveStatus('saving')
+    try {
+      await api.put(`/lms/notes/${topic.id}`, {
+        key_takeaways: ktRef.current,
+        how_to_apply: htaRef.current,
+      })
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus(''), 2500)
+    } catch {
+      setSaveStatus('error')
+    }
+    setIsSaving(false)
+  }
+
+  // Debounced auto-save after 2s of inactivity
   function scheduleSave() {
-    setSaveStatus('Saving...')
+    setSaveStatus('unsaved')
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(async () => {
-      try {
-        await api.put(`/lms/notes/${topic.id}`, {
-          key_takeaways: ktRef.current,
-          how_to_apply: htaRef.current,
-        })
-        setSaveStatus('Saved ✓')
-        setTimeout(() => setSaveStatus(''), 2000)
-      } catch {
-        setSaveStatus('Error saving')
-      }
-    }, 1000)
+    saveTimer.current = setTimeout(doSave, 2000)
   }
 
   function handleKtChange(html) { setKtHtml(html); scheduleSave() }
@@ -295,10 +302,7 @@ function NotesTab({ topic, role, userId, onTopicUpdated }) {
   async function submitNotes() {
     const text = ktHtml.replace(/<[^>]*>/g, '').trim()
     if (!text) return toast.error('Add at least one key takeaway first')
-    // Save immediately before submitting
-    try {
-      await api.put(`/lms/notes/${topic.id}`, { key_takeaways: ktHtml, how_to_apply: htaHtml })
-    } catch {}
+    await doSave()   // flush any pending changes first
     try {
       await api.patch(`/lms/topics/${topic.id}/stage`, { new_stage: 'Notes Submitted', changed_by: userId, role })
       onTopicUpdated({ ...topic, stage: 'Notes Submitted' })
@@ -310,15 +314,17 @@ function NotesTab({ topic, role, userId, onTopicUpdated }) {
 
   const readOnly = !canEdit
 
+  const statusLabel = saveStatus === 'saving' ? 'Saving...'
+    : saveStatus === 'saved' ? '✓ Saved'
+    : saveStatus === 'error' ? '✕ Error saving'
+    : saveStatus === 'unsaved' ? 'Unsaved changes'
+    : ''
+  const statusColor = saveStatus === 'saved' ? '#22c55e'
+    : saveStatus === 'error' ? '#ef4444'
+    : '#8a8680'
+
   return (
     <div className="space-y-6">
-      {/* Save indicator */}
-      {saveStatus && (
-        <p className="text-xs" style={{ color: saveStatus.includes('Error') ? '#ef4444' : '#8a8680' }}>
-          {saveStatus}
-        </p>
-      )}
-
       {/* Key Takeaways */}
       <div>
         <p className="text-sm font-medium text-[#c5c1b9] mb-2">Key Takeaways</p>
@@ -403,18 +409,55 @@ function NotesTab({ topic, role, userId, onTopicUpdated }) {
         )}
       </div>
 
-      {/* Submit button for employees */}
-      {isEmployee && ['Assigned', 'In Progress', 'Needs Revision'].includes(topic.stage) && (
-        <div className="pt-2 border-t border-white/8">
+      {/* Action bar — Save (always when canEdit) + Submit (employees only) */}
+      {canEdit && (
+        <div className="pt-3 border-t border-white/8 flex flex-wrap items-center gap-3">
+          {/* Save button */}
           <button
-            onClick={submitNotes}
-            className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-colors"
-            style={{ backgroundColor: '#575ECF' }}
+            onClick={doSave}
+            disabled={isSaving}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all"
+            style={{
+              backgroundColor: isSaving ? 'rgba(87,94,207,0.4)' : '#575ECF',
+              color: '#fff',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
+            }}
           >
-            Submit Notes →
+            {isSaving ? (
+              <>
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Saving...
+              </>
+            ) : 'Save Notes'}
           </button>
-          <p className="text-xs text-[#8a8680] mt-2">This will move the topic to "Notes Submitted" for manager review.</p>
+
+          {/* Status text */}
+          {statusLabel && (
+            <span className="text-xs font-medium transition-all" style={{ color: statusColor }}>
+              {statusLabel}
+            </span>
+          )}
+
+          {/* Submit for employees */}
+          {isEmployee && ['Assigned', 'In Progress', 'Needs Revision'].includes(topic.stage) && (
+            <button
+              onClick={submitNotes}
+              className="ml-auto px-5 py-2.5 rounded-lg text-sm font-semibold text-white border transition-all"
+              style={{ borderColor: '#575ECF40', backgroundColor: 'transparent', color: '#575ECF' }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#575ECF'; e.currentTarget.style.color = '#fff' }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#575ECF' }}
+            >
+              Submit Notes →
+            </button>
+          )}
         </div>
+      )}
+
+      {isEmployee && ['Assigned', 'In Progress', 'Needs Revision'].includes(topic.stage) && (
+        <p className="text-xs text-[#8a8680] -mt-3">Submitting will move the topic to "Notes Submitted" for manager review.</p>
       )}
     </div>
   )
