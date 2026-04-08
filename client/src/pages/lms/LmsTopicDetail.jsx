@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import api from '../../utils/lmsApi'
 import { useParams, useNavigate } from 'react-router-dom'
-import axios from 'axios'
 import toast from 'react-hot-toast'
 import BulletEditor from './components/BulletEditor'
 
@@ -69,7 +69,7 @@ function OverviewTab({ topic, role, onTopicUpdated }) {
 
   async function saveTitle() {
     try {
-      const { data } = await axios.patch(`/api/lms/topics/${topic.id}`, { title: titleVal })
+      const { data } = await api.patch(`/lms/topics/${topic.id}`, { title: titleVal })
       onTopicUpdated(data)
       setEditTitle(false)
       toast.success('Title updated')
@@ -78,7 +78,7 @@ function OverviewTab({ topic, role, onTopicUpdated }) {
 
   async function saveDesc() {
     try {
-      const { data } = await axios.patch(`/api/lms/topics/${topic.id}`, { description: descVal })
+      const { data } = await api.patch(`/lms/topics/${topic.id}`, { description: descVal })
       onTopicUpdated(data)
       setEditDesc(false)
       toast.success('Description updated')
@@ -87,7 +87,7 @@ function OverviewTab({ topic, role, onTopicUpdated }) {
 
   async function saveResources(newList) {
     try {
-      await axios.patch(`/api/lms/topics/${topic.id}`, { resources: newList })
+      await api.patch(`/lms/topics/${topic.id}`, { resources: newList })
       setResources(newList)
     } catch { toast.error('Error updating resources') }
   }
@@ -231,20 +231,20 @@ function NotesTab({ topic, role, userId, onTopicUpdated }) {
   async function addQuestion() {
     if (!newQuestion.trim()) return
     try {
-      const { data } = await axios.post(`/api/lms/questions/${topic.id}`, { question_text: newQuestion.trim() })
+      const { data } = await api.post(`/lms/questions/${topic.id}`, { question_text: newQuestion.trim() })
       setQuestions(q => [...q, data])
       setNewQuestion('')
     } catch { toast.error('Error adding question') }
   }
 
   async function deleteQuestion(qId) {
-    await axios.delete(`/api/lms/questions/${qId}`)
+    await api.delete(`/lms/questions/${qId}`)
     setQuestions(q => q.filter(x => x.id !== qId))
   }
 
   async function submitAnswer(qId) {
     try {
-      const { data } = await axios.patch(`/api/lms/questions/${qId}`, { manager_answer: answerText, answered_by: userId })
+      const { data } = await api.patch(`/lms/questions/${qId}`, { manager_answer: answerText, answered_by: userId })
       setQuestions(q => q.map(x => x.id === qId ? data : x))
       setAnsweringId(null)
       setAnswerText('')
@@ -256,7 +256,7 @@ function NotesTab({ topic, role, userId, onTopicUpdated }) {
     const takeaways = notes.key_takeaways || []
     if (!takeaways.some(b => b.trim())) return toast.error('Add at least one key takeaway first')
     try {
-      await axios.patch(`/api/lms/topics/${topic.id}/stage`, { new_stage: 'Notes Submitted', changed_by: userId, role })
+      await api.patch(`/lms/topics/${topic.id}/stage`, { new_stage: 'Notes Submitted', changed_by: userId, role })
       onTopicUpdated({ ...topic, stage: 'Notes Submitted' })
       toast.success('Notes submitted!')
     } catch (e) {
@@ -386,10 +386,10 @@ function AssessmentTab({ topic, role, userId, onTopicUpdated }) {
     if (!feedback.trim()) return toast.error('Feedback is required')
     setSubmitting(true)
     try {
-      await axios.post('/api/lms/assessments', { topic_id: topic.id, assessor_id: userId, star_rating: stars, feedback, decision })
+      await api.post('/lms/assessments', { topic_id: topic.id, assessor_id: userId, star_rating: stars, feedback, decision })
       const newStage = decision === 'completed' ? 'Completed' : 'Needs Revision'
       onTopicUpdated({ ...topic, stage: newStage })
-      const { data } = await axios.get(`/api/lms/assessments/${topic.id}`)
+      const { data } = await api.get(`/lms/assessments/${topic.id}`)
       setAssessments(data)
       toast.success(decision === 'completed' ? 'Marked as Completed!' : 'Sent for revision')
       setStars(0)
@@ -481,7 +481,7 @@ function DiscussionTab({ topic, userId, userName }) {
 
   async function loadComments() {
     try {
-      const { data } = await axios.get(`/api/lms/comments/${topic.id}`)
+      const { data } = await api.get(`/lms/comments/${topic.id}`)
       setComments(data)
       setLocked(false)
     } catch (e) {
@@ -495,7 +495,7 @@ function DiscussionTab({ topic, userId, userName }) {
     if (!message.trim() || sending) return
     setSending(true)
     try {
-      const { data } = await axios.post('/api/lms/comments', { topic_id: topic.id, author_id: userId, message: message.trim() })
+      const { data } = await api.post('/lms/comments', { topic_id: topic.id, author_id: userId, message: message.trim() })
       setComments(c => [...c, data])
       setMessage('')
     } catch { toast.error('Error sending message') }
@@ -594,7 +594,7 @@ export default function LmsTopicDetail() {
   async function loadTopic() {
     setLoading(true)
     try {
-      const { data } = await axios.get(`/api/lms/topics/${topicId}`)
+      const { data } = await api.get(`/lms/topics/${topicId}`)
       setTopic(data)
     } catch {
       toast.error('Topic not found')
@@ -606,7 +606,7 @@ export default function LmsTopicDetail() {
   async function changeStage(newStage) {
     setStageMenuOpen(false)
     try {
-      await axios.patch(`/api/lms/topics/${topicId}/stage`, { new_stage: newStage, changed_by: userId, role })
+      await api.patch(`/lms/topics/${topicId}/stage`, { new_stage: newStage, changed_by: userId, role })
       loadTopic()
       toast.success(`Stage changed to ${newStage}`)
     } catch (e) {

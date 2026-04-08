@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import axios from 'axios'
+import api from '../../utils/lmsApi'
 import toast from 'react-hot-toast'
 
 const STAGES = ['Assigned', 'In Progress', 'Notes Submitted', 'Assessed', 'Needs Revision', 'Completed']
@@ -119,7 +119,7 @@ function DashboardTab({ userId }) {
   const [stats, setStats] = useState(null)
 
   useEffect(() => {
-    axios.get(`/api/lms/dashboard?user_id=${userId}`).then(({ data }) => setStats(data))
+    api.get(`/lms/dashboard?user_id=${userId}`).then(({ data }) => setStats(data))
   }, [userId])
 
   if (!stats) return <p className="text-[#8a8680] text-sm">Loading...</p>
@@ -205,8 +205,8 @@ export default function LmsEmployee() {
   async function loadData() {
     setLoading(true)
     const [topicsRes, statsRes] = await Promise.all([
-      axios.get(`/api/lms/topics?assignee_id=${userId}`),
-      axios.get(`/api/lms/dashboard?user_id=${userId}`),
+      api.get(`/lms/topics?assignee_id=${userId}`),
+      api.get(`/lms/dashboard?user_id=${userId}`),
     ])
     setTopics(topicsRes.data)
     setStats(statsRes.data)
@@ -238,7 +238,7 @@ export default function LmsEmployee() {
     }
 
     try {
-      await axios.patch(`/api/lms/topics/${topicId}/stage`, {
+      await api.patch(`/lms/topics/${topicId}/stage`, {
         new_stage: targetStage,
         changed_by: storedUserId,
         role: 'employee',

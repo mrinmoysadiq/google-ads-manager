@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import axios from 'axios'
+import api from '../../utils/lmsApi'
 import toast from 'react-hot-toast'
 import Select from 'react-select'
 
@@ -71,7 +71,7 @@ function AssignDrawer({ users, templates, onClose, onAssigned, managerId }) {
     if (!form.title.trim()) return toast.error('Title required')
     if (!form.assignee_id) return toast.error('Assignee required')
     try {
-      await axios.post('/api/lms/topics', {
+      await api.post('/lms/topics', {
         title: form.title,
         description: form.description,
         resources: form.resources,
@@ -232,7 +232,7 @@ function AssessmentModal({ topic, managerId, onSubmit, onClose }) {
     if (!feedback.trim()) return toast.error('Feedback is required')
     setSubmitting(true)
     try {
-      await axios.post('/api/lms/assessments', { topic_id: topic.id, assessor_id: managerId, star_rating: stars, feedback, decision })
+      await api.post('/lms/assessments', { topic_id: topic.id, assessor_id: managerId, star_rating: stars, feedback, decision })
       onSubmit(decision === 'completed' ? 'Completed' : 'Needs Revision')
       toast.success('Assessment submitted')
     } catch (e) {
@@ -437,10 +437,10 @@ export default function LmsManager() {
   async function loadAll() {
     setLoading(true)
     const [topicsRes, usersRes, templatesRes, statsRes] = await Promise.all([
-      axios.get('/api/lms/topics'),
-      axios.get('/api/lms/users'),
-      axios.get('/api/lms/templates'),
-      axios.get('/api/lms/dashboard'),
+      api.get('/lms/topics'),
+      api.get('/lms/users'),
+      api.get('/lms/templates'),
+      api.get('/lms/dashboard'),
     ])
     setTopics(topicsRes.data)
     setUsers(usersRes.data)
@@ -476,7 +476,7 @@ export default function LmsManager() {
     }
 
     try {
-      await axios.patch(`/api/lms/topics/${topicId}/stage`, { new_stage: targetStage, changed_by: managerId, role })
+      await api.patch(`/lms/topics/${topicId}/stage`, { new_stage: targetStage, changed_by: managerId, role })
       setTopics(prev => prev.map(t => t.id === topicId ? { ...t, stage: targetStage } : t))
       toast.success(`Moved to ${targetStage}`)
     } catch (e) {

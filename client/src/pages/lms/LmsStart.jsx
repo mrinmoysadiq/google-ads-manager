@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import axios from 'axios'
+import api from '../../utils/lmsApi'
 import Select from 'react-select'
 
 const selectStyles = {
@@ -28,7 +28,7 @@ export default function LmsStart() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    axios.get('/api/lms/users').then(({ data }) => setUsers(data))
+    api.get('/lms/users').then(({ data }) => setUsers(data))
   }, [])
 
   const options = users.map(u => ({ value: u.id, label: u.name, role: u.role }))

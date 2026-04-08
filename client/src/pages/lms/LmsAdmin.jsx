@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import api from '../../utils/lmsApi'
 import toast from 'react-hot-toast'
 import Select from 'react-select'
 
@@ -42,14 +42,14 @@ function UsersSection() {
 
   useEffect(() => { fetchUsers() }, [])
   async function fetchUsers() {
-    const { data } = await axios.get('/api/lms/users/all')
+    const { data } = await api.get('/lms/users/all')
     setUsers(data)
   }
 
   async function addUser() {
     if (!newName.trim()) return
     try {
-      await axios.post('/api/lms/users', { name: newName.trim(), role: newRole.value })
+      await api.post('/lms/users', { name: newName.trim(), role: newRole.value })
       setNewName('')
       fetchUsers()
       toast.success('User added')
@@ -60,7 +60,7 @@ function UsersSection() {
 
   async function saveEdit(id) {
     try {
-      await axios.patch(`/api/lms/users/${id}`, { name: editName.trim(), role: editRole.value })
+      await api.patch(`/lms/users/${id}`, { name: editName.trim(), role: editRole.value })
       setEditId(null)
       fetchUsers()
       toast.success('User updated')
@@ -71,7 +71,7 @@ function UsersSection() {
 
   async function toggleActive(user) {
     try {
-      await axios.patch(`/api/lms/users/${user.id}`, { active: user.active ? 0 : 1 })
+      await api.patch(`/lms/users/${user.id}`, { active: user.active ? 0 : 1 })
       fetchUsers()
       toast.success(user.active ? 'User deactivated' : 'User activated')
     } catch (e) {
@@ -204,7 +204,7 @@ function TemplatesSection() {
 
   useEffect(() => { fetchTemplates() }, [])
   async function fetchTemplates() {
-    const { data } = await axios.get('/api/lms/templates')
+    const { data } = await api.get('/lms/templates')
     setTemplates(data)
   }
 
@@ -214,10 +214,10 @@ function TemplatesSection() {
     if (!form.title.trim()) return toast.error('Title required')
     try {
       if (editId) {
-        await axios.patch(`/api/lms/templates/${editId}`, { ...form, suggested_days: form.suggested_days ? Number(form.suggested_days) : null })
+        await api.patch(`/lms/templates/${editId}`, { ...form, suggested_days: form.suggested_days ? Number(form.suggested_days) : null })
         toast.success('Template updated')
       } else {
-        await axios.post('/api/lms/templates', { ...form, suggested_days: form.suggested_days ? Number(form.suggested_days) : null })
+        await api.post('/lms/templates', { ...form, suggested_days: form.suggested_days ? Number(form.suggested_days) : null })
         toast.success('Template created')
       }
       setShowForm(false)
@@ -231,7 +231,7 @@ function TemplatesSection() {
 
   async function deleteTemplate(id) {
     if (!confirm('Delete this template?')) return
-    await axios.delete(`/api/lms/templates/${id}`)
+    await api.delete(`/lms/templates/${id}`)
     fetchTemplates()
     toast.success('Template deleted')
   }
