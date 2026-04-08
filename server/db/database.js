@@ -301,6 +301,97 @@ function initializeDatabase() {
     try { db.exec(sql); } catch (e) { /* column already exists */ }
   });
 
+  // ── LMS (Learning Management System) tables ─────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS lms_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL DEFAULT 'employee',
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS lms_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT,
+      resources TEXT,
+      suggested_days INTEGER,
+      created_by INTEGER REFERENCES lms_users(id),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS lms_topics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT,
+      resources TEXT,
+      assignee_id INTEGER NOT NULL REFERENCES lms_users(id),
+      assigned_by INTEGER REFERENCES lms_users(id),
+      template_id INTEGER REFERENCES lms_templates(id),
+      stage TEXT NOT NULL DEFAULT 'Assigned',
+      is_sequential INTEGER DEFAULT 0,
+      due_date TEXT,
+      stage_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS lms_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      topic_id INTEGER NOT NULL UNIQUE REFERENCES lms_topics(id) ON DELETE CASCADE,
+      key_takeaways TEXT,
+      how_to_apply TEXT,
+      submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS lms_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      topic_id INTEGER NOT NULL REFERENCES lms_topics(id) ON DELETE CASCADE,
+      question_text TEXT NOT NULL,
+      manager_answer TEXT,
+      answered_at DATETIME,
+      answered_by INTEGER REFERENCES lms_users(id),
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS lms_assessments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      topic_id INTEGER NOT NULL REFERENCES lms_topics(id) ON DELETE CASCADE,
+      assessor_id INTEGER NOT NULL REFERENCES lms_users(id),
+      star_rating INTEGER NOT NULL CHECK(star_rating BETWEEN 1 AND 5),
+      feedback TEXT NOT NULL,
+      decision TEXT NOT NULL,
+      assessed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS lms_stage_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      topic_id INTEGER NOT NULL REFERENCES lms_topics(id) ON DELETE CASCADE,
+      old_stage TEXT,
+      new_stage TEXT NOT NULL,
+      changed_by INTEGER REFERENCES lms_users(id),
+      changed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS lms_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      topic_id INTEGER NOT NULL REFERENCES lms_topics(id) ON DELETE CASCADE,
+      author_id INTEGER NOT NULL REFERENCES lms_users(id),
+      message TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Seed one admin user if lms_users is empty
+  const lmsUserCount = db.prepare('SELECT COUNT(*) as cnt FROM lms_users').get();
+  if (lmsUserCount.cnt === 0) {
+    db.prepare("INSERT INTO lms_users (name, role) VALUES ('Admin', 'admin')").run();
+    console.log('Seeded default LMS admin user');
+  }
+  console.log('LMS tables initialized');
+
   // ── Facebook/Meta Ads tables ─────────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS fb_media_buyers (

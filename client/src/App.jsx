@@ -7,11 +7,11 @@ import ChecklistWrapper from './pages/ChecklistWrapper'
 import SessionComplete from './pages/SessionComplete'
 import ChangeLog from './pages/ChangeLog'
 import Admin from './pages/Admin'
-import LearningHome from './pages/learning/LearningHome'
-import LearningSubmit from './pages/learning/LearningSubmit'
-import LearningHistory from './pages/learning/LearningHistory'
-import LearningManagerDashboard from './pages/learning/LearningManagerDashboard'
-import LearningAdmin from './pages/learning/LearningAdmin'
+import LmsStart from './pages/lms/LmsStart'
+import LmsEmployee from './pages/lms/LmsEmployee'
+import LmsManager from './pages/lms/LmsManager'
+import LmsAdmin from './pages/lms/LmsAdmin'
+import LmsTopicDetail from './pages/lms/LmsTopicDetail'
 import OutreachHome from './pages/outreach/OutreachHome'
 import OutreachAdmin from './pages/outreach/OutreachAdmin'
 import FbSessionStart from './pages/facebook/FbSessionStart'
@@ -35,12 +35,12 @@ export default function App() {
           <Route path="/changelog" element={<ChangeLog />} />
           <Route path="/admin" element={<Admin />} />
 
-          {/* ── Weekly Learning module ─────────────────────────────────── */}
-          <Route path="/learning" element={<LearningHome />} />
-          <Route path="/learning/submit" element={<LearningSubmit />} />
-          <Route path="/learning/history/:userId" element={<LearningHistory />} />
-          <Route path="/learning/manager/:managerId" element={<LearningManagerDashboard />} />
-          <Route path="/learning/admin" element={<LearningAdmin />} />
+          {/* ── LMS module ─────────────────────────────────────────────── */}
+          <Route path="/learning" element={<LmsStart />} />
+          <Route path="/learning/employee/:userId" element={<LmsEmployee />} />
+          <Route path="/learning/manager" element={<LmsManager />} />
+          <Route path="/learning/admin" element={<LmsAdmin />} />
+          <Route path="/learning/topic/:topicId" element={<LmsTopicDetail />} />
 
           {/* ── Outreach CRM module ────────────────────────────────────── */}
           <Route path="/outreach" element={<OutreachHome />} />

@@ -6,7 +6,7 @@ const sessionsRouter = require('./routes/sessions');
 const slidesRouter = require('./routes/slides');
 const changelogRouter = require('./routes/changelog');
 const adminRouter = require('./routes/admin');
-const learningRouter = require('./routes/learning');
+const lmsRouter = require('./routes/lms');
 const outreachRouter = require('./routes/outreach');
 const facebookRouter = require('./routes/facebook');
 
@@ -30,7 +30,7 @@ app.use('/api/sessions', sessionsRouter);
 app.use('/api/slides', slidesRouter);
 app.use('/api/changelog', changelogRouter);
 app.use('/api/admin', adminRouter);
-app.use('/api/learning', learningRouter);
+app.use('/api/lms', lmsRouter);
 app.use('/api/outreach', outreachRouter);
 app.use('/api/facebook', facebookRouter);
 
