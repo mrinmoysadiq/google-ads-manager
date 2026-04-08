@@ -210,11 +210,17 @@ function ManagerTopicCard({ topic, onDragStart }) {
       <Link to={`/learning/topic/${topic.id}`} onClick={e => e.stopPropagation()}>
         <p className="text-sm font-medium text-[#c5c1b9] mb-1.5 line-clamp-2 hover:text-white">{topic.title}</p>
       </Link>
-      <p className="text-xs text-[#8a8680] mb-2">{topic.assignee_name}</p>
+      {topic.assignee_name && (
+        <p className="text-xs text-[#8a8680] mb-2 truncate">👤 {topic.assignee_name}</p>
+      )}
       <div className="flex items-center justify-between">
         {topic.latest_rating ? <StarRating value={topic.latest_rating} /> : <span />}
-        {topic.due_date && (
-          <span className="text-xs" style={{ color: overdue ? '#ef4444' : '#8a8680' }}>{formatDate(topic.due_date)}</span>
+        {topic.due_date ? (
+          <span className="text-xs font-medium" style={{ color: overdue ? '#ef4444' : '#8a8680' }}>
+            {overdue ? '⚠ ' : '📅 '}{formatDate(topic.due_date)}
+          </span>
+        ) : (
+          <span className="text-xs text-[#8a8680]/40">No deadline</span>
         )}
       </div>
     </div>

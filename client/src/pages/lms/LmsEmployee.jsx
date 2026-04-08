@@ -21,7 +21,7 @@ function getStageColor(stagesData, name) {
 }
 
 function StageBadge({ stage }) {
-  const color = STAGE_COLORS[stage] || '#8a8680'
+  const color = DEFAULT_COLORS[stage] || '#8a8680'
   return (
     <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${color}20`, color }}>
       {stage}
@@ -55,20 +55,24 @@ function TopicCard({ topic, onDragStart, onDragEnd }) {
       className="bg-[#2a2a2a] border border-white/8 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-white/15 transition-colors"
     >
       <Link to={`/learning/topic/${topic.id}`} onClick={e => e.stopPropagation()}>
-        <p className="text-sm font-medium text-[#c5c1b9] mb-2 line-clamp-2 hover:text-white transition-colors">{topic.title}</p>
+        <p className="text-sm font-medium text-[#c5c1b9] mb-1.5 line-clamp-2 hover:text-white transition-colors">{topic.title}</p>
       </Link>
+      {topic.assignee_name && (
+        <p className="text-xs text-[#8a8680] mb-2 truncate">👤 {topic.assignee_name}</p>
+      )}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           {topic.has_notes ? <span className="text-xs text-[#575ECF]">📝</span> : null}
           {topic.resources?.length > 0 && (
             <span className="text-xs text-[#8a8680]">{topic.resources.length} res</span>
           )}
-          {topic.is_sequential ? <span className="text-xs text-[#8a8680]">Seq</span> : null}
         </div>
-        {topic.due_date && (
-          <span className="text-xs" style={{ color: overdue ? '#ef4444' : '#8a8680' }}>
-            {overdue ? '⚠ ' : ''}{formatDate(topic.due_date)}
+        {topic.due_date ? (
+          <span className="text-xs font-medium" style={{ color: overdue ? '#ef4444' : '#8a8680' }}>
+            {overdue ? '⚠ ' : '📅 '}{formatDate(topic.due_date)}
           </span>
+        ) : (
+          <span className="text-xs text-[#8a8680]/40">No deadline</span>
         )}
       </div>
     </div>
@@ -141,9 +145,9 @@ function DashboardTab({ userId }) {
       <div>
         <p className="text-xs font-medium text-[#8a8680] uppercase tracking-wide mb-3">By Stage</p>
         <div className="grid grid-cols-3 gap-2">
-          {STAGES.map(s => (
+          {DEFAULT_STAGES.map(s => (
             <div key={s} className="bg-[#242424] border border-white/8 rounded-lg p-3 text-center">
-              <p className="text-lg font-bold" style={{ color: STAGE_COLORS[s] }}>{stats.by_stage[s] || 0}</p>
+              <p className="text-lg font-bold" style={{ color: DEFAULT_COLORS[s] }}>{stats.by_stage[s] || 0}</p>
               <p className="text-xs text-[#8a8680] mt-0.5">{s}</p>
             </div>
           ))}

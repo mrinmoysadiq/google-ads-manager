@@ -631,15 +631,30 @@ export default function LmsTopicDetail() {
   const [activeTab, setActiveTab] = useState('overview')
   const [stageMenuOpen, setStageMenuOpen] = useState(false)
   const [viewedTabs, setViewedTabs] = useState(new Set(['overview']))
+  // Must be declared here (top-level) — never after a conditional return
+  const [liveCommentCount, setLiveCommentCount] = useState(0)
 
   const userId = Number(localStorage.getItem('lms_user_id'))
   const role = localStorage.getItem('lms_user_role')
   const isManager = role === 'manager' || role === 'admin'
 
+  // Navigate back to the correct role-based page instead of relying on browser history
+  function goBack() {
+    if (role === 'employee') navigate(`/learning/employee/${userId}`)
+    else if (role === 'manager') navigate('/learning/manager')
+    else if (role === 'admin') navigate('/learning/admin')
+    else navigate('/learning')
+  }
+
   useEffect(() => {
     if (!userId) { navigate('/learning'); return }
     loadTopic()
   }, [topicId])
+
+  // Sync comment count whenever topic data changes
+  useEffect(() => {
+    if (topic) setLiveCommentCount(topic.comments?.length || 0)
+  }, [topic])
 
   async function loadTopic() {
     setLoading(true)
@@ -648,7 +663,7 @@ export default function LmsTopicDetail() {
       setTopic(data)
     } catch {
       toast.error('Topic not found')
-      navigate(-1)
+      goBack()
     }
     setLoading(false)
   }
@@ -675,7 +690,6 @@ export default function LmsTopicDetail() {
   const overdue = isOverdue(topic)
 
   const assessmentCount = topic.assessments?.length || 0
-  const [liveCommentCount, setLiveCommentCount] = useState(topic.comments?.length || 0)
   const discussionCount = liveCommentCount
 
   const tabs = [
@@ -694,7 +708,7 @@ export default function LmsTopicDetail() {
     <div className="min-h-screen bg-[#1b1b1b]">
       <div className="max-w-3xl mx-auto px-4 py-8">
         {/* Back */}
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm text-[#8a8680] hover:text-[#c5c1b9] mb-6">
+        <button onClick={goBack} className="flex items-center gap-1 text-sm text-[#8a8680] hover:text-[#c5c1b9] mb-6">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
