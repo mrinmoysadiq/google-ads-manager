@@ -191,7 +191,9 @@ router.get('/topics', (req, res) => {
       u1.name AS assignee_name,
       u2.name AS assigned_by_name,
       CASE WHEN n.id IS NOT NULL THEN 1 ELSE 0 END AS has_notes,
-      a.star_rating AS latest_rating
+      a.star_rating AS latest_rating,
+      COALESCE(cc.comment_count, 0) AS comment_count,
+      COALESCE(ac.assessment_count, 0) AS assessment_count
     FROM lms_topics t
     LEFT JOIN lms_users u1 ON t.assignee_id = u1.id
     LEFT JOIN lms_users u2 ON t.assigned_by = u2.id
@@ -200,6 +202,12 @@ router.get('/topics', (req, res) => {
       SELECT topic_id, star_rating FROM lms_assessments
       WHERE id IN (SELECT MAX(id) FROM lms_assessments GROUP BY topic_id)
     ) a ON a.topic_id = t.id
+    LEFT JOIN (
+      SELECT topic_id, COUNT(*) AS comment_count FROM lms_comments GROUP BY topic_id
+    ) cc ON cc.topic_id = t.id
+    LEFT JOIN (
+      SELECT topic_id, COUNT(*) AS assessment_count FROM lms_assessments GROUP BY topic_id
+    ) ac ON ac.topic_id = t.id
     WHERE 1=1
   `;
   const params = [];

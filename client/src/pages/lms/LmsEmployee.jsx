@@ -44,27 +44,65 @@ function daysDiff(dateStr) {
   return Math.floor(diff / 86400000)
 }
 
+// ── Notification helpers (localStorage-based per-user seen tracking) ──────────
+function seenKey(userId, topicId) { return `lms_seen_${userId}_${topicId}` }
+function getSeen(userId, topicId) {
+  try { return JSON.parse(localStorage.getItem(seenKey(userId, topicId))) || { c: 0, a: 0 } }
+  catch { return { c: 0, a: 0 } }
+}
+function markTopicSeen(userId, topicId, counts) {
+  localStorage.setItem(seenKey(userId, topicId), JSON.stringify(counts))
+}
+
 // ── Topic Card ────────────────────────────────────────────────────────────────
-function TopicCard({ topic, onDragStart, onDragEnd }) {
+function TopicCard({ topic, userId, onDragStart, onDragEnd }) {
   const overdue = isOverdue(topic)
+  const seen = getSeen(userId, topic.id)
+  const newComments = Math.max(0, (topic.comment_count || 0) - seen.c)
+  const newAssessments = Math.max(0, (topic.assessment_count || 0) - seen.a)
+  const hasNew = newComments > 0 || newAssessments > 0
+
   return (
     <div
       draggable
       onDragStart={e => onDragStart(e, topic)}
       onDragEnd={onDragEnd}
-      className="bg-[#2a2a2a] border border-white/8 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-white/15 transition-colors"
+      className="relative bg-[#2a2a2a] border rounded-lg p-3 cursor-grab active:cursor-grabbing transition-all"
+      style={{ borderColor: hasNew ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.08)' }}
     >
+      {/* Notification dot */}
+      {hasNew && (
+        <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#f59e0b] shadow-sm shadow-[#f59e0b]/50" />
+      )}
+
       <Link to={`/learning/topic/${topic.id}`} onClick={e => e.stopPropagation()}>
-        <p className="text-sm font-medium text-[#c5c1b9] mb-1.5 line-clamp-2 hover:text-white transition-colors">{topic.title}</p>
+        <p className="text-sm font-medium text-[#c5c1b9] mb-1.5 line-clamp-2 hover:text-white transition-colors pr-4">{topic.title}</p>
       </Link>
       {topic.assignee_name && (
         <p className="text-xs text-[#8a8680] mb-2 truncate">👤 {topic.assignee_name}</p>
       )}
+
+      {/* Notification badges */}
+      {(newComments > 0 || newAssessments > 0) && (
+        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+          {newComments > 0 && (
+            <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: '#575ECF20', color: '#575ECF' }}>
+              💬 {newComments} new
+            </span>
+          )}
+          {newAssessments > 0 && (
+            <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: '#f59e0b20', color: '#f59e0b' }}>
+              ⭐ {newAssessments} new
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           {topic.has_notes ? <span className="text-xs text-[#575ECF]">📝</span> : null}
-          {topic.resources?.length > 0 && (
-            <span className="text-xs text-[#8a8680]">{topic.resources.length} res</span>
+          {topic.comment_count > 0 && newComments === 0 && (
+            <span className="text-xs text-[#8a8680]">💬 {topic.comment_count}</span>
           )}
         </div>
         {topic.due_date ? (
@@ -80,7 +118,7 @@ function TopicCard({ topic, onDragStart, onDragEnd }) {
 }
 
 // ── Kanban Column ─────────────────────────────────────────────────────────────
-function KanbanColumn({ stage, color, topics, onDrop, dimmed }) {
+function KanbanColumn({ stage, color, topics, userId, onDrop, dimmed }) {
   const [dragOver, setDragOver] = useState(false)
 
   return (
@@ -109,6 +147,7 @@ function KanbanColumn({ stage, color, topics, onDrop, dimmed }) {
           <TopicCard
             key={t.id}
             topic={t}
+            userId={userId}
             onDragStart={(e, topic) => { e.dataTransfer.setData('topic_id', topic.id); e.dataTransfer.setData('from_stage', topic.stage) }}
             onDragEnd={() => {}}
           />
@@ -380,6 +419,7 @@ export default function LmsEmployee() {
                 color={getStageColor(stagesData, stage)}
                 topics={topicsForStage(stage)}
                 onDrop={handleDrop}
+                userId={Number(storedUserId)}
                 dimmed={draggingStage ? getDimmed(stage) : false}
               />
             ))}

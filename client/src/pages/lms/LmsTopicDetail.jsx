@@ -694,9 +694,20 @@ export default function LmsTopicDetail() {
     loadTopic()
   }, [topicId])
 
-  // Sync comment count whenever topic data changes
+  // Sync comment count & mark topic as seen (clears kanban notification badges)
   useEffect(() => {
-    if (topic) setLiveCommentCount(topic.comments?.length || 0)
+    if (topic) {
+      const commentCount = topic.comments?.length || 0
+      const assessmentCount = topic.assessments?.length || 0
+      setLiveCommentCount(commentCount)
+      // Write seen counts so kanban badges disappear for this user+topic
+      try {
+        localStorage.setItem(
+          `lms_seen_${userId}_${topic.id}`,
+          JSON.stringify({ c: commentCount, a: assessmentCount })
+        )
+      } catch {}
+    }
   }, [topic])
 
   async function loadTopic() {

@@ -9,6 +9,13 @@ const DEFAULT_COLORS = {
   'Assigned': '#8a8680', 'In Progress': '#575ECF', 'Notes Submitted': '#f59e0b',
   'Assessed': '#3b82f6', 'Needs Revision': '#ef4444', 'Completed': '#22c55e',
 }
+
+// ── Notification helpers ──────────────────────────────────────────────────────
+function seenKey(userId, topicId) { return `lms_seen_${userId}_${topicId}` }
+function getSeen(userId, topicId) {
+  try { return JSON.parse(localStorage.getItem(seenKey(userId, topicId))) || { c: 0, a: 0 } }
+  catch { return { c: 0, a: 0 } }
+}
 function getStageColor(stagesData, name) {
   const found = stagesData?.find(s => s.name === name)
   return found?.color || DEFAULT_COLORS[name] || '#8a8680'
@@ -199,22 +206,55 @@ function AssignDrawer({ users, templates, onClose, onAssigned, managerId }) {
 }
 
 // ── Topic Card (Manager) ──────────────────────────────────────────────────────
-function ManagerTopicCard({ topic, onDragStart }) {
+function ManagerTopicCard({ topic, userId, onDragStart }) {
   const overdue = isOverdue(topic)
+  const seen = getSeen(userId, topic.id)
+  const newComments = Math.max(0, (topic.comment_count || 0) - seen.c)
+  const newAssessments = Math.max(0, (topic.assessment_count || 0) - seen.a)
+  const hasNew = newComments > 0 || newAssessments > 0
+
   return (
     <div
       draggable
       onDragStart={e => { e.dataTransfer.setData('topic_id', topic.id); e.dataTransfer.setData('from_stage', topic.stage); onDragStart(topic.stage) }}
-      className="bg-[#2a2a2a] border border-white/8 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-white/15 transition-colors"
+      className="relative bg-[#2a2a2a] border rounded-lg p-3 cursor-grab active:cursor-grabbing transition-all"
+      style={{ borderColor: hasNew ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.08)' }}
     >
+      {/* Notification dot */}
+      {hasNew && (
+        <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#f59e0b] shadow-sm shadow-[#f59e0b]/50" />
+      )}
+
       <Link to={`/learning/topic/${topic.id}`} onClick={e => e.stopPropagation()}>
-        <p className="text-sm font-medium text-[#c5c1b9] mb-1.5 line-clamp-2 hover:text-white">{topic.title}</p>
+        <p className="text-sm font-medium text-[#c5c1b9] mb-1.5 line-clamp-2 hover:text-white pr-4">{topic.title}</p>
       </Link>
       {topic.assignee_name && (
         <p className="text-xs text-[#8a8680] mb-2 truncate">👤 {topic.assignee_name}</p>
       )}
+
+      {/* Notification badges */}
+      {(newComments > 0 || newAssessments > 0) && (
+        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+          {newComments > 0 && (
+            <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: '#575ECF20', color: '#575ECF' }}>
+              💬 {newComments} new
+            </span>
+          )}
+          {newAssessments > 0 && (
+            <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: '#f59e0b20', color: '#f59e0b' }}>
+              ⭐ {newAssessments} new
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
-        {topic.latest_rating ? <StarRating value={topic.latest_rating} /> : <span />}
+        <div className="flex items-center gap-2">
+          {topic.latest_rating ? <StarRating value={topic.latest_rating} /> : null}
+          {topic.comment_count > 0 && newComments === 0 && (
+            <span className="text-xs text-[#8a8680]">💬 {topic.comment_count}</span>
+          )}
+        </div>
         {topic.due_date ? (
           <span className="text-xs font-medium" style={{ color: overdue ? '#ef4444' : '#8a8680' }}>
             {overdue ? '⚠ ' : '📅 '}{formatDate(topic.due_date)}
@@ -287,7 +327,7 @@ function AssessmentModal({ topic, managerId, onSubmit, onClose }) {
 }
 
 // ── Kanban Column (Manager) ───────────────────────────────────────────────────
-function ManagerKanbanColumn({ stage, topics, onDrop, onDragStart }) {
+function ManagerKanbanColumn({ stage, topics, userId, onDrop, onDragStart }) {
   const [dragOver, setDragOver] = useState(false)
   const color = DEFAULT_COLORS[stage] || '#8a8680'
   return (
@@ -304,7 +344,7 @@ function ManagerKanbanColumn({ stage, topics, onDrop, onDragStart }) {
         onDrop={e => { setDragOver(false); onDrop(e, stage) }}
       >
         {topics.map(t => (
-          <ManagerTopicCard key={t.id} topic={t} onDragStart={onDragStart} />
+          <ManagerTopicCard key={t.id} topic={t} userId={userId} onDragStart={onDragStart} />
         ))}
       </div>
     </div>
@@ -567,6 +607,7 @@ export default function LmsManager() {
                 key={stage}
                 stage={stage}
                 topics={topicsForStage(stage)}
+                userId={managerId}
                 onDrop={handleDrop}
                 onDragStart={stage => setDraggingStage(stage)}
               />
