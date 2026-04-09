@@ -21,18 +21,19 @@ export default function Navbar() {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
-  // If localStorage has a token but no user object, fetch from API
+  // Always fetch fresh user data from API on mount so role/name/photo are correct
   // Also listen for profile-updated events (dispatched after profile save)
   useEffect(() => {
     const token = localStorage.getItem('app_token')
-    if (token && !getUser()) {
-      axios.get('/api/auth/me')
-        .then(({ data }) => {
-          localStorage.setItem('app_user', JSON.stringify(data))
-          setUser(data)
-        })
-        .catch(() => {})
-    }
+    if (!token) return
+    axios.get('/api/auth/me')
+      .then(({ data }) => {
+        localStorage.setItem('app_user', JSON.stringify(data))
+        setUser(data)
+      })
+      .catch(() => {
+        // API unavailable — keep whatever localStorage has; don't force logout
+      })
     const refresh = () => setUser(getUser())
     window.addEventListener('profile-updated', refresh)
     return () => window.removeEventListener('profile-updated', refresh)

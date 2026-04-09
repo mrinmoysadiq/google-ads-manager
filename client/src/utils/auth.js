@@ -2,7 +2,10 @@ export function getToken() { return localStorage.getItem('app_token'); }
 export function getUser() {
   try {
     const u = localStorage.getItem('app_user');
-    return u ? JSON.parse(u) : null;
+    if (!u) return null;
+    const parsed = JSON.parse(u);
+    // Reject empty objects — must have at least an id
+    return (parsed && parsed.id) ? parsed : null;
   } catch {
     localStorage.removeItem('app_user');
     return null;
