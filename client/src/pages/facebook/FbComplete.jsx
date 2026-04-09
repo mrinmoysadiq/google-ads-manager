@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import Navbar from '../../components/Navbar'
 import { fbState, resetFbState } from './fbState'
 
 function isIssueAnswer(qIdx, answer) {
@@ -33,7 +32,6 @@ export default function FbComplete() {
 
   return (
     <div className="min-h-screen bg-[#1b1b1b]">
-      <Navbar />
       <div className="flex items-center justify-center px-4 py-16">
         <div className="w-full max-w-md text-center">
           {/* Check icon */}

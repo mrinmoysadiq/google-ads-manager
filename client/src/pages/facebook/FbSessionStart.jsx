@@ -3,7 +3,6 @@ import { useNavigate, Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
 import api from '../../utils/api'
-import Navbar from '../../components/Navbar'
 import { fbState, resetFbState } from './fbState'
 import { getUser } from '../../utils/auth'
 
@@ -82,7 +81,6 @@ export default function FbSessionStart() {
 
   return (
     <div className="min-h-screen bg-[#1b1b1b]">
-      <Navbar />
       <div className="flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
           {/* Logo badge */}

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import toast from 'react-hot-toast'
-import Navbar from '../../components/Navbar'
 import { fbState } from './fbState'
 
 // ─── Question definitions ─────────────────────────────────────────────────────
@@ -371,7 +370,6 @@ export default function FbChecklist() {
 
   return (
     <div className="min-h-screen bg-[#1b1b1b]">
-      <Navbar />
       <div className="max-w-2xl mx-auto px-4 py-8">
 
         {/* Header */}
