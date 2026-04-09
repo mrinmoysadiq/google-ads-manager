@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import api from '../utils/api'
 import { getUser, logout, decodeToken } from '../utils/auth'
 import Avatar from './Avatar'
 import infinixLogo from '../assets/infinix-logo.svg'
@@ -34,7 +34,7 @@ export default function Navbar() {
       if (decoded) setUser(prev => prev || { username: decoded.username, role: decoded.role, name: '' })
     }
 
-    axios.get('/api/auth/me')
+    api.get('/auth/me')
       .then(({ data }) => {
         // Validate it's a real user object, not an HTML page
         if (data && typeof data === 'object' && data.id) {

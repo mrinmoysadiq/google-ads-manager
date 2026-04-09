@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import api from '../../utils/api'
 import infinixLogo from '../../assets/infinix-logo.svg'
 
 export default function Login() {
@@ -16,7 +16,7 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      const { data } = await axios.post('/api/auth/login', { username, password })
+      const { data } = await api.post('/auth/login', { username, password })
       localStorage.setItem('app_token', data.token)
       localStorage.setItem('app_user', JSON.stringify(data.user))
       navigate('/')

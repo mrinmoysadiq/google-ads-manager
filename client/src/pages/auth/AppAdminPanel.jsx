@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import api from '../../utils/api'
 import toast from 'react-hot-toast'
 import { getUser } from '../../utils/auth'
 import Avatar from '../../components/Avatar'
@@ -32,7 +32,7 @@ export default function AppAdminPanel() {
 
   async function load() {
     setLoading(true)
-    try { const { data } = await axios.get('/api/app-admin/users'); setUsers(data) }
+    try { const { data } = await api.get('/app-admin/users'); setUsers(data) }
     catch { toast.error('Failed to load users') }
     setLoading(false)
   }
@@ -53,21 +53,21 @@ export default function AppAdminPanel() {
     try {
       const payload = { ...form, avatar_url: form.avatar_url || null }
       if (editId && !payload.password) delete payload.password
-      if (editId) { await axios.patch(`/api/app-admin/users/${editId}`, payload); toast.success('User updated') }
-      else { await axios.post('/api/app-admin/users', payload); toast.success('User created') }
+      if (editId) { await api.patch(`/app-admin/users/${editId}`, payload); toast.success('User updated') }
+      else { await api.post('/app-admin/users', payload); toast.success('User created') }
       await load(); cancel()
     } catch (err) { toast.error(err.response?.data?.error || 'Error saving user') }
     setSaving(false)
   }
 
   async function del(id) {
-    try { await axios.delete(`/api/app-admin/users/${id}`); toast.success('User deleted'); setDeleteConfirm(null); load() }
+    try { await api.delete(`/app-admin/users/${id}`); toast.success('User deleted'); setDeleteConfirm(null); load() }
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   async function toggleActive(u) {
     if (u.id === 1 || u.id === me?.id) return toast.error(u.id === 1 ? 'Cannot deactivate super-admin' : 'Cannot deactivate your own account')
-    try { await axios.patch(`/api/app-admin/users/${u.id}`, { active: u.active ? 0 : 1 }); load() }
+    try { await api.patch(`/app-admin/users/${u.id}`, { active: u.active ? 0 : 1 }); load() }
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 

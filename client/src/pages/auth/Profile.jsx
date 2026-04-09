@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import api from '../../utils/api'
 import toast from 'react-hot-toast'
 import { logout, getUser, decodeToken } from '../../utils/auth'
 import Avatar from '../../components/Avatar'
@@ -63,7 +63,7 @@ export default function Profile() {
   const isAdmin = role === 'admin'
 
   useEffect(() => {
-    axios.get('/api/auth/me')
+    api.get('/auth/me')
       .then(({ data }) => {
         // Validate it's a real user object (not an HTML page returned by nginx)
         if (!data || typeof data !== 'object' || !data.id) {
@@ -108,7 +108,7 @@ export default function Profile() {
     try {
       const body = { name: name.trim(), designation: designation.trim() }
       if (avatarData !== null) body.avatar_url = avatarData
-      const { data } = await axios.patch('/api/auth/profile', body)
+      const { data } = await api.patch('/auth/profile', body)
       if (!data || typeof data !== 'object' || !data.id) {
         throw new Error('Server returned an unexpected response — changes may not have been saved.')
       }
@@ -130,7 +130,7 @@ export default function Profile() {
     if (newPw !== confirmPw) return toast.error('Passwords do not match')
     setSavingPw(true)
     try {
-      const { data } = await axios.patch('/api/auth/profile', { password: newPw })
+      const { data } = await api.patch('/auth/profile', { password: newPw })
       if (!data || typeof data !== 'object' || !data.id) {
         throw new Error('Server returned an unexpected response.')
       }

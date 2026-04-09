@@ -7,6 +7,13 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+// Attach Bearer token automatically on every request
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('app_token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
 // Sessions
 export const createSession = (data) => api.post('/sessions', data).then(r => r.data)
 export const getSession = (id) => api.get(`/sessions/${id}`).then(r => r.data)
