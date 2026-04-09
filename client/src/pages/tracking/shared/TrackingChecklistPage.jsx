@@ -91,6 +91,7 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
   const noColor = yesIsGood ? noBadColor : noGoodColor
 
   function handleAnswer(ans) {
+    onActivate() // auto-expand card so verify/issue section appears
     if (ans === item.answer) return
     const updated = { ...item, answer: ans }
     // Clear opposite section when switching yes/no
