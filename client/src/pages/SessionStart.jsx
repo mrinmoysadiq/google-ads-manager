@@ -23,23 +23,25 @@ export default function SessionStart() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
-  const [memberNotFound, setMemberNotFound] = useState(false)
-
   useEffect(() => {
     const appUser = getUser()
     Promise.all([getAccounts(), getTeamMembers()])
-      .then(([accts, members]) => {
+      .then(async ([accts, members]) => {
         const activeMembers = members.filter(m => m.active).map(m => ({ value: m.name, label: m.name }))
         setAccounts(accts.filter(a => a.active).map(a => ({ value: a.name, label: a.name })))
         setTeamMembers(activeMembers)
-        // Pre-fill from logged-in user
+        // Pre-fill from logged-in user — auto-create if not in list yet
         if (appUser) {
           const match = activeMembers.find(m => m.label.toLowerCase() === appUser.name.toLowerCase())
           if (match) {
             setSelectedMember(match)
-            setMemberNotFound(false)
           } else {
-            setMemberNotFound(true)
+            try {
+              const created = await createTeamMember(appUser.name)
+              const newOpt = { value: created.name, label: created.name }
+              setTeamMembers(prev => [...prev, newOpt])
+              setSelectedMember(newOpt)
+            } catch { /* ignore — user can still proceed manually */ }
           }
         }
         setLoading(false)
@@ -137,9 +139,6 @@ export default function SessionStart() {
                   isDisabled
                   classNamePrefix="react-select"
                 />
-                {memberNotFound && (
-                  <p className="mt-1.5 text-xs text-[#f59e0b]">Your account ({getUser()?.name}) was not found in the team members list. Please ask an admin to add you.</p>
-                )}
               </div>
 
               {/* Date */}

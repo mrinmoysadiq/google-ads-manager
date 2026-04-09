@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
-import { getSpecialists, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, upsertTouchpoint } from '../../utils/outreachApi'
+import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, upsertTouchpoint } from '../../utils/outreachApi'
 import LeadDrawer from './components/LeadDrawer'
 import PipelineTable from './components/PipelineTable'
 import PipelineKanban from './components/PipelineKanban'
@@ -59,7 +59,7 @@ export default function OutreachHome() {
     const appUser = getUser()
     const userIsAdmin = isAdmin()
     Promise.all([getSpecialists(), getIndustries(), getPipelineStages(), getSettings()])
-      .then(([specs, inds, stgs, settings]) => {
+      .then(async ([specs, inds, stgs, settings]) => {
         const activeSpecs = specs.filter(s => s.active)
         setSpecialists(activeSpecs)
         setIndustries(inds)
@@ -67,11 +67,18 @@ export default function OutreachHome() {
         setMaxTouchpoints(parseInt(settings.max_touchpoints) || 5)
 
         if (!userIsAdmin && appUser) {
-          // Regular user: auto-select specialist matching their name
+          // Regular user: auto-select specialist matching their name, create if missing
           const match = activeSpecs.find(s => s.name.toLowerCase() === appUser.name.toLowerCase())
           if (match) {
             setSelectedSpecialist(match)
             localStorage.setItem(LS_SPECIALIST_KEY, String(match.id))
+          } else {
+            try {
+              const created = await createSpecialist({ name: appUser.name })
+              setSpecialists(prev => [...prev, created])
+              setSelectedSpecialist(created)
+              localStorage.setItem(LS_SPECIALIST_KEY, String(created.id))
+            } catch { /* ignore */ }
           }
         } else {
           // Admin: restore from localStorage or leave as "All"

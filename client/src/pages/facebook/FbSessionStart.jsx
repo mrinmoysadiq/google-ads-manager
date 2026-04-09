@@ -2,12 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
-import axios from 'axios'
+import api from '../../utils/api'
 import Navbar from '../../components/Navbar'
 import { fbState, resetFbState } from './fbState'
 import { getUser } from '../../utils/auth'
-
-const API = import.meta.env.VITE_API_URL || '/api'
 
 const selectStyles = {
   control: (base, { isFocused }) => ({
@@ -41,24 +39,26 @@ export default function FbSessionStart() {
   const [buyer, setBuyer] = useState(fbState.buyer ? { value: fbState.buyer, label: fbState.buyer } : null)
   const [date, setDate] = useState(fbState.date || today)
   const [account, setAccount] = useState(fbState.account ? { value: fbState.account, label: fbState.account } : null)
-  const [buyerNotFound, setBuyerNotFound] = useState(false)
 
   useEffect(() => {
     const appUser = getUser()
     Promise.all([
-      axios.get(`${API}/facebook/media-buyers`),
-      axios.get(`${API}/facebook/ad-accounts`),
-    ]).then(([b, a]) => {
+      api.get('/facebook/media-buyers'),
+      api.get('/facebook/ad-accounts'),
+    ]).then(async ([b, a]) => {
       setBuyers(b.data)
       setAccounts(a.data)
-      // Pre-fill from logged-in user
+      // Pre-fill from logged-in user — auto-create if not in list yet
       if (appUser && !fbState.buyer) {
         const match = b.data.find(m => m.name.toLowerCase() === appUser.name.toLowerCase())
         if (match) {
           setBuyer({ value: match.name, label: match.name })
-          setBuyerNotFound(false)
         } else {
-          setBuyerNotFound(true)
+          try {
+            const { data: created } = await api.post('/facebook/media-buyers', { name: appUser.name })
+            setBuyers(prev => [...prev, created])
+            setBuyer({ value: created.name, label: created.name })
+          } catch { /* ignore */ }
         }
       }
     }).catch(() => toast.error('Failed to load data'))
@@ -122,9 +122,6 @@ export default function FbSessionStart() {
                     isClearable
                     isDisabled
                   />
-                  {buyerNotFound && (
-                    <p className="mt-1.5 text-xs text-[#f59e0b]">Your account ({getUser()?.name}) was not found in media buyers. Please ask an admin to add you.</p>
-                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[#8a8680] uppercase tracking-wider mb-2">Date</label>

@@ -8,42 +8,49 @@ export default function LmsStart() {
   const [status, setStatus] = useState('loading') // 'loading' | 'not_found'
 
   useEffect(() => {
-    const appUser = getUser()
-
-    api.get('/lms/users').then(({ data: lmsUsers }) => {
+    async function init() {
+      const appUser = getUser()
       if (!appUser) {
-        // No logged-in user — redirect to login
         navigate('/login', { replace: true })
         return
       }
+      try {
+        const { data: lmsUsers } = await api.get('/lms/users')
 
-      // Try to find the LMS user by name match
-      const match = lmsUsers.find(u => u.name.toLowerCase() === appUser.name.toLowerCase())
+        // Try to find the LMS user by name match
+        const match = lmsUsers.find(u => u.name.toLowerCase() === appUser.name.toLowerCase())
 
-      if (appUser.role === 'admin' && !match) {
-        // App admin but not in lms_users — go to lms admin panel
-        localStorage.setItem('lms_user_role', 'admin')
-        localStorage.setItem('lms_user_name', appUser.name)
-        navigate('/learning/admin', { replace: true })
-        return
-      }
+        if (!match && appUser.role === 'admin') {
+          // App admin but not in lms_users — go to lms admin panel
+          localStorage.setItem('lms_user_role', 'admin')
+          localStorage.setItem('lms_user_name', appUser.name)
+          navigate('/learning/admin', { replace: true })
+          return
+        }
 
-      if (!match) {
+        if (!match) {
+          // Auto-create as employee so they can use the module immediately
+          const { data: created } = await api.post('/lms/users', { name: appUser.name, role: 'employee' })
+          localStorage.setItem('lms_user_id', created.id)
+          localStorage.setItem('lms_user_role', 'employee')
+          localStorage.setItem('lms_user_name', created.name)
+          navigate(`/learning/employee/${created.id}`, { replace: true })
+          return
+        }
+
+        // Found in lms_users
+        localStorage.setItem('lms_user_id', match.id)
+        localStorage.setItem('lms_user_role', match.role)
+        localStorage.setItem('lms_user_name', match.name)
+
+        if (match.role === 'employee') navigate(`/learning/employee/${match.id}`, { replace: true })
+        else if (match.role === 'manager') navigate('/learning/manager', { replace: true })
+        else navigate('/learning/admin', { replace: true })
+      } catch {
         setStatus('not_found')
-        return
       }
-
-      // Found in lms_users
-      localStorage.setItem('lms_user_id', match.id)
-      localStorage.setItem('lms_user_role', match.role)
-      localStorage.setItem('lms_user_name', match.name)
-
-      if (match.role === 'employee') navigate(`/learning/employee/${match.id}`, { replace: true })
-      else if (match.role === 'manager') navigate('/learning/manager', { replace: true })
-      else navigate('/learning/admin', { replace: true })
-    }).catch(() => {
-      setStatus('not_found')
-    })
+    }
+    init()
   }, [])
 
   if (status === 'loading') {
