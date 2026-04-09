@@ -27,4 +27,27 @@ router.get('/me', (req, res) => {
   } catch { res.status(401).json({ error: 'Invalid token' }); }
 });
 
+// Self-service profile update (name, designation, password)
+router.patch('/profile', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token' });
+  try {
+    const payload = jwt.verify(token, SECRET);
+    const user = db.prepare('SELECT * FROM app_users WHERE id=?').get(payload.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const { name, designation, password } = req.body;
+    const newName = (name || '').trim() || user.name;
+    const newDesig = designation !== undefined ? (designation || '').trim() : user.designation;
+    if (password) {
+      if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      const hash = bcryptjs.hashSync(password, 10);
+      db.prepare('UPDATE app_users SET name=?,designation=?,password_hash=? WHERE id=?').run(newName, newDesig, hash, payload.id);
+    } else {
+      db.prepare('UPDATE app_users SET name=?,designation=? WHERE id=?').run(newName, newDesig, payload.id);
+    }
+    const updated = db.prepare('SELECT id,name,username,designation,role,avatar_url,active,created_at FROM app_users WHERE id=?').get(payload.id);
+    res.json(updated);
+  } catch { res.status(401).json({ error: 'Invalid token' }); }
+});
+
 module.exports = router;

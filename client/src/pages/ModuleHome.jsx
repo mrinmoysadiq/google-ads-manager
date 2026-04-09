@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import infinixLogo from '../assets/infinix-logo.svg'
-import { getUser, isAdmin } from '../utils/auth'
+import { isAdmin } from '../utils/auth'
 
 // ── Infinix brand logo (large hero version) ───────────────────────────────────
 function InfinixLogoLarge() {
@@ -128,7 +128,6 @@ function UtilCard({ href, icon, title, description, accentColor, accentAlpha }) 
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ModuleHome() {
-  const user = getUser()
   const admin = isAdmin()
 
   return (
@@ -212,38 +211,24 @@ export default function ModuleHome() {
         />
       </div>
 
-      {/* Account & Admin shortcuts */}
-      <div className="w-full max-w-5xl mt-10">
-        <p className="text-xs font-semibold text-[#8a8680]/60 uppercase tracking-widest mb-3 px-1">Account</p>
-        <div className={`grid gap-3 ${admin ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-1 max-w-sm'}`}>
+      {/* Admin Panel shortcut — only visible to admins */}
+      {admin && (
+        <div className="w-full max-w-5xl mt-10">
+          <p className="text-xs font-semibold text-[#8a8680]/60 uppercase tracking-widest mb-3 px-1">Administration</p>
           <UtilCard
-            href="/profile"
-            accentColor="#575ECF"
-            accentAlpha="rgba(87,94,207,0.25)"
-            title={user?.name ? `My Profile — ${user.name}` : 'My Profile'}
-            description={user?.designation || 'View and manage your account'}
+            href="/admin-panel"
+            accentColor="#f59e0b"
+            accentAlpha="rgba(245,158,11,0.25)"
+            title="User Management"
+            description="Add, update, or remove user accounts and reset passwords"
             icon={
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#575ECF" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             }
           />
-          {admin && (
-            <UtilCard
-              href="/admin-panel"
-              accentColor="#f59e0b"
-              accentAlpha="rgba(245,158,11,0.25)"
-              title="Admin Panel"
-              description="Add, edit, or remove user accounts"
-              icon={
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              }
-            />
-          )}
         </div>
-      </div>
+      )}
 
       {/* Footer note */}
       <p className="mt-10 text-xs text-[#8a8680]/50 tracking-wide">
