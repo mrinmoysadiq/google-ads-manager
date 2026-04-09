@@ -205,6 +205,28 @@ function AssignDrawer({ users, templates, onClose, onAssigned, managerId }) {
   )
 }
 
+// ── SVG Icons ─────────────────────────────────────────────────────────────────
+const IconUser = () => (
+  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+  </svg>
+)
+const IconChat = () => (
+  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+  </svg>
+)
+const IconStarFill = () => (
+  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+  </svg>
+)
+const IconCalendar = () => (
+  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+  </svg>
+)
+
 // ── Topic Card (Manager) ──────────────────────────────────────────────────────
 function ManagerTopicCard({ topic, userId, onDragStart }) {
   const overdue = isOverdue(topic)
@@ -217,50 +239,76 @@ function ManagerTopicCard({ topic, userId, onDragStart }) {
     <div
       draggable
       onDragStart={e => { e.dataTransfer.setData('topic_id', topic.id); e.dataTransfer.setData('from_stage', topic.stage); onDragStart(topic.stage) }}
-      className="relative bg-[#2a2a2a] border rounded-lg p-3 cursor-grab active:cursor-grabbing transition-all"
-      style={{ borderColor: hasNew ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.08)' }}
+      className="group relative rounded-xl p-4 cursor-grab active:cursor-grabbing transition-all duration-150"
+      style={{
+        backgroundColor: '#252525',
+        border: `1px solid ${hasNew ? 'rgba(245,158,11,0.35)' : 'rgba(255,255,255,0.07)'}`,
+        boxShadow: hasNew
+          ? '0 0 0 1px rgba(245,158,11,0.1), 0 2px 8px rgba(0,0,0,0.3)'
+          : '0 1px 3px rgba(0,0,0,0.25)',
+      }}
     >
-      {/* Notification dot */}
+      {/* Notification pulse dot */}
       {hasNew && (
-        <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#f59e0b] shadow-sm shadow-[#f59e0b]/50" />
+        <span className="absolute top-3 right-3 flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ backgroundColor: '#f59e0b' }} />
+          <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: '#f59e0b' }} />
+        </span>
       )}
 
+      {/* Title */}
       <Link to={`/learning/topic/${topic.id}`} onClick={e => e.stopPropagation()}>
-        <p className="text-sm font-medium text-[#c5c1b9] mb-1.5 line-clamp-2 hover:text-white pr-4">{topic.title}</p>
+        <p className="text-[13px] font-semibold leading-snug text-[#d4cfc7] group-hover:text-white transition-colors line-clamp-2 mb-3 pr-4">
+          {topic.title}
+        </p>
       </Link>
+
+      {/* Assignee */}
       {topic.assignee_name && (
-        <p className="text-xs text-[#8a8680] mb-2 truncate">👤 {topic.assignee_name}</p>
+        <div className="flex items-center gap-1.5 mb-3">
+          <span className="text-[#8a8680]"><IconUser /></span>
+          <span className="text-xs text-[#8a8680] truncate">{topic.assignee_name}</span>
+        </div>
       )}
 
       {/* Notification badges */}
       {(newComments > 0 || newAssessments > 0) && (
-        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+        <div className="flex flex-wrap gap-1.5 mb-3">
           {newComments > 0 && (
-            <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: '#575ECF20', color: '#575ECF' }}>
-              💬 {newComments} new
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#575ECF18', color: '#818cf8' }}>
+              <IconChat /> {newComments} new
             </span>
           )}
           {newAssessments > 0 && (
-            <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: '#f59e0b20', color: '#f59e0b' }}>
-              ⭐ {newAssessments} new
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#f59e0b18', color: '#fbbf24' }}>
+              <IconStarFill /> {newAssessments} new
             </span>
           )}
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-2 pt-2.5" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <div className="flex items-center gap-2">
-          {topic.latest_rating ? <StarRating value={topic.latest_rating} /> : null}
+          {topic.latest_rating ? (
+            <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold" style={{ color: '#fbbf24' }}>
+              {'★'.repeat(topic.latest_rating)}
+            </span>
+          ) : null}
           {topic.comment_count > 0 && newComments === 0 && (
-            <span className="text-xs text-[#8a8680]">💬 {topic.comment_count}</span>
+            <span className="inline-flex items-center gap-1 text-[11px] text-[#8a8680]">
+              <IconChat /> {topic.comment_count}
+            </span>
           )}
         </div>
         {topic.due_date ? (
-          <span className="text-xs font-medium" style={{ color: overdue ? '#ef4444' : '#8a8680' }}>
-            {overdue ? '⚠ ' : '📅 '}{formatDate(topic.due_date)}
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium" style={{ color: overdue ? '#f87171' : '#6b7280' }}>
+            <IconCalendar />
+            {formatDate(topic.due_date)}
+            {overdue && <span className="ml-0.5 text-[10px] font-bold">OVERDUE</span>}
           </span>
         ) : (
-          <span className="text-xs text-[#8a8680]/40">No deadline</span>
+          <span className="text-[11px] text-[#8a8680]/30">No deadline</span>
         )}
       </div>
     </div>
@@ -330,22 +378,53 @@ function AssessmentModal({ topic, managerId, onSubmit, onClose }) {
 function ManagerKanbanColumn({ stage, topics, userId, onDrop, onDragStart }) {
   const [dragOver, setDragOver] = useState(false)
   const color = DEFAULT_COLORS[stage] || '#8a8680'
+  const totalNew = topics.reduce((acc, t) => {
+    const seen = getSeen(userId, t.id)
+    return acc + Math.max(0, (t.comment_count || 0) - seen.c) + Math.max(0, (t.assessment_count || 0) - seen.a)
+  }, 0)
+
   return (
-    <div className="flex-shrink-0 w-56 flex flex-col rounded-xl overflow-hidden">
-      <div className="px-3 py-2.5 flex items-center justify-between" style={{ backgroundColor: `${color}18`, borderBottom: `2px solid ${color}` }}>
-        <span className="text-xs font-semibold" style={{ color }}>{stage}</span>
-        <span className="text-xs text-[#8a8680] bg-black/20 rounded-full px-1.5 py-0.5">{topics.length}</span>
+    <div
+      className="flex-shrink-0 w-64 flex flex-col rounded-2xl transition-all duration-200"
+      style={{
+        backgroundColor: '#1a1a1a',
+        border: dragOver ? `1.5px dashed ${color}70` : '1.5px solid rgba(255,255,255,0.05)',
+        boxShadow: dragOver ? `0 0 0 3px ${color}15` : 'none',
+      }}
+      onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={e => { setDragOver(false); onDrop(e, stage) }}
+    >
+      {/* Header */}
+      <div className="px-4 py-3.5 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+          <span className="text-[13px] font-semibold tracking-tight" style={{ color }}>{stage}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {totalNew > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#f59e0b22', color: '#f59e0b' }}>
+              {totalNew} new
+            </span>
+          )}
+          <span className="text-xs font-semibold text-[#8a8680] bg-white/6 rounded-full px-2 py-0.5 min-w-[22px] text-center">
+            {topics.length}
+          </span>
+        </div>
       </div>
+      {/* Cards */}
       <div
-        className="flex-1 p-2 space-y-2 min-h-[100px] rounded-b-xl transition-colors"
-        style={{ backgroundColor: dragOver ? `${color}08` : '#1b1b1b', border: dragOver ? `1px dashed ${color}60` : '1px solid transparent' }}
-        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={e => { setDragOver(false); onDrop(e, stage) }}
+        className="flex-1 p-3 space-y-2.5 min-h-[120px] rounded-b-2xl transition-colors duration-150"
+        style={{ backgroundColor: dragOver ? `${color}06` : 'transparent' }}
       >
         {topics.map(t => (
           <ManagerTopicCard key={t.id} topic={t} userId={userId} onDragStart={onDragStart} />
         ))}
+        {topics.length === 0 && (
+          <div className="flex items-center justify-center h-16 rounded-xl" style={{ border: '1px dashed rgba(255,255,255,0.06)' }}>
+            <p className="text-[11px] text-[#8a8680]/50">Drop here</p>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -549,48 +628,56 @@ export default function LmsManager() {
   )
 
   return (
-    <div className="min-h-screen bg-[#1b1b1b]">
+    <div className="min-h-screen" style={{ backgroundColor: '#161616' }}>
       {/* Top bar */}
-      <div className="bg-[#242424] border-b border-white/8 px-4 py-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <h1 className="text-lg font-bold text-[#c5c1b9]">Manager Dashboard</h1>
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="w-48">
-              <Select
-                options={employeeOptions}
-                value={employeeOptions.find(o => o.value === employeeFilter) || employeeOptions[0]}
-                onChange={o => setEmployeeFilter(o?.value || null)}
-                styles={selectStyles}
-                isSearchable={false}
-              />
-            </div>
-            <button
-              onClick={() => setShowAssignDrawer(true)}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-              style={{ backgroundColor: '#575ECF' }}
-            >
-              + Assign Topic
-            </button>
-            <button onClick={() => navigate('/learning')} className="text-xs text-[#8a8680] hover:text-[#c5c1b9]">
-              Switch User
-            </button>
+      <div className="px-6 py-5 flex items-center justify-between flex-wrap gap-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <h1 className="text-xl font-bold text-white tracking-tight">Manager Dashboard</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="w-52">
+            <Select
+              options={employeeOptions}
+              value={employeeOptions.find(o => o.value === employeeFilter) || employeeOptions[0]}
+              onChange={o => setEmployeeFilter(o?.value || null)}
+              styles={selectStyles}
+              isSearchable={false}
+            />
           </div>
+          <button
+            onClick={() => setShowAssignDrawer(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
+            style={{ backgroundColor: '#575ECF', boxShadow: '0 2px 8px rgba(87,94,207,0.35)' }}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Assign Topic
+          </button>
+          <button
+            onClick={() => navigate('/learning')}
+            className="text-xs text-[#8a8680] hover:text-[#c5c1b9] transition-colors px-3 py-2 rounded-lg hover:bg-white/5"
+          >
+            Switch User
+          </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="px-4 pt-4">
-        <div className="flex gap-1 bg-[#242424] border border-white/8 rounded-lg p-1 w-fit mb-4">
+      <div className="px-6 pt-5 pb-4">
+        <div className="flex gap-1 w-fit rounded-xl p-1" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
           {[
             { id: 'pipeline', label: 'Kanban' },
-            { id: 'employees', label: 'Employee View' },
+            { id: 'employees', label: 'Team View' },
             { id: 'dashboard', label: 'Dashboard' },
           ].map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-              style={{ backgroundColor: activeTab === t.id ? '#575ECF' : 'transparent', color: activeTab === t.id ? '#fff' : '#8a8680' }}
+              className="px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-150"
+              style={{
+                backgroundColor: activeTab === t.id ? '#575ECF' : 'transparent',
+                color: activeTab === t.id ? '#fff' : '#6b7280',
+                boxShadow: activeTab === t.id ? '0 2px 6px rgba(87,94,207,0.3)' : 'none',
+              }}
             >
               {t.label}
             </button>
@@ -600,8 +687,8 @@ export default function LmsManager() {
 
       {/* Kanban */}
       {activeTab === 'pipeline' && (
-        <div className="px-4 pb-8 overflow-x-auto">
-          <div className="flex gap-3 min-w-max">
+        <div className="px-6 pb-10 overflow-x-auto">
+          <div className="flex gap-4 min-w-max">
             {stages.map(stage => (
               <ManagerKanbanColumn
                 key={stage}
@@ -614,7 +701,9 @@ export default function LmsManager() {
             ))}
           </div>
           {filteredTopics.length === 0 && (
-            <p className="text-center py-16 text-[#8a8680] text-sm">No topics found</p>
+            <div className="text-center py-20">
+              <p className="text-[#8a8680] text-sm">No topics found</p>
+            </div>
           )}
         </div>
       )}
