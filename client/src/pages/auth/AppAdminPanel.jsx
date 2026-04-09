@@ -176,10 +176,36 @@ export default function AppAdminPanel() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-[#8a8680] mb-1.5">Profile Photo URL (optional)</label>
-                <div className="flex gap-2 items-center">
-                  <input className={inp} placeholder="https://... (leave blank for initials)" value={form.avatar_url} onChange={e => setForm(f => ({ ...f, avatar_url: e.target.value }))} />
-                  <Avatar name={form.name || 'User'} avatarUrl={form.avatar_url || null} size={40} />
+                <label className="block text-xs text-[#8a8680] mb-1.5">Profile Photo (optional)</label>
+                <div className="flex gap-3 items-center">
+                  <label className="cursor-pointer flex-shrink-0">
+                    <Avatar name={form.name || 'User'} avatarUrl={form.avatar_url || null} size={44} />
+                    <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                      const file = e.target.files[0]; if (!file) return;
+                      if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
+                      const reader = new FileReader();
+                      reader.onload = ev => {
+                        const img = new Image();
+                        img.onload = () => {
+                          const MAX = 200; let w = img.width, h = img.height;
+                          if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; } }
+                          else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; } }
+                          const c = document.createElement('canvas'); c.width = w; c.height = h;
+                          c.getContext('2d').drawImage(img, 0, 0, w, h);
+                          setForm(f => ({ ...f, avatar_url: c.toDataURL('image/jpeg', 0.85) }));
+                        };
+                        img.src = ev.target.result;
+                      };
+                      reader.readAsDataURL(file);
+                    }} />
+                  </label>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-[#8a8680] mb-1">Click photo to upload (or paste URL below)</p>
+                    <input className={inp} placeholder="https://... or leave blank for initials" value={form.avatar_url} onChange={e => setForm(f => ({ ...f, avatar_url: e.target.value }))} />
+                  </div>
+                  {form.avatar_url && (
+                    <button type="button" onClick={() => setForm(f => ({ ...f, avatar_url: '' }))} className="text-xs text-[#8a8680] hover:text-[#ef4444] flex-shrink-0">✕</button>
+                  )}
                 </div>
               </div>
               {editId && (

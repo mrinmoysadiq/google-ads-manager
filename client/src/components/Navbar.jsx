@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import { getUser, logout, isAdmin } from '../utils/auth'
 import Avatar from './Avatar'
 import infinixLogo from '../assets/infinix-logo.svg'
 
-// ── Infinix brand logo (compact navbar version) ───────────────────────────────
 function InfinixLogo() {
   return (
     <div className="flex items-center">
@@ -17,9 +17,26 @@ export default function Navbar() {
   const location = useLocation()
   const navigate = useNavigate()
   const path = location.pathname
-  const user = getUser()
+  const [user, setUser] = useState(getUser())
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
+
+  // If localStorage has a token but no user object, fetch from API
+  // Also listen for profile-updated events (dispatched after profile save)
+  useEffect(() => {
+    const token = localStorage.getItem('app_token')
+    if (token && !getUser()) {
+      axios.get('/api/auth/me')
+        .then(({ data }) => {
+          localStorage.setItem('app_user', JSON.stringify(data))
+          setUser(data)
+        })
+        .catch(() => {})
+    }
+    const refresh = () => setUser(getUser())
+    window.addEventListener('profile-updated', refresh)
+    return () => window.removeEventListener('profile-updated', refresh)
+  }, [])
 
   useEffect(() => {
     function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
@@ -27,25 +44,20 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Context detection
-  const isAudit = path === '/audit' ||
-    path.startsWith('/checklist') ||
-    path.startsWith('/complete') ||
-    path === '/changelog' ||
-    path === '/admin'
-
+  const isAudit = path === '/audit' || path.startsWith('/checklist') || path.startsWith('/complete') || path === '/changelog' || path === '/admin'
   const isLearning = path.startsWith('/learning')
   const isOutreach = path.startsWith('/outreach')
   const isFacebook = path.startsWith('/facebook')
 
-  const auditNavLink = (to, label) => (
+  const navLink = (to, label, activeColor = '#575ECF') => (
     <Link
       to={to}
-      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-        path === to
-          ? 'text-[#575ECF] bg-[#575ECF]/10'
-          : 'text-[#8a8680] hover:text-[#c5c1b9] hover:bg-white/5'
-      }`}
+      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors`}
+      style={path === to
+        ? { color: activeColor, backgroundColor: `${activeColor}18` }
+        : { color: '#8a8680' }}
+      onMouseEnter={e => { if (path !== to) { e.currentTarget.style.color = '#c5c1b9'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)' } }}
+      onMouseLeave={e => { if (path !== to) { e.currentTarget.style.color = '#8a8680'; e.currentTarget.style.backgroundColor = 'transparent' } }}
     >
       {label}
     </Link>
@@ -56,148 +68,106 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
 
-          {/* Logo — always links back to home */}
           <Link to="/" className="flex items-center">
             <InfinixLogo />
           </Link>
 
-          {/* Right side: context nav + avatar */}
           <div className="flex items-center gap-1">
-            {/* Context-aware nav links */}
-            {isAudit && (
-              <>
-                {auditNavLink('/changelog', 'Change Log')}
-                {auditNavLink('/admin', 'Admin')}
-              </>
-            )}
+            {isAudit && <>{navLink('/changelog', 'Change Log')}{navLink('/admin', 'Admin')}</>}
+            {isLearning && navLink('/learning/admin', 'Admin')}
+            {isOutreach && navLink('/outreach/admin', 'Admin', '#e05d0a')}
+            {isFacebook && navLink('/facebook/admin', 'Admin', '#1877f2')}
 
-            {isLearning && (
-              <Link
-                to="/learning/admin"
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  path === '/learning/admin'
-                    ? 'text-[#575ECF] bg-[#575ECF]/10'
-                    : 'text-[#8a8680] hover:text-[#c5c1b9] hover:bg-white/5'
-                }`}
-              >
-                Admin
-              </Link>
-            )}
-
-            {isOutreach && (
-              <Link
-                to="/outreach/admin"
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  path === '/outreach/admin'
-                    ? 'text-[#e05d0a] bg-[#e05d0a]/10'
-                    : 'text-[#8a8680] hover:text-[#c5c1b9] hover:bg-white/5'
-                }`}
-              >
-                Admin
-              </Link>
-            )}
-
-            {isFacebook && (
-              <Link
-                to="/facebook/admin"
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  path === '/facebook/admin'
-                    ? 'text-[#1877f2] bg-[#1877f2]/10'
-                    : 'text-[#8a8680] hover:text-[#c5c1b9] hover:bg-white/5'
-                }`}
-              >
-                Admin
-              </Link>
-            )}
-
-            {/* "Back to modules" pill — shown inside any module */}
             {(isAudit || isLearning || isOutreach || isFacebook) && (
               <Link
                 to="/"
-                className="ml-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-[#8a8680] hover:text-[#c5c1b9]"
+                className="ml-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#8a8680] hover:text-[#c5c1b9] transition-colors"
                 style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'}
                 onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'}
               >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                 Modules
               </Link>
             )}
 
-            {/* Avatar dropdown */}
-            {user && (
-              <div className="relative ml-3" ref={ref}>
-                <button
-                  onClick={() => setOpen(o => !o)}
-                  className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-white/5 transition-colors"
+            {/* Avatar / profile dropdown — always rendered if token exists */}
+            <div className="relative ml-3" ref={ref}>
+              <button
+                onClick={() => setOpen(o => !o)}
+                className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-white/5 transition-colors"
+              >
+                <Avatar name={user?.name || '?'} avatarUrl={user?.avatar_url} size={32} />
+                <div className="hidden sm:block text-left max-w-[140px]">
+                  <div className="text-xs font-semibold text-[#c5c1b9] leading-tight truncate">{user?.name || 'Account'}</div>
+                  {user?.designation && <div className="text-[10px] text-[#8a8680] leading-tight truncate">{user.designation}</div>}
+                </div>
+                <svg className="w-3.5 h-3.5 text-[#8a8680] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {open && (
+                <div
+                  className="absolute right-0 mt-2 w-56 rounded-xl overflow-hidden z-50"
+                  style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
                 >
-                  <Avatar name={user.name} avatarUrl={user.avatar_url} size={30} />
-                  <div className="hidden sm:block text-left">
-                    <div className="text-xs font-semibold text-[#c5c1b9] leading-tight">{user.name}</div>
-                    {user.designation && <div className="text-[10px] text-[#8a8680] leading-tight">{user.designation}</div>}
-                  </div>
-                  <svg className="w-3.5 h-3.5 text-[#8a8680]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-
-                {open && (
-                  <div
-                    className="absolute right-0 mt-2 w-52 rounded-xl overflow-hidden z-50"
-                    style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
-                  >
-                    {/* User info header */}
-                    <div className="px-4 py-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
-                      <div className="text-xs font-semibold text-[#c5c1b9]">{user.name}</div>
-                      <div className="text-[10px] text-[#8a8680]">@{user.username}</div>
+                  {/* User header */}
+                  <div className="px-4 py-3 flex items-center gap-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+                    <Avatar name={user?.name || '?'} avatarUrl={user?.avatar_url} size={36} />
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-[#c5c1b9] truncate">{user?.name || '—'}</div>
+                      <div className="text-[10px] text-[#8a8680] truncate">@{user?.username || '—'}</div>
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-0.5 inline-block"
+                        style={{ backgroundColor: user?.role === 'admin' ? '#575ECF20' : 'rgba(255,255,255,0.06)', color: user?.role === 'admin' ? '#818cf8' : '#8a8680' }}>
+                        {user?.role === 'admin' ? 'Admin' : 'User'}
+                      </span>
                     </div>
+                  </div>
 
-                    {/* Menu items */}
-                    <div className="py-1">
+                  <div className="py-1">
+                    <button
+                      onClick={() => { setOpen(false); navigate('/profile') }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#c5c1b9] hover:bg-white/5 transition-colors text-left"
+                    >
+                      <svg className="w-4 h-4 text-[#8a8680]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      My Profile
+                    </button>
+
+                    {(user?.role === 'admin') && (
                       <button
-                        onClick={() => { setOpen(false); navigate('/profile') }}
+                        onClick={() => { setOpen(false); navigate('/admin-panel') }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#c5c1b9] hover:bg-white/5 transition-colors text-left"
                       >
-                        <svg className="w-4 h-4 text-[#8a8680]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        <svg className="w-4 h-4 text-[#f59e0b]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                         </svg>
-                        My Profile
+                        <span>User Management</span>
+                        <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#f59e0b20', color: '#f59e0b' }}>Admin</span>
                       </button>
+                    )}
 
-                      {isAdmin() && (
-                        <button
-                          onClick={() => { setOpen(false); navigate('/admin-panel') }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#c5c1b9] hover:bg-white/5 transition-colors text-left"
-                        >
-                          <svg className="w-4 h-4 text-[#8a8680]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          Admin Panel
-                        </button>
-                      )}
+                    <div className="my-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }} />
 
-                      <div className="my-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }} />
-
-                      <button
-                        onClick={() => { setOpen(false); logout() }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-left"
-                        style={{ color: '#ef4444' }}
-                        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.08)'}
-                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                        Sign Out
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => { setOpen(false); logout() }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors"
+                      style={{ color: '#ef4444' }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.08)'}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Sign Out
+                    </button>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
       </div>

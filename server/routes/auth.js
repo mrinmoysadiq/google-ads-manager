@@ -35,15 +35,16 @@ router.patch('/profile', (req, res) => {
     const payload = jwt.verify(token, SECRET);
     const user = db.prepare('SELECT * FROM app_users WHERE id=?').get(payload.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    const { name, designation, password } = req.body;
+    const { name, designation, password, avatar_url } = req.body;
     const newName = (name || '').trim() || user.name;
     const newDesig = designation !== undefined ? (designation || '').trim() : user.designation;
+    const newAvatar = avatar_url !== undefined ? (avatar_url || null) : user.avatar_url;
     if (password) {
       if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
       const hash = bcryptjs.hashSync(password, 10);
-      db.prepare('UPDATE app_users SET name=?,designation=?,password_hash=? WHERE id=?').run(newName, newDesig, hash, payload.id);
+      db.prepare('UPDATE app_users SET name=?,designation=?,password_hash=?,avatar_url=? WHERE id=?').run(newName, newDesig, hash, newAvatar, payload.id);
     } else {
-      db.prepare('UPDATE app_users SET name=?,designation=? WHERE id=?').run(newName, newDesig, payload.id);
+      db.prepare('UPDATE app_users SET name=?,designation=?,avatar_url=? WHERE id=?').run(newName, newDesig, newAvatar, payload.id);
     }
     const updated = db.prepare('SELECT id,name,username,designation,role,avatar_url,active,created_at FROM app_users WHERE id=?').get(payload.id);
     res.json(updated);
