@@ -91,7 +91,6 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
   const noColor = yesIsGood ? noBadColor : noGoodColor
 
   function handleAnswer(ans) {
-    onActivate() // auto-expand card so verify/issue section appears
     if (ans === item.answer) return
     const updated = { ...item, answer: ans }
     // Clear opposite section when switching yes/no
@@ -144,8 +143,8 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
         )}
       </div>
 
-      {/* EMQ score — always shown for Meta Q5 once active */}
-      {question.hasEMQScore && isActive && (
+      {/* EMQ score — always shown for Meta Q5 once answered */}
+      {question.hasEMQScore && (hasAnswer || isActive) && (
         <div className="mb-3" onClick={e => e.stopPropagation()}>
           <label className="block text-xs font-semibold mb-1.5" style={{ color: '#f59e0b' }}>
             {question.emqScoreLabel}
@@ -162,8 +161,8 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
         </div>
       )}
 
-      {/* Follow-up sections */}
-      {hasAnswer && item.answer !== 'na' && isActive && (
+      {/* Follow-up sections — always visible once answered */}
+      {hasAnswer && item.answer !== 'na' && (
         <div onClick={e => e.stopPropagation()}>
           {good ? (
             /* Verification box */
