@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Component } from 'react'
 import { Toaster } from 'react-hot-toast'
 import Navbar from './components/Navbar'
 import ModuleHome from './pages/ModuleHome'
@@ -22,6 +23,32 @@ import Login from './pages/auth/Login'
 import Profile from './pages/auth/Profile'
 import AppAdminPanel from './pages/auth/AppAdminPanel'
 
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error('App error:', error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ minHeight: '100vh', background: '#1b1b1b', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '24px' }}>
+          <div style={{ color: '#ef4444', fontSize: '48px' }}>⚠</div>
+          <h2 style={{ color: '#c5c1b9', fontSize: '18px', fontWeight: 700, margin: 0 }}>Something went wrong</h2>
+          <p style={{ color: '#8a8680', fontSize: '13px', margin: 0, textAlign: 'center', maxWidth: '360px' }}>
+            {this.state.error?.message || 'An unexpected error occurred.'}
+          </p>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/'; }}
+            style={{ marginTop: '8px', padding: '10px 24px', borderRadius: '10px', background: '#575ECF', color: '#fff', border: 'none', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            Go to Home
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('app_token');
   if (!token) return <Navigate to="/login" replace />;
@@ -30,7 +57,8 @@ function ProtectedRoute({ children }) {
 
 function AdminRoute({ children }) {
   const token = localStorage.getItem('app_token');
-  const user = JSON.parse(localStorage.getItem('app_user') || '{}');
+  let user = {};
+  try { user = JSON.parse(localStorage.getItem('app_user') || '{}'); } catch { /* ignore */ }
   if (!token) return <Navigate to="/login" replace />;
   if (user.role !== 'admin') return <Navigate to="/" replace />;
   return children;
@@ -41,6 +69,7 @@ export default function App() {
   const isLogin = location.pathname === '/login';
 
   return (
+    <ErrorBoundary>
     <div className="min-h-screen bg-[#1b1b1b]">
       {!isLogin && <Navbar />}
       <main className="pt-0">
@@ -99,5 +128,6 @@ export default function App() {
         }}
       />
     </div>
+    </ErrorBoundary>
   )
 }

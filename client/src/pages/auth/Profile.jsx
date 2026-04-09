@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { getUser, logout } from '../../utils/auth'
 import Avatar from '../../components/Avatar'
 
@@ -10,7 +10,7 @@ function formatDate(str) {
 export default function Profile() {
   const navigate = useNavigate()
   const user = getUser()
-  if (!user) { navigate('/login'); return null }
+  if (!user) return <Navigate to="/login" replace />
   return (
     <div className="min-h-screen bg-[#1b1b1b] flex items-center justify-center px-4">
       <div className="w-full max-w-sm">

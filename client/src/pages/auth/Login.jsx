@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import infinixLogo from '../../assets/infinix-logo.svg'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -31,9 +32,7 @@ export default function Login() {
     <div className="min-h-screen bg-[#1b1b1b] flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="flex justify-center mb-8">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#22c55e18', border: '1px solid #22c55e30' }}>
-            <span className="text-2xl font-black text-[#22c55e]">IO</span>
-          </div>
+          <img src={infinixLogo} alt="Infinix" style={{ height: '44px', width: 'auto' }} />
         </div>
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-[#c5c1b9] mb-1">Welcome Back</h1>
