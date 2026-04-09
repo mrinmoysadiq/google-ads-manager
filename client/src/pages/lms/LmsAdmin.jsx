@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import api from '../../utils/lmsApi'
 import toast from 'react-hot-toast'
 import Select from 'react-select'
@@ -510,10 +510,283 @@ function PipelineStagesSection() {
   )
 }
 
+// ── Topics Section (Admin Kanban) ─────────────────────────────────────────────
+const STAGE_COLORS = {
+  'Assigned': '#8a8680', 'In Progress': '#575ECF', 'Notes Submitted': '#f59e0b',
+  'Assessed': '#3b82f6', 'Needs Revision': '#ef4444', 'Completed': '#22c55e',
+}
+
+function formatDate(str) {
+  if (!str) return ''
+  return new Date(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function isOverdue(topic) {
+  if (!topic.due_date || topic.stage === 'Completed') return false
+  return topic.due_date < new Date().toISOString().split('T')[0]
+}
+
+function AdminTopicCard({ topic, onDragStart }) {
+  const overdue = isOverdue(topic)
+  return (
+    <Link
+      to={`/learning/topic/${topic.id}`}
+      draggable
+      onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('topic_id', topic.id); e.dataTransfer.setData('from_stage', topic.stage); onDragStart && onDragStart() }}
+      onClick={e => e.stopPropagation()}
+      className="group block rounded-xl p-3.5 cursor-grab active:cursor-grabbing transition-all duration-150 select-none"
+      style={{ backgroundColor: '#252525', border: '1px solid rgba(255,255,255,0.07)', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }}
+    >
+      <p className="text-[13px] font-semibold leading-snug text-[#d4cfc7] group-hover:text-white line-clamp-2 mb-2.5">
+        {topic.title}
+      </p>
+      {topic.assignee_name && (
+        <div className="flex items-center gap-1.5 mb-2">
+          <svg className="w-3 h-3 text-[#8a8680] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          <span className="text-[11px] text-[#8a8680] truncate">{topic.assignee_name}</span>
+        </div>
+      )}
+      <div className="flex items-center justify-between pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        {topic.comment_count > 0 ? (
+          <span className="text-[11px] text-[#8a8680]">💬 {topic.comment_count}</span>
+        ) : <span />}
+        {topic.due_date ? (
+          <span className="text-[11px] font-medium" style={{ color: overdue ? '#f87171' : '#6b7280' }}>
+            {formatDate(topic.due_date)}{overdue && ' ⚠'}
+          </span>
+        ) : <span className="text-[11px] text-[#8a8680]/30">No deadline</span>}
+      </div>
+    </Link>
+  )
+}
+
+function AdminKanbanColumn({ stage, color, topics, onDrop }) {
+  const [dragOver, setDragOver] = useState(false)
+  return (
+    <div
+      className="flex-shrink-0 w-60 flex flex-col rounded-2xl"
+      style={{
+        backgroundColor: '#1a1a1a',
+        border: dragOver ? `1.5px dashed ${color}70` : '1.5px solid rgba(255,255,255,0.05)',
+        boxShadow: dragOver ? `0 0 0 3px ${color}15` : 'none',
+        transition: 'all 0.15s',
+      }}
+      onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={e => { setDragOver(false); onDrop(e, stage) }}
+    >
+      <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+          <span className="text-[13px] font-semibold" style={{ color }}>{stage}</span>
+        </div>
+        <span className="text-xs font-semibold text-[#8a8680] bg-white/6 rounded-full px-2 py-0.5 min-w-[22px] text-center">{topics.length}</span>
+      </div>
+      <div className="flex-1 p-3 space-y-2 min-h-[100px] rounded-b-2xl" style={{ backgroundColor: dragOver ? `${color}06` : 'transparent' }}>
+        {topics.map(t => <AdminTopicCard key={t.id} topic={t} />)}
+        {topics.length === 0 && (
+          <div className="flex items-center justify-center h-14 rounded-xl" style={{ border: '1px dashed rgba(255,255,255,0.06)' }}>
+            <p className="text-[11px] text-[#8a8680]/50">Drop here</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AdminNewTopicModal({ users, onCreated, onClose }) {
+  const [form, setForm] = useState({ title: '', description: '', due_date: '', assignee_id: '' })
+  const [saving, setSaving] = useState(false)
+  const inp = 'w-full bg-[#1b1b1b] border border-white/10 rounded-lg px-3 py-2 text-sm text-[#c5c1b9] outline-none focus:border-[#575ECF] placeholder-[#8a8680]'
+  const userOpts = users.map(u => ({ value: u.id, label: u.name }))
+
+  async function submit() {
+    if (!form.title.trim()) return toast.error('Title required')
+    if (!form.assignee_id) return toast.error('Select an assignee')
+    setSaving(true)
+    try {
+      await api.post('/lms/topics', {
+        title: form.title.trim(),
+        description: form.description,
+        assignee_id: form.assignee_id,
+        due_date: form.due_date || null,
+      })
+      toast.success('Topic created!')
+      onCreated()
+      onClose()
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error creating topic')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-[#242424] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <h3 className="text-lg font-bold text-[#c5c1b9] mb-4">New Topic</h3>
+        <div className="space-y-3">
+          <input className={inp} placeholder="Topic title *" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} autoFocus />
+          <textarea className={inp + ' resize-none h-20'} placeholder="Description (optional)" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          <div>
+            <p className="text-xs text-[#8a8680] mb-1">Assign to *</p>
+            <Select
+              options={userOpts}
+              onChange={opt => setForm(f => ({ ...f, assignee_id: opt?.value || '' }))}
+              placeholder="Select team member…"
+              styles={selectStyles}
+            />
+          </div>
+          <div>
+            <p className="text-xs text-[#8a8680] mb-1">Due Date (optional)</p>
+            <input className={inp} type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={submit} disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#575ECF' }}>
+              {saving ? 'Creating…' : 'Create Topic'}
+            </button>
+            <button onClick={onClose} className="px-4 py-2.5 rounded-lg text-sm text-[#8a8680] bg-white/8">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TopicsSection() {
+  const [users, setUsers] = useState([])
+  const [selectedUser, setSelectedUser] = useState(null) // null = All
+  const [topics, setTopics] = useState([])
+  const [stages, setStages] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showNewTopic, setShowNewTopic] = useState(false)
+
+  useEffect(() => {
+    Promise.all([api.get('/lms/users'), api.get('/lms/stages')])
+      .then(([u, s]) => {
+        setUsers(u.data.filter(x => x.active))
+        setStages(s.data.filter(x => x.active))
+      })
+  }, [])
+
+  useEffect(() => { fetchTopics() }, [selectedUser]) // eslint-disable-line
+
+  async function fetchTopics() {
+    setLoading(true)
+    try {
+      const url = selectedUser ? `/lms/topics?assignee_id=${selectedUser}` : '/lms/topics'
+      const { data } = await api.get(url)
+      setTopics(data)
+    } catch { toast.error('Failed to load topics') }
+    setLoading(false)
+  }
+
+  const stageList = stages.length > 0 ? stages : Object.keys(STAGE_COLORS).map(name => ({ name, color: STAGE_COLORS[name] }))
+
+  function getColor(name) {
+    const found = stages.find(s => s.name === name)
+    return found?.color || STAGE_COLORS[name] || '#8a8680'
+  }
+
+  async function handleDrop(e, targetStage) {
+    const topicId = e.dataTransfer.getData('topic_id')
+    if (!topicId) return
+    try {
+      await api.patch(`/lms/topics/${topicId}/stage`, { new_stage: targetStage, role: 'admin' })
+      setTopics(prev => prev.map(t => String(t.id) === String(topicId) ? { ...t, stage: targetStage } : t))
+      toast.success(`Moved to ${targetStage}`)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error moving topic')
+    }
+  }
+
+  const userOptions = [
+    { value: null, label: 'All Users' },
+    ...users.map(u => ({ value: u.id, label: u.name })),
+  ]
+
+  const selectedOpt = userOptions.find(o => o.value === selectedUser) || userOptions[0]
+  const topicCount = topics.length
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
+        <div>
+          <h2 className="text-lg font-semibold text-[#c5c1b9]">Learning Topics</h2>
+          <p className="text-xs text-[#8a8680] mt-0.5">{topicCount} topic{topicCount !== 1 ? 's' : ''}{selectedUser ? ` for ${selectedOpt?.label}` : ' across all users'}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* User filter dropdown */}
+          <div style={{ width: 200 }}>
+            <Select
+              options={userOptions}
+              value={selectedOpt}
+              onChange={opt => setSelectedUser(opt?.value ?? null)}
+              styles={{
+                ...selectStyles,
+                control: (b, s) => ({ ...selectStyles.control(b, s), minHeight: '36px' }),
+              }}
+              isSearchable={false}
+            />
+          </div>
+          <button
+            onClick={() => setShowNewTopic(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white"
+            style={{ backgroundColor: '#575ECF' }}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+            New Topic
+          </button>
+        </div>
+      </div>
+
+      {/* Kanban */}
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <svg className="w-6 h-6 animate-spin text-[#575ECF]" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        </div>
+      ) : (
+        <div className="overflow-x-auto pb-4 -mx-4 px-4">
+          <div className="flex gap-3 min-w-max">
+            {stageList.map(s => (
+              <AdminKanbanColumn
+                key={s.name}
+                stage={s.name}
+                color={getColor(s.name)}
+                topics={topics.filter(t => t.stage === s.name)}
+                onDrop={handleDrop}
+              />
+            ))}
+          </div>
+          {topics.length === 0 && !loading && (
+            <div className="text-center py-16">
+              <p className="text-[#8a8680] text-sm">No topics found{selectedUser ? ' for this user' : ''}.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showNewTopic && (
+        <AdminNewTopicModal
+          users={users}
+          onCreated={fetchTopics}
+          onClose={() => setShowNewTopic(false)}
+        />
+      )}
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LmsAdmin() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('users')
+  const [activeTab, setActiveTab] = useState('topics')
 
   useEffect(() => {
     const role = localStorage.getItem('lms_user_role')
@@ -521,6 +794,7 @@ export default function LmsAdmin() {
   }, [])
 
   const tabs = [
+    { id: 'topics', label: 'Topics' },
     { id: 'users', label: 'Users' },
     { id: 'templates', label: 'Template Library' },
     { id: 'stages', label: 'Pipeline Stages' },
@@ -528,7 +802,7 @@ export default function LmsAdmin() {
 
   return (
     <div className="min-h-screen bg-[#1b1b1b]">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-[#c5c1b9]">LMS Admin Panel</h1>
           <button onClick={() => navigate('/learning')} className="text-sm text-[#8a8680] hover:text-[#c5c1b9]">
@@ -553,6 +827,7 @@ export default function LmsAdmin() {
           ))}
         </div>
 
+        {activeTab === 'topics' && <TopicsSection />}
         {activeTab === 'users' && <UsersSection />}
         {activeTab === 'templates' && <TemplatesSection />}
         {activeTab === 'stages' && <PipelineStagesSection />}
