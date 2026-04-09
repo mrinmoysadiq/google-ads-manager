@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { getUser, logout, isAdmin } from '../utils/auth'
+import { getUser, logout, decodeToken } from '../utils/auth'
 import Avatar from './Avatar'
 import infinixLogo from '../assets/infinix-logo.svg'
 
@@ -21,23 +21,33 @@ export default function Navbar() {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
-  // Always fetch fresh user data from API on mount so role/name/photo are correct
-  // Also listen for profile-updated events (dispatched after profile save)
+  // Always fetch fresh user data from API on mount so role/name/photo are correct.
+  // If the API returns garbage (HTML page instead of JSON), fall back to localStorage
+  // then to the decoded JWT token so the admin role is still detected correctly.
   useEffect(() => {
     const token = localStorage.getItem('app_token')
     if (!token) return
+
+    // Seed the initial state from the token payload immediately (covers the "blank" flash)
+    if (!user) {
+      const decoded = decodeToken()
+      if (decoded) setUser(prev => prev || { username: decoded.username, role: decoded.role, name: '' })
+    }
+
     axios.get('/api/auth/me')
       .then(({ data }) => {
-        localStorage.setItem('app_user', JSON.stringify(data))
-        setUser(data)
+        // Validate it's a real user object, not an HTML page
+        if (data && typeof data === 'object' && data.id) {
+          localStorage.setItem('app_user', JSON.stringify(data))
+          setUser(data)
+        }
       })
-      .catch(() => {
-        // API unavailable — keep whatever localStorage has; don't force logout
-      })
+      .catch(() => { /* keep whatever is in state */ })
+
     const refresh = () => setUser(getUser())
     window.addEventListener('profile-updated', refresh)
     return () => window.removeEventListener('profile-updated', refresh)
-  }, [])
+  }, []) // eslint-disable-line
 
   useEffect(() => {
     function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }

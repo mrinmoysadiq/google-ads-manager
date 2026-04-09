@@ -1,4 +1,14 @@
 export function getToken() { return localStorage.getItem('app_token'); }
+
+// Decode JWT payload without verification — gives id, username, role without an API call
+export function decodeToken() {
+  try {
+    const token = getToken();
+    if (!token) return null;
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload || null;
+  } catch { return null; }
+}
 export function getUser() {
   try {
     const u = localStorage.getItem('app_user');
