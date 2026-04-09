@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import infinixLogo from '../assets/infinix-logo.svg'
+import { getUser, isAdmin } from '../utils/auth'
 
 // ── Infinix brand logo (large hero version) ───────────────────────────────────
 function InfinixLogoLarge() {
@@ -87,8 +88,49 @@ function ModuleCard({ href, icon, title, description, accentColor, accentAlpha, 
   )
 }
 
+// ── Utility card (smaller, for Profile / Admin Panel) ──────────────────────────
+function UtilCard({ href, icon, title, description, accentColor, accentAlpha }) {
+  return (
+    <Link
+      to={href}
+      className="group flex items-center gap-4 rounded-2xl px-6 py-4 transition-all duration-200"
+      style={{
+        backgroundColor: '#242424',
+        border: '1px solid rgba(255,255,255,0.08)',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = accentAlpha
+        e.currentTarget.style.boxShadow = `0 0 30px ${accentAlpha}`
+        e.currentTarget.style.transform = 'translateY(-2px)'
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
+        e.currentTarget.style.boxShadow = 'none'
+        e.currentTarget.style.transform = 'translateY(0)'
+      }}
+    >
+      <div
+        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+        style={{ backgroundColor: `${accentColor}18`, border: `1px solid ${accentColor}30` }}
+      >
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold text-[#c5c1b9] group-hover:text-white transition-colors">{title}</div>
+        <div className="text-xs text-[#8a8680] mt-0.5">{description}</div>
+      </div>
+      <svg className="w-4 h-4 flex-shrink-0 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke={accentColor} strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+      </svg>
+    </Link>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ModuleHome() {
+  const user = getUser()
+  const admin = isAdmin()
+
   return (
     <div className="min-h-[calc(100vh-64px)] bg-[#1b1b1b] flex flex-col items-center justify-center px-4 py-16">
 
@@ -170,8 +212,41 @@ export default function ModuleHome() {
         />
       </div>
 
+      {/* Account & Admin shortcuts */}
+      <div className="w-full max-w-5xl mt-10">
+        <p className="text-xs font-semibold text-[#8a8680]/60 uppercase tracking-widest mb-3 px-1">Account</p>
+        <div className={`grid gap-3 ${admin ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-1 max-w-sm'}`}>
+          <UtilCard
+            href="/profile"
+            accentColor="#575ECF"
+            accentAlpha="rgba(87,94,207,0.25)"
+            title={user?.name ? `My Profile — ${user.name}` : 'My Profile'}
+            description={user?.designation || 'View and manage your account'}
+            icon={
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#575ECF" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            }
+          />
+          {admin && (
+            <UtilCard
+              href="/admin-panel"
+              accentColor="#f59e0b"
+              accentAlpha="rgba(245,158,11,0.25)"
+              title="Admin Panel"
+              description="Add, edit, or remove user accounts"
+              icon={
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              }
+            />
+          )}
+        </div>
+      </div>
+
       {/* Footer note */}
-      <p className="mt-14 text-xs text-[#8a8680]/50 tracking-wide">
+      <p className="mt-10 text-xs text-[#8a8680]/50 tracking-wide">
         More modules coming soon
       </p>
     </div>
