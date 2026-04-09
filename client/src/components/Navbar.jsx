@@ -59,6 +59,7 @@ export default function Navbar() {
   const isLearning = path.startsWith('/learning')
   const isOutreach = path.startsWith('/outreach')
   const isFacebook = path.startsWith('/facebook')
+  const isTracking = path.startsWith('/tracking')
 
   const navLink = (to, label, activeColor = '#575ECF') => (
     <Link
@@ -88,8 +89,9 @@ export default function Navbar() {
             {isLearning && navLink('/learning/admin', 'Admin')}
             {isOutreach && navLink('/outreach/admin', 'Admin', '#e05d0a')}
             {isFacebook && navLink('/facebook/admin', 'Admin', '#1877f2')}
+            {isTracking && navLink('/tracking/admin', 'Admin', '#65db38')}
 
-            {(isAudit || isLearning || isOutreach || isFacebook) && (
+            {(isAudit || isLearning || isOutreach || isFacebook || isTracking) && (
               <Link
                 to="/"
                 className="ml-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#8a8680] hover:text-[#c5c1b9] transition-colors"

@@ -474,6 +474,22 @@ function initializeDatabase() {
     db.prepare('INSERT INTO app_users (name, username, password_hash, designation, role) VALUES (?, ?, ?, ?, ?)').run('Admin', 'admin', hash, 'Super Admin', 'admin');
     console.log('Seeded super-admin: admin / admin123');
   }
+
+  // ── Tracking Audit clients ───────────────────────────────────────────────
+  db.prepare(`CREATE TABLE IF NOT EXISTS tracking_clients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    website TEXT,
+    active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`).run();
+
+  const trackingClientCount = db.prepare('SELECT COUNT(*) as cnt FROM tracking_clients').get();
+  if (trackingClientCount.cnt === 0) {
+    const insertTrackingClient = db.prepare('INSERT INTO tracking_clients (name) VALUES (?)');
+    ['Client Alpha', 'Client Beta'].forEach(n => insertTrackingClient.run(n));
+    console.log('Seeded tracking_clients');
+  }
 }
 
 module.exports = { db, initializeDatabase };

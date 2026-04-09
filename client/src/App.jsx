@@ -22,6 +22,17 @@ import FbAdmin from './pages/facebook/FbAdmin'
 import Login from './pages/auth/Login'
 import Profile from './pages/auth/Profile'
 import AppAdminPanel from './pages/auth/AppAdminPanel'
+import TrackingHome from './pages/tracking/TrackingHome'
+import TrackingAdmin from './pages/tracking/TrackingAdmin'
+import GoogleAdsTrackingStart from './pages/tracking/googleAds/GoogleAdsTrackingStart'
+import GoogleAdsTrackingChecklist from './pages/tracking/googleAds/GoogleAdsTrackingChecklist'
+import GoogleAdsTrackingComplete from './pages/tracking/googleAds/GoogleAdsTrackingComplete'
+import MetaAuditStart from './pages/tracking/meta/MetaAuditStart'
+import MetaAuditChecklist from './pages/tracking/meta/MetaAuditChecklist'
+import MetaAuditComplete from './pages/tracking/meta/MetaAuditComplete'
+import GA4AuditStart from './pages/tracking/ga4/GA4AuditStart'
+import GA4AuditChecklist from './pages/tracking/ga4/GA4AuditChecklist'
+import GA4AuditComplete from './pages/tracking/ga4/GA4AuditComplete'
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
@@ -103,6 +114,19 @@ export default function App() {
           <Route path="/facebook/checklist" element={<ProtectedRoute><FbChecklist /></ProtectedRoute>} />
           <Route path="/facebook/complete" element={<ProtectedRoute><FbComplete /></ProtectedRoute>} />
           <Route path="/facebook/admin" element={<ProtectedRoute><FbAdmin /></ProtectedRoute>} />
+
+          {/* ── Tracking Audit module ─────────────────────────────────── */}
+          <Route path="/tracking" element={<ProtectedRoute><TrackingHome /></ProtectedRoute>} />
+          <Route path="/tracking/admin" element={<ProtectedRoute><TrackingAdmin /></ProtectedRoute>} />
+          <Route path="/tracking/google-ads" element={<ProtectedRoute><GoogleAdsTrackingStart /></ProtectedRoute>} />
+          <Route path="/tracking/google-ads/checklist" element={<ProtectedRoute><GoogleAdsTrackingChecklist /></ProtectedRoute>} />
+          <Route path="/tracking/google-ads/complete" element={<ProtectedRoute><GoogleAdsTrackingComplete /></ProtectedRoute>} />
+          <Route path="/tracking/meta" element={<ProtectedRoute><MetaAuditStart /></ProtectedRoute>} />
+          <Route path="/tracking/meta/checklist" element={<ProtectedRoute><MetaAuditChecklist /></ProtectedRoute>} />
+          <Route path="/tracking/meta/complete" element={<ProtectedRoute><MetaAuditComplete /></ProtectedRoute>} />
+          <Route path="/tracking/ga4" element={<ProtectedRoute><GA4AuditStart /></ProtectedRoute>} />
+          <Route path="/tracking/ga4/checklist" element={<ProtectedRoute><GA4AuditChecklist /></ProtectedRoute>} />
+          <Route path="/tracking/ga4/complete" element={<ProtectedRoute><GA4AuditComplete /></ProtectedRoute>} />
 
           {/* ── Auth pages ─────────────────────────────────────────────── */}
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
