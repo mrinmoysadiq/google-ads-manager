@@ -1,55 +1,67 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import api from '../../utils/lmsApi'
-import Select from 'react-select'
-
-const selectStyles = {
-  control: (b, s) => ({
-    ...b,
-    backgroundColor: '#1b1b1b',
-    borderColor: s.isFocused ? '#575ECF' : 'rgba(255,255,255,0.12)',
-    borderRadius: '10px',
-    boxShadow: 'none',
-    padding: '4px 2px',
-    fontSize: '15px',
-    '&:hover': { borderColor: '#575ECF' },
-  }),
-  menu: b => ({ ...b, backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden' }),
-  option: (b, s) => ({ ...b, backgroundColor: s.isSelected ? '#575ECF' : s.isFocused ? 'rgba(87,94,207,0.15)' : 'transparent', color: '#c5c1b9', cursor: 'pointer' }),
-  singleValue: b => ({ ...b, color: '#c5c1b9' }),
-  input: b => ({ ...b, color: '#c5c1b9' }),
-  placeholder: b => ({ ...b, color: '#8a8680' }),
-}
+import { getUser } from '../../utils/auth'
 
 export default function LmsStart() {
   const navigate = useNavigate()
-  const [users, setUsers] = useState([])
-  const [selected, setSelected] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState('loading') // 'loading' | 'not_found'
 
   useEffect(() => {
-    api.get('/lms/users').then(({ data }) => setUsers(data))
+    const appUser = getUser()
+
+    api.get('/lms/users').then(({ data: lmsUsers }) => {
+      if (!appUser) {
+        // No logged-in user — redirect to login
+        navigate('/login', { replace: true })
+        return
+      }
+
+      // Try to find the LMS user by name match
+      const match = lmsUsers.find(u => u.name.toLowerCase() === appUser.name.toLowerCase())
+
+      if (appUser.role === 'admin' && !match) {
+        // App admin but not in lms_users — go to lms admin panel
+        localStorage.setItem('lms_user_role', 'admin')
+        localStorage.setItem('lms_user_name', appUser.name)
+        navigate('/learning/admin', { replace: true })
+        return
+      }
+
+      if (!match) {
+        setStatus('not_found')
+        return
+      }
+
+      // Found in lms_users
+      localStorage.setItem('lms_user_id', match.id)
+      localStorage.setItem('lms_user_role', match.role)
+      localStorage.setItem('lms_user_name', match.name)
+
+      if (match.role === 'employee') navigate(`/learning/employee/${match.id}`, { replace: true })
+      else if (match.role === 'manager') navigate('/learning/manager', { replace: true })
+      else navigate('/learning/admin', { replace: true })
+    }).catch(() => {
+      setStatus('not_found')
+    })
   }, [])
 
-  const options = users.map(u => ({ value: u.id, label: u.name, role: u.role }))
-
-  async function handleContinue() {
-    if (!selected) return
-    setLoading(true)
-    localStorage.setItem('lms_user_id', selected.value)
-    localStorage.setItem('lms_user_role', selected.role)
-    localStorage.setItem('lms_user_name', selected.label)
-
-    if (selected.role === 'employee') navigate(`/learning/employee/${selected.value}`)
-    else if (selected.role === 'manager') navigate('/learning/manager')
-    else navigate('/learning/admin')
-    setLoading(false)
+  if (status === 'loading') {
+    return (
+      <div className="min-h-[calc(100vh-64px)] bg-[#1b1b1b] flex items-center justify-center">
+        <svg className="w-8 h-8 animate-spin text-[#575ECF]" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      </div>
+    )
   }
 
+  // not_found state
+  const appUser = getUser()
   return (
     <div className="min-h-[calc(100vh-64px)] bg-[#1b1b1b] flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        {/* Icon */}
+      <div className="w-full max-w-md text-center">
         <div className="flex justify-center mb-6">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#575ECF18', border: '1px solid #575ECF30' }}>
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="#575ECF" strokeWidth={1.8}>
@@ -57,45 +69,19 @@ export default function LmsStart() {
             </svg>
           </div>
         </div>
-
-        {/* Heading */}
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-[#c5c1b9] mb-2">Learning & Training</h1>
-          <p className="text-[#8a8680] text-sm">Select your name to continue</p>
-        </div>
-
-        {/* Card */}
-        <div className="bg-[#242424] border border-white/8 rounded-2xl p-6 mb-4">
-          <label className="block text-sm font-medium text-[#8a8680] mb-2">Your Name</label>
-          <Select
-            options={options}
-            value={selected}
-            onChange={setSelected}
-            styles={selectStyles}
-            placeholder="Select your name..."
-            isClearable
-          />
-
-          <button
-            onClick={handleContinue}
-            disabled={!selected || loading}
-            className="mt-5 w-full py-3 rounded-xl text-sm font-semibold transition-all"
-            style={{
-              backgroundColor: selected ? '#575ECF' : 'rgba(87,94,207,0.3)',
-              color: selected ? '#fff' : '#8a8680',
-              cursor: selected ? 'pointer' : 'not-allowed',
-            }}
-          >
-            Continue →
+        <h1 className="text-xl font-bold text-[#c5c1b9] mb-2">Not Set Up Yet</h1>
+        <p className="text-sm text-[#8a8680] mb-1">
+          Your account <span className="text-[#c5c1b9] font-medium">{appUser?.name}</span> is not set up in the Learning Management System.
+        </p>
+        <p className="text-sm text-[#8a8680] mb-8">Please ask an admin to add you as a learner.</p>
+        <div className="flex gap-3 justify-center">
+          <button onClick={() => navigate(-1)} className="px-5 py-2.5 rounded-xl text-sm text-[#8a8680] border border-white/10 hover:text-[#c5c1b9] transition-colors">
+            ← Back
           </button>
-        </div>
-
-        <p className="text-center text-xs text-[#8a8680]">
-          Not listed?{' '}
-          <Link to="/learning/admin" className="text-[#575ECF] hover:text-[#6B72D8]">
+          <Link to="/learning/admin" className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-colors" style={{ backgroundColor: '#575ECF' }}>
             Admin Panel
           </Link>
-        </p>
+        </div>
       </div>
     </div>
   )

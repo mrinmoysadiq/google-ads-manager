@@ -9,6 +9,8 @@ const adminRouter = require('./routes/admin');
 const lmsRouter = require('./routes/lms');
 const outreachRouter = require('./routes/outreach');
 const facebookRouter = require('./routes/facebook');
+const authRouter = require('./routes/auth');
+const appAdminRouter = require('./routes/app-admin');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -33,6 +35,8 @@ app.use('/api/admin', adminRouter);
 app.use('/api/lms', lmsRouter);
 app.use('/api/outreach', outreachRouter);
 app.use('/api/facebook', facebookRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/app-admin', appAdminRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

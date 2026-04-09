@@ -8,6 +8,7 @@ import PipelineTable from './components/PipelineTable'
 import PipelineKanban from './components/PipelineKanban'
 import Dashboard from './components/Dashboard'
 import TouchpointQuickModal from './components/TouchpointQuickModal'
+import { getUser, isAdmin } from '../../utils/auth'
 
 function getTouchpointNumber(status) {
   const m = status && status.match(/^Touchpoint (\d+)$/)
@@ -55,17 +56,30 @@ export default function OutreachHome() {
 
   // Load metadata
   useEffect(() => {
+    const appUser = getUser()
+    const userIsAdmin = isAdmin()
     Promise.all([getSpecialists(), getIndustries(), getPipelineStages(), getSettings()])
       .then(([specs, inds, stgs, settings]) => {
-        setSpecialists(specs.filter(s => s.active))
+        const activeSpecs = specs.filter(s => s.active)
+        setSpecialists(activeSpecs)
         setIndustries(inds)
         setStages(stgs.filter(s => s.active))
         setMaxTouchpoints(parseInt(settings.max_touchpoints) || 5)
-        // Restore selected specialist from localStorage
-        const saved = localStorage.getItem(LS_SPECIALIST_KEY)
-        if (saved) {
-          const found = specs.find(s => String(s.id) === saved)
-          if (found) setSelectedSpecialist(found)
+
+        if (!userIsAdmin && appUser) {
+          // Regular user: auto-select specialist matching their name
+          const match = activeSpecs.find(s => s.name.toLowerCase() === appUser.name.toLowerCase())
+          if (match) {
+            setSelectedSpecialist(match)
+            localStorage.setItem(LS_SPECIALIST_KEY, String(match.id))
+          }
+        } else {
+          // Admin: restore from localStorage or leave as "All"
+          const saved = localStorage.getItem(LS_SPECIALIST_KEY)
+          if (saved) {
+            const found = activeSpecs.find(s => String(s.id) === saved)
+            if (found) setSelectedSpecialist(found)
+          }
         }
       })
       .catch(() => toast.error('Failed to load outreach data'))
@@ -207,7 +221,7 @@ export default function OutreachHome() {
               </button>
             )}
 
-            {/* Specialist selector */}
+            {/* Specialist selector — read-only for non-admins */}
             <div style={{ minWidth: 180 }}>
               <Select
                 options={specialistOptions}
@@ -215,6 +229,7 @@ export default function OutreachHome() {
                 onChange={handleSpecialistChange}
                 styles={selectStyles}
                 isSearchable={false}
+                isDisabled={!isAdmin()}
               />
             </div>
 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
 import { getAccounts, getTeamMembers, createSession } from '../utils/api'
+import { getUser } from '../utils/auth'
 
 const today = () => {
   const d = new Date()
@@ -22,11 +23,25 @@ export default function SessionStart() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
+  const [memberNotFound, setMemberNotFound] = useState(false)
+
   useEffect(() => {
+    const appUser = getUser()
     Promise.all([getAccounts(), getTeamMembers()])
       .then(([accts, members]) => {
+        const activeMembers = members.filter(m => m.active).map(m => ({ value: m.name, label: m.name }))
         setAccounts(accts.filter(a => a.active).map(a => ({ value: a.name, label: a.name })))
-        setTeamMembers(members.filter(m => m.active).map(m => ({ value: m.name, label: m.name })))
+        setTeamMembers(activeMembers)
+        // Pre-fill from logged-in user
+        if (appUser) {
+          const match = activeMembers.find(m => m.label.toLowerCase() === appUser.name.toLowerCase())
+          if (match) {
+            setSelectedMember(match)
+            setMemberNotFound(false)
+          } else {
+            setMemberNotFound(true)
+          }
+        }
         setLoading(false)
       })
       .catch(err => {
@@ -119,8 +134,12 @@ export default function SessionStart() {
                   placeholder="Select team member..."
                   styles={selectStyles}
                   isSearchable
+                  isDisabled
                   classNamePrefix="react-select"
                 />
+                {memberNotFound && (
+                  <p className="mt-1.5 text-xs text-[#f59e0b]">Your account ({getUser()?.name}) was not found in the team members list. Please ask an admin to add you.</p>
+                )}
               </div>
 
               {/* Date */}

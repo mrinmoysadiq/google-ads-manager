@@ -452,6 +452,28 @@ function initializeDatabase() {
     ['FB Account Alpha', 'FB Account Beta'].forEach(n => insertAcct.run(n));
     console.log('Seeded fb_ad_accounts');
   }
+
+  // ── App Users (JWT auth) ─────────────────────────────────────────────────
+  db.prepare(`CREATE TABLE IF NOT EXISTS app_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    designation TEXT,
+    role TEXT NOT NULL DEFAULT 'user',
+    avatar_url TEXT,
+    active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`).run();
+
+  // Seed super-admin
+  const bcryptjs = require('bcryptjs');
+  const userCount = db.prepare('SELECT COUNT(*) as cnt FROM app_users').get();
+  if (userCount.cnt === 0) {
+    const hash = bcryptjs.hashSync('admin123', 10);
+    db.prepare('INSERT INTO app_users (name, username, password_hash, designation, role) VALUES (?, ?, ?, ?, ?)').run('Admin', 'admin', hash, 'Super Admin', 'admin');
+    console.log('Seeded super-admin: admin / admin123');
+  }
 }
 
 module.exports = { db, initializeDatabase };

@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import Navbar from './components/Navbar'
 import ModuleHome from './pages/ModuleHome'
@@ -18,39 +18,66 @@ import FbSessionStart from './pages/facebook/FbSessionStart'
 import FbChecklist from './pages/facebook/FbChecklist'
 import FbComplete from './pages/facebook/FbComplete'
 import FbAdmin from './pages/facebook/FbAdmin'
+import Login from './pages/auth/Login'
+import Profile from './pages/auth/Profile'
+import AppAdminPanel from './pages/auth/AppAdminPanel'
+
+function ProtectedRoute({ children }) {
+  const token = localStorage.getItem('app_token');
+  if (!token) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function AdminRoute({ children }) {
+  const token = localStorage.getItem('app_token');
+  const user = JSON.parse(localStorage.getItem('app_user') || '{}');
+  if (!token) return <Navigate to="/login" replace />;
+  if (user.role !== 'admin') return <Navigate to="/" replace />;
+  return children;
+}
 
 export default function App() {
+  const location = useLocation();
+  const isLogin = location.pathname === '/login';
+
   return (
     <div className="min-h-screen bg-[#1b1b1b]">
-      <Navbar />
+      {!isLogin && <Navbar />}
       <main className="pt-0">
         <Routes>
+          {/* ── Public ────────────────────────────────────────────────── */}
+          <Route path="/login" element={<Login />} />
+
           {/* ── Hub ───────────────────────────────────────────────────── */}
-          <Route path="/" element={<ModuleHome />} />
+          <Route path="/" element={<ProtectedRoute><ModuleHome /></ProtectedRoute>} />
 
           {/* ── Google Ads Audit module ────────────────────────────────── */}
-          <Route path="/audit" element={<SessionStart />} />
-          <Route path="/checklist/:sessionId" element={<ChecklistWrapper />} />
-          <Route path="/complete/:sessionId" element={<SessionComplete />} />
-          <Route path="/changelog" element={<ChangeLog />} />
-          <Route path="/admin" element={<Admin />} />
+          <Route path="/audit" element={<ProtectedRoute><SessionStart /></ProtectedRoute>} />
+          <Route path="/checklist/:sessionId" element={<ProtectedRoute><ChecklistWrapper /></ProtectedRoute>} />
+          <Route path="/complete/:sessionId" element={<ProtectedRoute><SessionComplete /></ProtectedRoute>} />
+          <Route path="/changelog" element={<ProtectedRoute><ChangeLog /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
 
           {/* ── LMS module ─────────────────────────────────────────────── */}
-          <Route path="/learning" element={<LmsStart />} />
-          <Route path="/learning/employee/:userId" element={<LmsEmployee />} />
-          <Route path="/learning/manager" element={<LmsManager />} />
-          <Route path="/learning/admin" element={<LmsAdmin />} />
-          <Route path="/learning/topic/:topicId" element={<LmsTopicDetail />} />
+          <Route path="/learning" element={<ProtectedRoute><LmsStart /></ProtectedRoute>} />
+          <Route path="/learning/employee/:userId" element={<ProtectedRoute><LmsEmployee /></ProtectedRoute>} />
+          <Route path="/learning/manager" element={<ProtectedRoute><LmsManager /></ProtectedRoute>} />
+          <Route path="/learning/admin" element={<ProtectedRoute><LmsAdmin /></ProtectedRoute>} />
+          <Route path="/learning/topic/:topicId" element={<ProtectedRoute><LmsTopicDetail /></ProtectedRoute>} />
 
           {/* ── Outreach CRM module ────────────────────────────────────── */}
-          <Route path="/outreach" element={<OutreachHome />} />
-          <Route path="/outreach/admin" element={<OutreachAdmin />} />
+          <Route path="/outreach" element={<ProtectedRoute><OutreachHome /></ProtectedRoute>} />
+          <Route path="/outreach/admin" element={<ProtectedRoute><OutreachAdmin /></ProtectedRoute>} />
 
           {/* ── Facebook/Meta Ads module ───────────────────────────────── */}
-          <Route path="/facebook" element={<FbSessionStart />} />
-          <Route path="/facebook/checklist" element={<FbChecklist />} />
-          <Route path="/facebook/complete" element={<FbComplete />} />
-          <Route path="/facebook/admin" element={<FbAdmin />} />
+          <Route path="/facebook" element={<ProtectedRoute><FbSessionStart /></ProtectedRoute>} />
+          <Route path="/facebook/checklist" element={<ProtectedRoute><FbChecklist /></ProtectedRoute>} />
+          <Route path="/facebook/complete" element={<ProtectedRoute><FbComplete /></ProtectedRoute>} />
+          <Route path="/facebook/admin" element={<ProtectedRoute><FbAdmin /></ProtectedRoute>} />
+
+          {/* ── Auth pages ─────────────────────────────────────────────── */}
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/admin-panel" element={<AdminRoute><AppAdminPanel /></AdminRoute>} />
         </Routes>
       </main>
       <Toaster
