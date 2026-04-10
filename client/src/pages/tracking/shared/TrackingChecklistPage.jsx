@@ -91,6 +91,7 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
   const noColor = yesIsGood ? noBadColor : noGoodColor
 
   function handleAnswer(ans) {
+    onActivate() // track which card is active so paste routes here
     if (ans === item.answer) return
     const updated = { ...item, answer: ans }
     // Clear opposite section when switching yes/no
@@ -258,22 +259,31 @@ export default function TrackingChecklistPage({
     if (!auditState.specialist) navigate(guardPath, { replace: true })
   }, []) // eslint-disable-line
 
-  // Global paste listener
+  // Global paste listener — routes image to active question, or first answered question on current slide
   useEffect(() => {
     function handlePaste(e) {
-      const items = e.clipboardData?.items
-      if (!items) return
-      for (const it of items) {
+      const clipItems = e.clipboardData?.items
+      if (!clipItems) return
+      for (const it of clipItems) {
         if (it.type.startsWith('image/')) {
           const file = it.getAsFile()
           if (!file) return
           const reader = new FileReader()
           reader.onload = ev => {
-            if (activeIdx === null) return
-            const item = auditState.items[activeIdx]
-            const good = item.answer ? isGoodAnswer(activeIdx, item.answer, auditType) : null
-            if (good === true) auditState.items[activeIdx] = { ...item, verifyImage: ev.target.result }
-            else if (good === false) auditState.items[activeIdx] = { ...item, issueImage: ev.target.result }
+            // Determine target: prefer activeIdx, fall back to first answered question on current slide
+            const slideIdxs = questions.reduce((acc, q, i) => {
+              if (q.slide === auditState.currentSlide + 1) acc.push(i)
+              return acc
+            }, [])
+            const targetIdx = (activeIdx !== null && slideIdxs.includes(activeIdx))
+              ? activeIdx
+              : slideIdxs.find(i => auditState.items[i]?.answer && auditState.items[i].answer !== 'na') ?? null
+            if (targetIdx === null) return
+            const target = auditState.items[targetIdx]
+            if (!target?.answer || target.answer === 'na') return
+            const good = isGoodAnswer(targetIdx, target.answer, auditType)
+            if (good) auditState.items[targetIdx] = { ...target, verifyImage: ev.target.result }
+            else auditState.items[targetIdx] = { ...target, issueImage: ev.target.result }
             refresh()
           }
           reader.readAsDataURL(file)
@@ -283,7 +293,7 @@ export default function TrackingChecklistPage({
     }
     document.addEventListener('paste', handlePaste)
     return () => document.removeEventListener('paste', handlePaste)
-  }, [activeIdx, auditType, auditState, refresh])
+  }, [activeIdx, auditType, auditState, questions, refresh])
 
   const slide = auditState.currentSlide
   const slideQuestions = questions.filter(q => q.slide === slide + 1)
