@@ -11,7 +11,6 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
 
 const RESOLUTION_OPTIONS = ['Fixed', 'In Progress', 'Needs Client Action', 'Escalated']
 
@@ -38,6 +37,26 @@ function isComplete(idx, item, auditType) {
   return !!(item.issueText.trim() || item.issueImage)
 }
 
+// Read an image file/blob and call callback with the data URL
+function readImageFromClipboard(clipboardItems, callback) {
+  if (!clipboardItems) return false
+  for (const it of clipboardItems) {
+    if (it.type.startsWith('image/')) {
+      const file = it.getAsFile()
+      if (!file) continue
+      const reader = new FileReader()
+      reader.onload = e => callback(e.target.result)
+      reader.readAsDataURL(file)
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * ScreenshotUpload — handles its own paste events when the label is focused.
+ * Paste intercepted here does NOT propagate to the global handler.
+ */
 function ScreenshotUpload({ label, image, onChange }) {
   const handleFile = (file) => {
     if (!file || !file.type.startsWith('image/')) return
@@ -46,8 +65,17 @@ function ScreenshotUpload({ label, image, onChange }) {
     reader.readAsDataURL(file)
   }
 
+  // Intercept paste events bubbling up from inside this zone (e.g. when label is focused)
+  function handleZonePaste(e) {
+    const handled = readImageFromClipboard(e.clipboardData?.items, onChange)
+    if (handled) {
+      e.preventDefault()
+      e.stopPropagation() // block global handler from also firing
+    }
+  }
+
   return (
-    <div className="mt-3">
+    <div className="mt-3" onPaste={handleZonePaste}>
       <p className="text-xs font-medium mb-1.5" style={{ color: '#8a8680' }}>{label}</p>
       {image ? (
         <div className="relative inline-block">
@@ -61,7 +89,8 @@ function ScreenshotUpload({ label, image, onChange }) {
         </div>
       ) : (
         <label
-          className="flex flex-col items-center justify-center gap-1.5 rounded-xl cursor-pointer transition-colors"
+          tabIndex={0}
+          className="flex flex-col items-center justify-center gap-1.5 rounded-xl cursor-pointer transition-colors outline-none"
           style={{ border: '1.5px dashed rgba(255,255,255,0.12)', padding: '20px', backgroundColor: 'rgba(255,255,255,0.02)' }}
           onDragOver={e => e.preventDefault()}
           onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]) }}
@@ -81,31 +110,36 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
   const complete = isComplete(idx, item, auditType)
   const hasAnswer = !!item.answer
 
-  // Determine button appearance
   const yesIsGood = question.yesIsGood !== false
-  // yes button
-  const yesGoodColor = '#22c55e'
-  const yesBadColor = '#ef4444'
-  const yesColor = yesIsGood ? yesGoodColor : yesBadColor
-  // no button
-  const noGoodColor = '#22c55e'
-  const noBadColor = '#ef4444'
-  const noColor = yesIsGood ? noBadColor : noGoodColor
+  const yesColor = yesIsGood ? '#22c55e' : '#ef4444'
+  const noColor  = yesIsGood ? '#ef4444' : '#22c55e'
 
   function handleAnswer(ans) {
-    onActivate() // track which card is active so paste routes here
+    onActivate() // track for global paste fallback
     if (ans === item.answer) return
     const updated = { ...item, answer: ans }
-    // Clear opposite section when switching yes/no
     if (ans === 'yes') { updated.issueText = ''; updated.issueImage = null; updated.resolution = '' }
-    if (ans === 'no') { updated.verifyText = ''; updated.verifyImage = null }
-    if (ans === 'na') { updated.verifyText = ''; updated.verifyImage = null; updated.issueText = ''; updated.issueImage = null; updated.resolution = '' }
-    // EMQ score persists regardless
+    if (ans === 'no')  { updated.verifyText = ''; updated.verifyImage = null }
+    if (ans === 'na')  { updated.verifyText = ''; updated.verifyImage = null; updated.issueText = ''; updated.issueImage = null; updated.resolution = '' }
     onChange(updated)
   }
 
-  const btnBase = 'flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-all'
+  // Intercept image pastes in the textarea and route to the correct image slot
+  function makeTextareaPasteHandler(imageKey) {
+    return function(e) {
+      const handled = readImageFromClipboard(
+        e.clipboardData?.items,
+        (img) => onChange({ ...item, [imageKey]: img })
+      )
+      if (handled) {
+        e.preventDefault()
+        e.stopPropagation() // block global handler
+      }
+      // text paste falls through normally
+    }
+  }
 
+  const btnBase = 'flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-all'
   function btnStyle(color, selected) {
     if (selected) return { backgroundColor: color, borderColor: color, color: '#fff' }
     return { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.12)', color: '#8a8680' }
@@ -125,16 +159,8 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
 
       {/* Answer buttons */}
       <div className="flex gap-2 mb-3" onClick={e => e.stopPropagation()}>
-        <button
-          className={btnBase}
-          style={btnStyle(yesColor, item.answer === 'yes')}
-          onClick={() => handleAnswer('yes')}
-        >Yes</button>
-        <button
-          className={btnBase}
-          style={btnStyle(noColor, item.answer === 'no')}
-          onClick={() => handleAnswer('no')}
-        >No</button>
+        <button className={btnBase} style={btnStyle(yesColor, item.answer === 'yes')} onClick={() => handleAnswer('yes')}>Yes</button>
+        <button className={btnBase} style={btnStyle(noColor,  item.answer === 'no')}  onClick={() => handleAnswer('no')}>No</button>
         {question.hasNA && (
           <button
             className={btnBase}
@@ -177,8 +203,9 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
                 placeholder={question.verifyPrompt}
                 value={item.verifyText}
                 onChange={e => onChange({ ...item, verifyText: e.target.value })}
-                onFocus={e => e.target.style.borderColor = '#22c55e'}
+                onFocus={e => { onActivate(); e.target.style.borderColor = '#22c55e' }}
                 onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'}
+                onPaste={makeTextareaPasteHandler('verifyImage')}
               />
               <ScreenshotUpload
                 label={question.screenshotLabel}
@@ -196,8 +223,9 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
                 placeholder={question.issuePrompt}
                 value={item.issueText}
                 onChange={e => onChange({ ...item, issueText: e.target.value })}
-                onFocus={e => e.target.style.borderColor = '#f59e0b'}
+                onFocus={e => { onActivate(); e.target.style.borderColor = '#f59e0b' }}
                 onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'}
+                onPaste={makeTextareaPasteHandler('issueImage')}
               />
               <ScreenshotUpload
                 label={question.screenshotLabel}
@@ -261,38 +289,54 @@ export default function TrackingChecklistPage({
     if (!auditState.specialist) navigate(guardPath, { replace: true })
   }, []) // eslint-disable-line
 
-  // Global paste listener — routes image to active question, or first answered question on current slide
+  // Global paste listener — FALLBACK ONLY.
+  // Per-element paste handlers (textareas, upload zones) call stopPropagation so
+  // they never reach here. This only fires when the user presses Ctrl+V/Cmd+V
+  // while no specific input element is focused.
   useEffect(() => {
     function handlePaste(e) {
       const clipItems = e.clipboardData?.items
       if (!clipItems) return
+
+      // Only handle images
+      let imageItem = null
       for (const it of clipItems) {
-        if (it.type.startsWith('image/')) {
-          const file = it.getAsFile()
-          if (!file) return
-          const reader = new FileReader()
-          reader.onload = ev => {
-            // Determine target: prefer activeIdx, fall back to first answered question on current slide
-            const slideIdxs = questions.reduce((acc, q, i) => {
-              if (q.slide === auditState.currentSlide + 1) acc.push(i)
-              return acc
-            }, [])
-            const targetIdx = (activeIdx !== null && slideIdxs.includes(activeIdx))
-              ? activeIdx
-              : slideIdxs.find(i => auditState.items[i]?.answer && auditState.items[i].answer !== 'na') ?? null
-            if (targetIdx === null) return
-            const target = auditState.items[targetIdx]
-            if (!target?.answer || target.answer === 'na') return
-            const good = isGoodAnswer(targetIdx, target.answer, auditType)
-            if (good) auditState.items[targetIdx] = { ...target, verifyImage: ev.target.result }
-            else auditState.items[targetIdx] = { ...target, issueImage: ev.target.result }
-            refresh()
-          }
-          reader.readAsDataURL(file)
-          break
-        }
+        if (it.type.startsWith('image/')) { imageItem = it; break }
       }
+      if (!imageItem) return
+
+      const file = imageItem.getAsFile()
+      if (!file) return
+
+      // Determine target: activeIdx on current slide, or first answered question
+      const slideIdxs = questions.reduce((acc, q, i) => {
+        if (q.slide === auditState.currentSlide + 1) acc.push(i)
+        return acc
+      }, [])
+
+      const targetIdx = (activeIdx !== null && slideIdxs.includes(activeIdx))
+        ? activeIdx
+        : slideIdxs.find(i => {
+            const ans = auditState.items[i]?.answer
+            return ans && ans !== 'na'
+          }) ?? null
+
+      if (targetIdx === null) return
+
+      const target = auditState.items[targetIdx]
+      if (!target?.answer || target.answer === 'na') return
+
+      const reader = new FileReader()
+      reader.onload = ev => {
+        const good = isGoodAnswer(targetIdx, target.answer, auditType)
+        const fresh = auditState.items[targetIdx]
+        if (good) auditState.items[targetIdx] = { ...fresh, verifyImage: ev.target.result }
+        else      auditState.items[targetIdx] = { ...fresh, issueImage: ev.target.result }
+        refresh()
+      }
+      reader.readAsDataURL(file)
     }
+
     document.addEventListener('paste', handlePaste)
     return () => document.removeEventListener('paste', handlePaste)
   }, [activeIdx, auditType, auditState, questions, refresh])
@@ -330,7 +374,6 @@ export default function TrackingChecklistPage({
 
   const totalAnswered = questions.filter((_, i) => auditState.items[i]?.answer).length
   const progress = Math.round((totalAnswered / questions.length) * 100)
-
   const slideTitle = slideQuestions[0]?.slideTitle || `Slide ${slide + 1}`
 
   return (
