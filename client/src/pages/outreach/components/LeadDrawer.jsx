@@ -1316,6 +1316,24 @@ export default function LeadDrawer({
                   <div style={{ display: activeTab === 'details' ? 'block' : 'none' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
+                      {/* Company Name — full width */}
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Company Name <SavedIndicator show={saved.company_name} />
+                        </label>
+                        <input
+                          key={lead.company_name}
+                          type="text"
+                          className={inputClass}
+                          defaultValue={lead.company_name || ''}
+                          onBlur={e => {
+                            const v = e.target.value.trim()
+                            if (v && v !== lead.company_name) saveField('company_name', v)
+                          }}
+                          placeholder="—"
+                        />
+                      </div>
+
                       {/* Contact Name */}
                       <div>
                         <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
