@@ -31,9 +31,11 @@ function isComplete(idx, item, auditType) {
   }
 
   if (isGoodAnswer(idx, item.answer, auditType)) {
+    // Yes answer: need verification text OR screenshot
     return !!(item.verifyText.trim() || item.verifyImage)
   }
-  return !!(item.issueText.trim() || item.issueImage) && !!item.resolution
+  // No answer: need issue text OR screenshot (resolution is optional)
+  return !!(item.issueText.trim() || item.issueImage)
 }
 
 function ScreenshotUpload({ label, image, onChange }) {
@@ -168,7 +170,7 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
           {good ? (
             /* Verification box */
             <div className="rounded-xl p-4 mt-1" style={{ border: '1px solid rgba(34,197,94,0.25)', backgroundColor: 'rgba(34,197,94,0.04)' }}>
-              <p className="text-xs font-bold mb-2" style={{ color: '#22c55e' }}>✓ VERIFICATION *</p>
+              <p className="text-xs font-bold mb-2" style={{ color: '#22c55e' }}>✓ VERIFICATION (text or screenshot required)</p>
               <textarea
                 className="w-full rounded-lg px-3 py-2 text-sm text-[#c5c1b9] outline-none resize-none transition-colors"
                 style={{ backgroundColor: '#1b1b1b', border: '1px solid rgba(255,255,255,0.08)', minHeight: '72px' }}
@@ -187,7 +189,7 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
           ) : (
             /* Issue box */
             <div className="rounded-xl p-4 mt-1" style={{ border: '1px solid rgba(245,158,11,0.25)', backgroundColor: 'rgba(245,158,11,0.04)' }}>
-              <p className="text-xs font-bold mb-2" style={{ color: '#f59e0b' }}>⚠ ISSUE & RESOLUTION *</p>
+              <p className="text-xs font-bold mb-2" style={{ color: '#f59e0b' }}>⚠ ISSUE (text or screenshot required)</p>
               <textarea
                 className="w-full rounded-lg px-3 py-2 text-sm text-[#c5c1b9] outline-none resize-none transition-colors"
                 style={{ backgroundColor: '#1b1b1b', border: '1px solid rgba(255,255,255,0.08)', minHeight: '72px' }}
@@ -204,7 +206,7 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
               />
               {/* Resolution dropdown */}
               <div className="mt-3">
-                <label className="block text-xs font-medium mb-1.5" style={{ color: '#8a8680' }}>Resolution Status *</label>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: '#8a8680' }}>Resolution Status (optional)</label>
                 <div className="flex flex-wrap gap-2">
                   {RESOLUTION_OPTIONS.map(r => (
                     <button
