@@ -868,6 +868,10 @@ export default function LeadDrawer({
       toast.error('Company name is required')
       return
     }
+    if (!createForm.specialist_id) {
+      toast.error('Please assign a specialist')
+      return
+    }
     setCreating(true)
     try {
       const payload = {
@@ -881,8 +885,8 @@ export default function LeadDrawer({
         phone: createForm.phone || undefined,
         fb_page_url: createForm.fb_page_url || undefined,
         ig_url: createForm.ig_url || undefined,
-        specialist_id: createForm.specialist_id || undefined,
-        next_followup: createForm.next_followup || undefined,
+        specialist_id: createForm.specialist_id,
+        next_followup_date: createForm.next_followup || undefined,
         source_url: createForm.source_url || undefined,
         source_image: createForm.source_image || undefined,
       }
@@ -1514,14 +1518,14 @@ export default function LeadDrawer({
                       {/* Next Follow-up */}
                       <div>
                         <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Next Follow-up <SavedIndicator show={saved.next_followup} />
+                          Next Follow-up <SavedIndicator show={saved.next_followup_date} />
                         </label>
                         <input
-                          key={lead.next_followup}
+                          key={lead.next_followup_date}
                           type="date"
                           className={inputClass}
-                          defaultValue={lead.next_followup ? lead.next_followup.slice(0, 10) : ''}
-                          onBlur={e => saveField('next_followup', e.target.value || null)}
+                          defaultValue={lead.next_followup_date ? lead.next_followup_date.slice(0, 10) : ''}
+                          onBlur={e => saveField('next_followup_date', e.target.value || null)}
                         />
                       </div>
 

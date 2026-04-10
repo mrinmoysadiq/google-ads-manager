@@ -249,9 +249,11 @@ router.post('/leads', (req, res) => {
   try {
     const {
       specialist_id, company_name, contact_name, job_title,
-      website, industry_id, location, next_followup_date,
+      website, industry_id, location,
+      next_followup_date, next_followup,
       source_url, source_image, email, phone, fb_page_url, ig_url,
     } = req.body;
+    const followupDate = next_followup_date || next_followup || null;
     if (!specialist_id) return res.status(400).json({ error: 'specialist_id is required' });
     if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'company_name is required' });
 
@@ -267,7 +269,7 @@ router.post('/leads', (req, res) => {
       website || null,
       industry_id || null,
       location || null,
-      next_followup_date || null,
+      followupDate,
       source_url || null,
       source_image || null,
       email || null,
@@ -337,9 +339,14 @@ router.patch('/leads/:id', (req, res) => {
 
     const {
       specialist_id, company_name, contact_name, job_title,
-      website, industry_id, location, status, next_followup_date,
+      website, industry_id, location, status,
+      next_followup_date, next_followup,
       source_url, source_image, email, phone, fb_page_url, ig_url,
     } = req.body;
+
+    // Accept both next_followup_date and next_followup field names
+    const hasFollowupField = next_followup_date !== undefined || next_followup !== undefined;
+    const followupValue = hasFollowupField ? (next_followup_date || next_followup || null) : undefined;
 
     const statusChanged = status && status !== existing.status;
 
@@ -371,7 +378,7 @@ router.patch('/leads/:id', (req, res) => {
       industry_id !== undefined ? (industry_id || null) : existing.industry_id,
       location !== undefined ? (location || null) : existing.location,
       status || null,
-      next_followup_date !== undefined ? (next_followup_date || null) : existing.next_followup_date,
+      followupValue !== undefined ? followupValue : existing.next_followup_date,
       source_url !== undefined ? (source_url || null) : existing.source_url,
       source_image !== undefined ? (source_image || null) : existing.source_image,
       email !== undefined ? (email || null) : existing.email,
