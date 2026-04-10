@@ -165,12 +165,16 @@ function QuestionCard({ idx, question, item, auditType, onChange, isActive, onAc
           <button
             className={btnBase}
             style={item.answer === 'na'
-              ? { backgroundColor: '#2a2a2a', borderColor: 'rgba(255,255,255,0.2)', color: '#c5c1b9' }
+              ? { backgroundColor: '#6366f1', borderColor: '#6366f1', color: '#fff' }
               : { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.12)', color: '#8a8680' }}
             onClick={() => handleAnswer('na')}
           >N/A</button>
         )}
       </div>
+      {/* N/A label shown below buttons when selected */}
+      {item.answer === 'na' && question.naLabel && (
+        <p className="text-xs mt-1 mb-1" style={{ color: '#6366f1' }}>✓ {question.naLabel}</p>
+      )}
 
       {/* EMQ score — always shown for Meta Q5 once answered */}
       {question.hasEMQScore && (hasAnswer || isActive) && (
