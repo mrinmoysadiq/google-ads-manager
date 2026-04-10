@@ -803,7 +803,7 @@ export default function LeadDrawer({
       setTpQuickModal({ open: true, number: tpNum, status: newStatus, modalKey: Date.now() })
       return
     }
-    if (newStatus === 'Interested' || newStatus === 'Meeting Done - Not Interested') {
+    if (['Interested', 'Not Interested', 'Meeting Done - Not Interested'].includes(newStatus)) {
       setResponseModal({ open: true, status: newStatus, modalKey: Date.now() })
       return
     }

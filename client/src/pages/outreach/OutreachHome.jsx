@@ -138,7 +138,7 @@ export default function OutreachHome() {
     localStorage.setItem(LS_VIEW_KEY, mode)
   }
 
-  const RESPONSE_REQUIRED_STATUSES = ['Interested', 'Meeting Done - Not Interested']
+  const RESPONSE_REQUIRED_STATUSES = ['Interested', 'Not Interested', 'Meeting Done - Not Interested']
 
   const handleStatusChange = async (leadId, newStatus) => {
     const tpNum = getTouchpointNumber(newStatus)
