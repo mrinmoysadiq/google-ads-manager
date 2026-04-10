@@ -2,6 +2,25 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db/database');
 const { Parser } = require('json2csv');
+const jwt = require('jsonwebtoken');
+const SECRET = process.env.JWT_SECRET || 'infinix_secret_key';
+
+// Decode the JWT from Authorization header and return the app_user row
+function getRequestUser(req) {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return null;
+    const payload = jwt.verify(token, SECRET);
+    return db.prepare('SELECT id, name, role FROM app_users WHERE id = ? AND active = 1').get(payload.id) || null;
+  } catch { return null; }
+}
+
+// For non-admin users: return their specialist id, or null if admin, or -1 if no specialist found
+function resolveSpecialistForUser(reqUser) {
+  if (!reqUser || reqUser.role === 'admin') return null; // admin = no restriction
+  const spec = db.prepare('SELECT id FROM outreach_specialists WHERE LOWER(name) = LOWER(?)').get(reqUser.name);
+  return spec ? spec.id : -1; // -1 = no specialist found → return no leads
+}
 
 const STATUSES = [
   'New Lead',
@@ -163,12 +182,25 @@ router.delete('/industries/:id', (req, res) => {
 
 router.get('/leads', (req, res) => {
   try {
-    const {
+    let {
       specialist_id, status, industry_id, search,
       followup_overdue, date_from, date_to,
       page = 1, limit = 25,
       sort_by = 'created_at', sort_dir = 'DESC',
     } = req.query;
+
+    // ── Server-side access enforcement ──────────────────────────────────────
+    const reqUser = getRequestUser(req);
+    const enforcedSpecId = resolveSpecialistForUser(reqUser);
+    if (enforcedSpecId === -1) {
+      // Non-admin with no specialist record — return empty
+      return res.json({ data: [], total: 0, page: 1, totalPages: 0 });
+    }
+    if (enforcedSpecId !== null) {
+      // Non-admin: force their own specialist_id, ignore client param
+      specialist_id = String(enforcedSpecId);
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     const conditions = [];
     const params = [];
@@ -344,6 +376,18 @@ router.get('/leads/:id', (req, res) => {
       WHERE l.id = ?
     `).get(id);
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    // ── Server-side access enforcement ──────────────────────────────────────
+    const reqUser = getRequestUser(req);
+    const enforcedSpecId = resolveSpecialistForUser(reqUser);
+    if (enforcedSpecId === -1) return res.status(403).json({ error: 'Access denied' });
+    if (enforcedSpecId !== null) {
+      const hasAccess = db.prepare(
+        'SELECT 1 FROM outreach_lead_specialists WHERE lead_id = ? AND specialist_id = ?'
+      ).get(id, enforcedSpecId);
+      if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     const touchpoints = db.prepare(
       'SELECT * FROM outreach_touchpoints WHERE lead_id = ? ORDER BY touchpoint_number ASC'
