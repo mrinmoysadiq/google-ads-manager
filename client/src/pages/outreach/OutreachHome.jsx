@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
-import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, upsertTouchpoint } from '../../utils/outreachApi'
+import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, upsertTouchpoint, createLeadResponse } from '../../utils/outreachApi'
 import LeadDrawer from './components/LeadDrawer'
 import PipelineTable from './components/PipelineTable'
 import PipelineKanban from './components/PipelineKanban'
 import Dashboard from './components/Dashboard'
 import TouchpointQuickModal from './components/TouchpointQuickModal'
+import ResponseQuickModal from './components/ResponseQuickModal'
 import { getUser, isAdmin } from '../../utils/auth'
 
 function getTouchpointNumber(status) {
@@ -42,6 +43,7 @@ export default function OutreachHome() {
   const [stages, setStages] = useState([])
   const [maxTouchpoints, setMaxTouchpoints] = useState(5)
   const [tpModal, setTpModal] = useState({ open: false, leadId: null, number: null, status: null, modalKey: 0 })
+  const [responseModal, setResponseModal] = useState({ open: false, leadId: null, status: null, modalKey: 0 })
 
   // Drawer state
   const [drawerLeadId, setDrawerLeadId] = useState(undefined) // undefined=closed, null=create, number=edit
@@ -136,18 +138,23 @@ export default function OutreachHome() {
     localStorage.setItem(LS_VIEW_KEY, mode)
   }
 
+  const RESPONSE_REQUIRED_STATUSES = ['Interested', 'Meeting Done - Not Interested']
+
   const handleStatusChange = async (leadId, newStatus) => {
     const tpNum = getTouchpointNumber(newStatus)
     if (tpNum !== null) {
-      // Open touchpoint modal instead of immediately moving
       setTpModal({ open: true, leadId, number: tpNum, status: newStatus, modalKey: Date.now() })
       return
     }
-    // Non-touchpoint stage: optimistic update
+    if (RESPONSE_REQUIRED_STATUSES.includes(newStatus)) {
+      setResponseModal({ open: true, leadId, status: newStatus, modalKey: Date.now() })
+      return
+    }
+    // All other stages: optimistic update
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: newStatus } : l))
     try {
       await updateLead(leadId, { status: newStatus })
-    } catch (err) {
+    } catch {
       toast.error('Failed to update status')
       fetchLeads()
     }
@@ -160,6 +167,20 @@ export default function OutreachHome() {
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l))
     setTpModal({ open: false, leadId: null, number: null, status: null, modalKey: 0 })
     toast.success(`Touchpoint ${number} saved — moved to ${status}`)
+  }
+
+  const handleResponseModalSave = async (fields) => {
+    const { leadId, status } = responseModal
+    try {
+      await createLeadResponse(leadId, fields)
+      await updateLead(leadId, { status })
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l))
+      setResponseModal({ open: false, leadId: null, status: null, modalKey: 0 })
+      toast.success(`Response logged — moved to "${status}"`)
+    } catch {
+      toast.error('Failed to save response')
+      throw new Error('Failed')
+    }
   }
 
   const handleLeadUpdated = (updatedLead) => {
@@ -373,13 +394,23 @@ export default function OutreachHome() {
         />
       )}
 
-      {/* Touchpoint Quick Modal (kanban drag-to-touchpoint-stage) */}
+      {/* Touchpoint Quick Modal (kanban drag / table / drawer → touchpoint stage) */}
       {tpModal.open && (
         <TouchpointQuickModal
           key={tpModal.modalKey}
           touchpointNumber={tpModal.number}
           onSave={handleTpModalSave}
           onClose={() => setTpModal({ open: false, leadId: null, number: null, status: null, modalKey: 0 })}
+        />
+      )}
+
+      {/* Response Quick Modal (kanban drag / table / drawer → Interested or Not Interested) */}
+      {responseModal.open && (
+        <ResponseQuickModal
+          key={responseModal.modalKey}
+          newStatus={responseModal.status}
+          onSave={handleResponseModalSave}
+          onClose={() => setResponseModal({ open: false, leadId: null, status: null, modalKey: 0 })}
         />
       )}
     </div>
