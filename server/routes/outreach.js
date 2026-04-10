@@ -250,15 +250,15 @@ router.post('/leads', (req, res) => {
     const {
       specialist_id, company_name, contact_name, job_title,
       website, industry_id, location, next_followup_date,
-      source_url, source_image,
+      source_url, source_image, email, phone, fb_page_url, ig_url,
     } = req.body;
     if (!specialist_id) return res.status(400).json({ error: 'specialist_id is required' });
     if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'company_name is required' });
 
     const result = db.prepare(`
       INSERT INTO outreach_leads
-        (specialist_id, company_name, contact_name, job_title, website, industry_id, location, next_followup_date, source_url, source_image)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (specialist_id, company_name, contact_name, job_title, website, industry_id, location, next_followup_date, source_url, source_image, email, phone, fb_page_url, ig_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       specialist_id,
       company_name.trim(),
@@ -270,6 +270,10 @@ router.post('/leads', (req, res) => {
       next_followup_date || null,
       source_url || null,
       source_image || null,
+      email || null,
+      phone || null,
+      fb_page_url || null,
+      ig_url || null,
     );
 
     // Seed status history entry
@@ -334,7 +338,7 @@ router.patch('/leads/:id', (req, res) => {
     const {
       specialist_id, company_name, contact_name, job_title,
       website, industry_id, location, status, next_followup_date,
-      source_url, source_image,
+      source_url, source_image, email, phone, fb_page_url, ig_url,
     } = req.body;
 
     const statusChanged = status && status !== existing.status;
@@ -352,6 +356,10 @@ router.patch('/leads/:id', (req, res) => {
         next_followup_date = ?,
         source_url = ?,
         source_image = ?,
+        email = ?,
+        phone = ?,
+        fb_page_url = ?,
+        ig_url = ?,
         status_updated_at = CASE WHEN ? IS NOT NULL AND ? != status THEN CURRENT_TIMESTAMP ELSE status_updated_at END
       WHERE id = ?
     `).run(
@@ -366,6 +374,10 @@ router.patch('/leads/:id', (req, res) => {
       next_followup_date !== undefined ? (next_followup_date || null) : existing.next_followup_date,
       source_url !== undefined ? (source_url || null) : existing.source_url,
       source_image !== undefined ? (source_image || null) : existing.source_image,
+      email !== undefined ? (email || null) : existing.email,
+      phone !== undefined ? (phone || null) : existing.phone,
+      fb_page_url !== undefined ? (fb_page_url || null) : existing.fb_page_url,
+      ig_url !== undefined ? (ig_url || null) : existing.ig_url,
       status || null, status || null,
       id,
     );

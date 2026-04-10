@@ -163,7 +163,7 @@ export default function OutreachHome() {
   }
 
   const handleLeadUpdated = (updatedLead) => {
-    setLeads(prev => prev.map(l => l.id === updatedLead.id ? { ...l, status: updatedLead.status } : l))
+    setLeads(prev => prev.map(l => l.id === updatedLead.id ? { ...l, ...updatedLead } : l))
   }
 
   const handleLeadSaved = () => { fetchLeads() }

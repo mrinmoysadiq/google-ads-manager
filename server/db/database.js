@@ -293,6 +293,10 @@ function initializeDatabase() {
   const columnMigrations = [
     'ALTER TABLE outreach_leads ADD COLUMN source_url TEXT',
     'ALTER TABLE outreach_leads ADD COLUMN source_image TEXT',
+    'ALTER TABLE outreach_leads ADD COLUMN email TEXT',
+    'ALTER TABLE outreach_leads ADD COLUMN phone TEXT',
+    'ALTER TABLE outreach_leads ADD COLUMN fb_page_url TEXT',
+    'ALTER TABLE outreach_leads ADD COLUMN ig_url TEXT',
   ];
   // Migrate old 'Contacted' status to 'New Lead' (one-time)
   try { db.exec("UPDATE outreach_leads SET status = 'New Lead' WHERE status = 'Contacted'"); } catch (e) { /* ignore */ }

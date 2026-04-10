@@ -11,6 +11,7 @@ import {
   deleteLeadResponse,
 } from '../../../utils/outreachApi'
 import TouchpointQuickModal from './TouchpointQuickModal'
+import ResponseQuickModal from './ResponseQuickModal'
 
 function getTouchpointNumber(status) {
   const m = status && status.match(/^Touchpoint (\d+)$/)
@@ -79,6 +80,7 @@ const selectStyles = {
 
 function ImagePasteZone({ value, onChange }) {
   const zoneRef = useRef(null)
+  const [focused, setFocused] = useState(false)
 
   const handlePaste = useCallback((e) => {
     const items = e.clipboardData?.items
@@ -94,12 +96,6 @@ function ImagePasteZone({ value, onChange }) {
       }
     }
   }, [onChange])
-
-  // Listen globally so user doesn't need to click the zone first
-  useEffect(() => {
-    document.addEventListener('paste', handlePaste)
-    return () => document.removeEventListener('paste', handlePaste)
-  }, [handlePaste])
 
   if (value) {
     return (
@@ -127,21 +123,27 @@ function ImagePasteZone({ value, onChange }) {
   return (
     <div
       ref={zoneRef}
+      tabIndex={0}
+      onPaste={handlePaste}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       style={{
-        border: '1px dashed rgba(255,255,255,0.15)',
+        border: `1px dashed ${focused ? '#575ECF' : 'rgba(255,255,255,0.15)'}`,
         borderRadius: '8px',
         padding: '20px',
         textAlign: 'center',
-        color: '#555',
+        color: focused ? '#8a8680' : '#555',
         fontSize: '12px',
-        cursor: 'default',
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        cursor: 'pointer',
+        backgroundColor: focused ? 'rgba(87,94,207,0.05)' : 'rgba(255,255,255,0.02)',
         userSelect: 'none',
+        outline: 'none',
+        transition: 'border-color 0.15s, background-color 0.15s',
       }}
     >
       <div style={{ fontSize: '20px', marginBottom: '6px', opacity: 0.4 }}>🖼</div>
-      <div>Paste a screenshot anywhere</div>
-      <div style={{ marginTop: '3px', opacity: 0.6 }}>⌘V / Ctrl+V</div>
+      <div>{focused ? 'Now press Ctrl+V / ⌘V to paste' : 'Click here, then Ctrl+V / ⌘V to paste screenshot'}</div>
+      <div style={{ marginTop: '3px', opacity: 0.6, fontSize: '11px' }}>Click the zone first to focus it</div>
     </div>
   )
 }
@@ -732,6 +734,7 @@ export default function LeadDrawer({
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [tpQuickModal, setTpQuickModal] = useState({ open: false, number: null, status: null, modalKey: 0 })
+  const [responseModal, setResponseModal] = useState({ open: false, status: null, modalKey: 0 })
 
   // Create form state
   const [createForm, setCreateForm] = useState({
@@ -741,6 +744,10 @@ export default function LeadDrawer({
     website: '',
     industry_id: '',
     location: '',
+    email: '',
+    phone: '',
+    fb_page_url: '',
+    ig_url: '',
     specialist_id: defaultSpecialistId || '',
     next_followup: '',
     source_url: '',
@@ -782,6 +789,7 @@ export default function LeadDrawer({
       const updated = await updateLead(leadId, { [field]: value })
       setLead(prev => ({ ...prev, ...updated }))
       markSaved(field)
+      if (onLeadUpdated) onLeadUpdated(updated)
     } catch {
       toast.error('Failed to save')
     }
@@ -795,6 +803,10 @@ export default function LeadDrawer({
       setTpQuickModal({ open: true, number: tpNum, status: newStatus, modalKey: Date.now() })
       return
     }
+    if (newStatus === 'Interested' || newStatus === 'Meeting Done - Not Interested') {
+      setResponseModal({ open: true, status: newStatus, modalKey: Date.now() })
+      return
+    }
     try {
       const updated = await updateLead(leadId, { status: newStatus })
       setLead(prev => ({ ...prev, ...updated }))
@@ -803,6 +815,20 @@ export default function LeadDrawer({
     } catch {
       toast.error('Failed to update status')
     }
+  }
+
+  const handleResponseModalSave = async (fields) => {
+    const { status } = responseModal
+    const created = await createLeadResponse(leadId, fields)
+    const updated = await updateLead(leadId, { status })
+    setLead(prev => ({
+      ...prev,
+      ...updated,
+      responses: [created, ...(prev.responses || [])],
+    }))
+    if (onLeadUpdated) onLeadUpdated(updated)
+    setResponseModal({ open: false, status: null, modalKey: 0 })
+    toast.success(`Response logged — moved to ${status}`)
   }
 
   const handleTpQuickModalSave = async (fields) => {
@@ -851,6 +877,10 @@ export default function LeadDrawer({
         website: createForm.website || undefined,
         industry_id: createForm.industry_id || undefined,
         location: createForm.location || undefined,
+        email: createForm.email || undefined,
+        phone: createForm.phone || undefined,
+        fb_page_url: createForm.fb_page_url || undefined,
+        ig_url: createForm.ig_url || undefined,
         specialist_id: createForm.specialist_id || undefined,
         next_followup: createForm.next_followup || undefined,
         source_url: createForm.source_url || undefined,
@@ -1041,6 +1071,54 @@ export default function LeadDrawer({
                     value={createForm.location}
                     onChange={e => setCreateForm(v => ({ ...v, location: e.target.value }))}
                     placeholder="New York, NY"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Email</label>
+                  <input
+                    type="email"
+                    className={inputClass}
+                    value={createForm.email}
+                    onChange={e => setCreateForm(v => ({ ...v, email: e.target.value }))}
+                    placeholder="contact@example.com"
+                  />
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Phone</label>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={createForm.phone}
+                    onChange={e => setCreateForm(v => ({ ...v, phone: e.target.value }))}
+                    placeholder="+1 (555) 000-0000"
+                  />
+                </div>
+
+                {/* FB Page URL */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Facebook Page URL</label>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={createForm.fb_page_url}
+                    onChange={e => setCreateForm(v => ({ ...v, fb_page_url: e.target.value }))}
+                    placeholder="https://facebook.com/…"
+                  />
+                </div>
+
+                {/* IG URL */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Instagram URL</label>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={createForm.ig_url}
+                    onChange={e => setCreateForm(v => ({ ...v, ig_url: e.target.value }))}
+                    placeholder="https://instagram.com/…"
                   />
                 </div>
 
@@ -1335,6 +1413,86 @@ export default function LeadDrawer({
                         />
                       </div>
 
+                      {/* Email */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Email <SavedIndicator show={saved.email} />
+                        </label>
+                        <input
+                          key={lead.email}
+                          type="email"
+                          className={inputClass}
+                          defaultValue={lead.email || ''}
+                          onBlur={e => saveField('email', e.target.value)}
+                          placeholder="—"
+                        />
+                      </div>
+
+                      {/* Phone */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Phone <SavedIndicator show={saved.phone} />
+                        </label>
+                        <input
+                          key={lead.phone}
+                          type="text"
+                          className={inputClass}
+                          defaultValue={lead.phone || ''}
+                          onBlur={e => saveField('phone', e.target.value)}
+                          placeholder="—"
+                        />
+                      </div>
+
+                      {/* Facebook Page URL */}
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Facebook Page URL <SavedIndicator show={saved.fb_page_url} />
+                        </label>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <input
+                            key={lead.fb_page_url}
+                            type="text"
+                            className={inputClass}
+                            defaultValue={lead.fb_page_url || ''}
+                            onBlur={e => {
+                              setLead(prev => ({ ...prev, fb_page_url: e.target.value }))
+                              saveField('fb_page_url', e.target.value || null)
+                            }}
+                            placeholder="https://facebook.com/…"
+                            style={{ flex: 1 }}
+                          />
+                          {lead.fb_page_url && (
+                            <a href={lead.fb_page_url} target="_blank" rel="noopener noreferrer" title="Open Facebook page"
+                              style={{ color: '#575ECF', fontSize: '16px', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}>↗</a>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Instagram URL */}
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Instagram URL <SavedIndicator show={saved.ig_url} />
+                        </label>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <input
+                            key={lead.ig_url}
+                            type="text"
+                            className={inputClass}
+                            defaultValue={lead.ig_url || ''}
+                            onBlur={e => {
+                              setLead(prev => ({ ...prev, ig_url: e.target.value }))
+                              saveField('ig_url', e.target.value || null)
+                            }}
+                            placeholder="https://instagram.com/…"
+                            style={{ flex: 1 }}
+                          />
+                          {lead.ig_url && (
+                            <a href={lead.ig_url} target="_blank" rel="noopener noreferrer" title="Open Instagram"
+                              style={{ color: '#575ECF', fontSize: '16px', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}>↗</a>
+                          )}
+                        </div>
+                      </div>
+
                       {/* Specialist */}
                       <div>
                         <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -1565,6 +1723,16 @@ export default function LeadDrawer({
           initialData={lead ? (lead.touchpoints || []).find(t => t.touchpoint_number === tpQuickModal.number) : null}
           onSave={handleTpQuickModalSave}
           onClose={() => setTpQuickModal({ open: false, number: null, status: null, modalKey: 0 })}
+        />
+      )}
+
+      {/* ── Response Quick Modal (for Interested / Not Interested stages) ──────── */}
+      {responseModal.open && (
+        <ResponseQuickModal
+          key={responseModal.modalKey}
+          newStatus={responseModal.status}
+          onSave={handleResponseModalSave}
+          onClose={() => setResponseModal({ open: false, status: null, modalKey: 0 })}
         />
       )}
 
