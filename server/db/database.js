@@ -257,6 +257,13 @@ function initializeDatabase() {
       notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS outreach_lead_specialists (
+      lead_id INTEGER NOT NULL REFERENCES outreach_leads(id) ON DELETE CASCADE,
+      specialist_id INTEGER NOT NULL REFERENCES outreach_specialists(id) ON DELETE CASCADE,
+      assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (lead_id, specialist_id)
+    );
   `);
 
   // Seed default industries if empty
@@ -297,6 +304,7 @@ function initializeDatabase() {
     'ALTER TABLE outreach_leads ADD COLUMN phone TEXT',
     'ALTER TABLE outreach_leads ADD COLUMN fb_page_url TEXT',
     'ALTER TABLE outreach_leads ADD COLUMN ig_url TEXT',
+    'ALTER TABLE outreach_status_history ADD COLUMN performed_by TEXT',
   ];
   // Migrate old 'Contacted' status to 'New Lead' (one-time)
   try { db.exec("UPDATE outreach_leads SET status = 'New Lead' WHERE status = 'Contacted'"); } catch (e) { /* ignore */ }
@@ -304,6 +312,13 @@ function initializeDatabase() {
   columnMigrations.forEach(sql => {
     try { db.exec(sql); } catch (e) { /* column already exists */ }
   });
+  // Migrate existing specialist_id data into junction table (one-time, safe to re-run)
+  try {
+    db.exec(`
+      INSERT OR IGNORE INTO outreach_lead_specialists (lead_id, specialist_id)
+      SELECT id, specialist_id FROM outreach_leads WHERE specialist_id IS NOT NULL
+    `);
+  } catch (e) { /* ignore */ }
 
   // ── LMS (Learning Management System) tables ─────────────────────────────
   db.exec(`

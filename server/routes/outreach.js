@@ -173,7 +173,10 @@ router.get('/leads', (req, res) => {
     const conditions = [];
     const params = [];
 
-    if (specialist_id) { conditions.push('l.specialist_id = ?'); params.push(specialist_id); }
+    if (specialist_id) {
+      conditions.push('EXISTS (SELECT 1 FROM outreach_lead_specialists ols WHERE ols.lead_id = l.id AND ols.specialist_id = ?)');
+      params.push(specialist_id);
+    }
     if (status) {
       const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
       if (statuses.length > 0) {
@@ -209,6 +212,11 @@ router.get('/leads', (req, res) => {
         l.*,
         s.name as specialist_name,
         i.name as industry_name,
+        (SELECT GROUP_CONCAT(s2.name, ', ') FROM outreach_lead_specialists ols2
+         JOIN outreach_specialists s2 ON s2.id = ols2.specialist_id
+         WHERE ols2.lead_id = l.id ORDER BY s2.name ASC) as specialist_names,
+        (SELECT GROUP_CONCAT(ols2.specialist_id, ',') FROM outreach_lead_specialists ols2
+         WHERE ols2.lead_id = l.id) as specialist_ids_csv,
         (SELECT COUNT(*) FROM outreach_touchpoints WHERE lead_id = l.id AND date IS NOT NULL) as touchpoint_count,
         (SELECT MAX(date) FROM outreach_touchpoints WHERE lead_id = l.id AND date IS NOT NULL) as last_touchpoint_date
       FROM outreach_leads l
@@ -218,6 +226,12 @@ router.get('/leads', (req, res) => {
       ORDER BY ${safeSortBy} ${safeSortDir}
       LIMIT ? OFFSET ?
     `).all(...params, parseInt(limit), offset);
+
+    // Parse specialist_ids_csv into array
+    leads.forEach(l => {
+      l.specialist_ids = l.specialist_ids_csv ? l.specialist_ids_csv.split(',').map(Number) : (l.specialist_id ? [l.specialist_id] : []);
+      delete l.specialist_ids_csv;
+    });
 
     // Attach channels used per lead
     if (leads.length > 0) {
@@ -248,13 +262,20 @@ router.get('/leads', (req, res) => {
 router.post('/leads', (req, res) => {
   try {
     const {
-      specialist_id, company_name, contact_name, job_title,
+      specialist_ids, specialist_id: single_specialist_id,
+      company_name, contact_name, job_title,
       website, industry_id, location,
       next_followup_date, next_followup,
       source_url, source_image, email, phone, fb_page_url, ig_url,
+      performed_by,
     } = req.body;
     const followupDate = next_followup_date || next_followup || null;
-    if (!specialist_id) return res.status(400).json({ error: 'specialist_id is required' });
+
+    // Normalize specialist_ids — accept array or single id
+    const specIds = Array.isArray(specialist_ids) && specialist_ids.length > 0
+      ? specialist_ids
+      : (single_specialist_id ? [single_specialist_id] : []);
+    if (!specIds.length) return res.status(400).json({ error: 'At least one specialist is required' });
     if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'company_name is required' });
 
     const result = db.prepare(`
@@ -262,7 +283,7 @@ router.post('/leads', (req, res) => {
         (specialist_id, company_name, contact_name, job_title, website, industry_id, location, next_followup_date, source_url, source_image, email, phone, fb_page_url, ig_url)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      specialist_id,
+      specIds[0],
       company_name.trim(),
       contact_name || null,
       job_title || null,
@@ -278,11 +299,17 @@ router.post('/leads', (req, res) => {
       ig_url || null,
     );
 
+    const leadId = result.lastInsertRowid;
+
+    // Insert all specialists into junction table
+    const insertSpec = db.prepare('INSERT OR IGNORE INTO outreach_lead_specialists (lead_id, specialist_id) VALUES (?, ?)');
+    for (const sid of specIds) { insertSpec.run(leadId, sid); }
+
     // Seed status history entry
-    db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status) VALUES (?, ?, ?)')
-      .run(result.lastInsertRowid, null, 'New Lead');
+    db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status, performed_by) VALUES (?, ?, ?, ?)')
+      .run(leadId, null, 'New Lead', performed_by || null);
     // Set initial status to 'New Lead'
-    db.prepare("UPDATE outreach_leads SET status = 'New Lead' WHERE id = ?").run(result.lastInsertRowid);
+    db.prepare("UPDATE outreach_leads SET status = 'New Lead' WHERE id = ?").run(leadId);
 
     const created = db.prepare(`
       SELECT l.*, s.name as specialist_name, i.name as industry_name
@@ -290,9 +317,15 @@ router.post('/leads', (req, res) => {
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
       LEFT JOIN outreach_industries i ON i.id = l.industry_id
       WHERE l.id = ?
-    `).get(result.lastInsertRowid);
+    `).get(leadId);
+    const specialists = db.prepare(`
+      SELECT s.id, s.name FROM outreach_lead_specialists ols
+      JOIN outreach_specialists s ON s.id = ols.specialist_id WHERE ols.lead_id = ?
+    `).all(leadId);
     created.channels_used = [];
     created.touchpoint_count = 0;
+    created.specialists = specialists;
+    created.specialist_ids = specialists.map(s => s.id);
     res.status(201).json(created);
   } catch (err) {
     console.error(err);
@@ -324,7 +357,13 @@ router.get('/leads/:id', (req, res) => {
       'SELECT * FROM outreach_lead_responses WHERE lead_id = ? ORDER BY created_at DESC'
     ).all(id);
 
-    res.json({ ...lead, touchpoints, history, responses });
+    const specialists = db.prepare(`
+      SELECT s.id, s.name FROM outreach_lead_specialists ols
+      JOIN outreach_specialists s ON s.id = ols.specialist_id
+      WHERE ols.lead_id = ? ORDER BY s.name ASC
+    `).all(id);
+
+    res.json({ ...lead, touchpoints, history, responses, specialists });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch lead' });
@@ -338,10 +377,11 @@ router.patch('/leads/:id', (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Lead not found' });
 
     const {
-      specialist_id, company_name, contact_name, job_title,
+      specialist_id, specialist_ids, company_name, contact_name, job_title,
       website, industry_id, location, status,
       next_followup_date, next_followup,
       source_url, source_image, email, phone, fb_page_url, ig_url,
+      performed_by,
     } = req.body;
 
     // Accept both next_followup_date and next_followup field names
@@ -390,8 +430,19 @@ router.patch('/leads/:id', (req, res) => {
     );
 
     if (statusChanged) {
-      db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status) VALUES (?, ?, ?)')
-        .run(id, existing.status, status);
+      db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status, performed_by) VALUES (?, ?, ?, ?)')
+        .run(id, existing.status, status, performed_by || null);
+    }
+
+    // Update specialist assignments if specialist_ids array provided
+    if (Array.isArray(specialist_ids)) {
+      db.prepare('DELETE FROM outreach_lead_specialists WHERE lead_id = ?').run(id);
+      const insertSpec = db.prepare('INSERT OR IGNORE INTO outreach_lead_specialists (lead_id, specialist_id) VALUES (?, ?)');
+      for (const sid of specialist_ids) { insertSpec.run(id, sid); }
+      // Update primary specialist_id
+      if (specialist_ids.length > 0) {
+        db.prepare('UPDATE outreach_leads SET specialist_id = ? WHERE id = ?').run(specialist_ids[0], id);
+      }
     }
 
     const updated = db.prepare(`
@@ -401,6 +452,14 @@ router.patch('/leads/:id', (req, res) => {
       LEFT JOIN outreach_industries i ON i.id = l.industry_id
       WHERE l.id = ?
     `).get(id);
+    const updatedSpecialists = db.prepare(`
+      SELECT s.id, s.name FROM outreach_lead_specialists ols
+      JOIN outreach_specialists s ON s.id = ols.specialist_id WHERE ols.lead_id = ?
+      ORDER BY s.name ASC
+    `).all(id);
+    updated.specialists = updatedSpecialists;
+    updated.specialist_ids = updatedSpecialists.map(s => s.id);
+    updated.specialist_names = updatedSpecialists.map(s => s.name).join(', ');
     res.json(updated);
   } catch (err) {
     console.error(err);

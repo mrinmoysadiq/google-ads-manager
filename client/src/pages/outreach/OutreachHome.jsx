@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
+import { getUser } from '../../utils/auth'
 import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, upsertTouchpoint, createLeadResponse } from '../../utils/outreachApi'
 import LeadDrawer from './components/LeadDrawer'
 import PipelineTable from './components/PipelineTable'
@@ -153,7 +154,7 @@ export default function OutreachHome() {
     // All other stages: optimistic update
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: newStatus } : l))
     try {
-      await updateLead(leadId, { status: newStatus })
+      await updateLead(leadId, { status: newStatus, performed_by: getUser()?.name || null })
     } catch {
       toast.error('Failed to update status')
       fetchLeads()
@@ -163,7 +164,7 @@ export default function OutreachHome() {
   const handleTpModalSave = async (fields) => {
     const { leadId, number, status } = tpModal
     await upsertTouchpoint(leadId, number, fields)
-    await updateLead(leadId, { status })
+    await updateLead(leadId, { status, performed_by: getUser()?.name || null })
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l))
     setTpModal({ open: false, leadId: null, number: null, status: null, modalKey: 0 })
     toast.success(`Touchpoint ${number} saved — moved to ${status}`)
@@ -173,7 +174,7 @@ export default function OutreachHome() {
     const { leadId, status } = responseModal
     try {
       await createLeadResponse(leadId, fields)
-      await updateLead(leadId, { status })
+      await updateLead(leadId, { status, performed_by: getUser()?.name || null })
       setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l))
       setResponseModal({ open: false, leadId: null, status: null, modalKey: 0 })
       toast.success(`Response logged — moved to "${status}"`)

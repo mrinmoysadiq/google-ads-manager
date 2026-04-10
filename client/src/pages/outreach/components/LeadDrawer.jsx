@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import Select from 'react-select'
+import { getUser } from '../../../utils/auth'
 import {
   getLead,
   updateLead,
@@ -74,6 +75,9 @@ const selectStyles = {
   indicatorSeparator: () => ({ display: 'none' }),
   dropdownIndicator: (base) => ({ ...base, color: '#8a8680', padding: '0 8px' }),
   clearIndicator: (base) => ({ ...base, color: '#8a8680' }),
+  multiValue: (base) => ({ ...base, backgroundColor: 'rgba(87,94,207,0.25)', borderRadius: '4px' }),
+  multiValueLabel: (base) => ({ ...base, color: '#c5c1b9', fontSize: '12px', padding: '1px 4px' }),
+  multiValueRemove: (base) => ({ ...base, color: '#8a8680', borderRadius: '0 4px 4px 0', ':hover': { backgroundColor: 'rgba(239,68,68,0.2)', color: '#ef4444' } }),
 }
 
 // ─── Helper: ImageLightbox ─────────────────────────────────────────────────────
@@ -845,7 +849,7 @@ export default function LeadDrawer({
     phone: '',
     fb_page_url: '',
     ig_url: '',
-    specialist_id: defaultSpecialistId || '',
+    specialist_ids: defaultSpecialistId ? [defaultSpecialistId] : [],
     next_followup: '',
     source_url: '',
     source_image: null,
@@ -905,7 +909,7 @@ export default function LeadDrawer({
       return
     }
     try {
-      const updated = await updateLead(leadId, { status: newStatus })
+      const updated = await updateLead(leadId, { status: newStatus, performed_by: getUser()?.name || null })
       setLead(prev => ({ ...prev, ...updated }))
       markSaved('status')
       if (onLeadUpdated) onLeadUpdated(updated)
@@ -917,7 +921,7 @@ export default function LeadDrawer({
   const handleResponseModalSave = async (fields) => {
     const { status } = responseModal
     const created = await createLeadResponse(leadId, fields)
-    const updated = await updateLead(leadId, { status })
+    const updated = await updateLead(leadId, { status, performed_by: getUser()?.name || null })
     setLead(prev => ({
       ...prev,
       ...updated,
@@ -931,7 +935,7 @@ export default function LeadDrawer({
   const handleTpQuickModalSave = async (fields) => {
     const { number, status } = tpQuickModal
     const savedTp = await upsertTouchpoint(leadId, number, fields)
-    const updated = await updateLead(leadId, { status })
+    const updated = await updateLead(leadId, { status, performed_by: getUser()?.name || null })
     setLead(prev => ({
       ...prev,
       ...updated,
@@ -948,7 +952,7 @@ export default function LeadDrawer({
   const handleTpStageChange = async (number) => {
     const stageName = `Touchpoint ${number}`
     try {
-      const updated = await updateLead(leadId, { status: stageName })
+      const updated = await updateLead(leadId, { status: stageName, performed_by: getUser()?.name || null })
       setLead(prev => ({ ...prev, ...updated }))
       toast.success(`Stage changed to ${stageName}`)
       if (onLeadUpdated) onLeadUpdated(updated)
@@ -965,8 +969,8 @@ export default function LeadDrawer({
       toast.error('Company name is required')
       return
     }
-    if (!createForm.specialist_id) {
-      toast.error('Please assign a specialist')
+    if (!createForm.specialist_ids.length) {
+      toast.error('Please assign at least one specialist')
       return
     }
     setCreating(true)
@@ -982,10 +986,11 @@ export default function LeadDrawer({
         phone: createForm.phone || undefined,
         fb_page_url: createForm.fb_page_url || undefined,
         ig_url: createForm.ig_url || undefined,
-        specialist_id: createForm.specialist_id,
+        specialist_ids: createForm.specialist_ids,
         next_followup_date: createForm.next_followup || undefined,
         source_url: createForm.source_url || undefined,
         source_image: createForm.source_image || undefined,
+        performed_by: getUser()?.name || undefined,
       }
       const newLead = await createLead(payload)
       toast.success('Lead created')
@@ -1223,16 +1228,19 @@ export default function LeadDrawer({
                   />
                 </div>
 
-                {/* Specialist */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Specialist</label>
+                {/* Specialists — multi-select */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>
+                    Specialist(s) <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
                   <Select
+                    isMulti
                     styles={selectStyles}
                     options={specialistOptions}
-                    value={specialistOptions.find(o => o.value === createForm.specialist_id) || null}
-                    onChange={opt => setCreateForm(v => ({ ...v, specialist_id: opt?.value || '' }))}
-                    placeholder="Assign specialist…"
-                    isClearable
+                    value={specialistOptions.filter(o => createForm.specialist_ids.includes(o.value))}
+                    onChange={opts => setCreateForm(v => ({ ...v, specialist_ids: opts.map(o => o.value) }))}
+                    placeholder="Assign specialist(s)…"
+                    closeMenuOnSelect={false}
                   />
                 </div>
 
@@ -1368,7 +1376,13 @@ export default function LeadDrawer({
                         <StatusBadge status={lead.status} onChange={handleStatusChange} stages={stages.length > 0 ? stages.map(s => s.name) : Object.keys(STATUS_COLORS)} />
                         <span style={{ color: '#555', fontSize: '11px' }}>
                           Created {fmtDate(lead.created_at)}
-                          {lead.specialist_name ? ` · ${lead.specialist_name}` : ''}
+                          {(lead.specialists?.length > 0
+                            ? lead.specialists.map(s => s.name).join(', ')
+                            : lead.specialist_names || lead.specialist_name)
+                            ? ` · ${lead.specialists?.length > 0
+                                ? lead.specialists.map(s => s.name).join(', ')
+                                : lead.specialist_names || lead.specialist_name}`
+                            : ''}
                         </span>
                       </div>
                     </div>
@@ -1612,21 +1626,36 @@ export default function LeadDrawer({
                         </div>
                       </div>
 
-                      {/* Specialist */}
-                      <div>
+                      {/* Specialists — multi-select, full width */}
+                      <div style={{ gridColumn: '1 / -1' }}>
                         <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Specialist <SavedIndicator show={saved.specialist_id} />
+                          Specialist(s) <SavedIndicator show={saved.specialists} />
                         </label>
                         <Select
+                          isMulti
                           styles={selectStyles}
                           options={specialistOptions}
-                          value={specialistOptions.find(o => o.value === lead.specialist_id) || null}
-                          onChange={opt => {
-                            setLead(prev => ({ ...prev, specialist_id: opt?.value || null, specialist_name: opt?.label || null }))
-                            saveField('specialist_id', opt?.value || null)
+                          value={specialistOptions.filter(o => (lead.specialists || []).some(s => s.id === o.value))}
+                          onChange={opts => {
+                            const ids = opts.map(o => o.value)
+                            const newSpecs = opts.map(o => ({ id: o.value, name: o.label }))
+                            setLead(prev => ({
+                              ...prev,
+                              specialists: newSpecs,
+                              specialist_id: ids[0] || null,
+                              specialist_name: opts[0]?.label || null,
+                              specialist_names: opts.map(o => o.label).join(', '),
+                            }))
+                            updateLead(leadId, { specialist_ids: ids, performed_by: getUser()?.name || null })
+                              .then(updated => {
+                                setLead(prev => ({ ...prev, ...updated }))
+                                markSaved('specialists')
+                                if (onLeadUpdated) onLeadUpdated(updated)
+                              })
+                              .catch(() => toast.error('Failed to save specialists'))
                           }}
-                          placeholder="Assign…"
-                          isClearable
+                          placeholder="Assign specialist(s)…"
+                          closeMenuOnSelect={false}
                         />
                       </div>
 
@@ -1762,7 +1791,9 @@ export default function LeadDrawer({
                                 </div>
                                 <div style={{ color: '#555', fontSize: '11px', marginTop: '4px' }}>
                                   {fmtDateTime(item.changed_at || item.created_at)}
-                                  {item.changed_by && ` · ${item.changed_by}`}
+                                  {item.performed_by && (
+                                  <span style={{ color: '#575ECF', fontWeight: 500 }}> · {item.performed_by}</span>
+                                )}
                                 </div>
                               </div>
                             </div>
