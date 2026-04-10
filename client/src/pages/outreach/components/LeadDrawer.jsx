@@ -76,11 +76,83 @@ const selectStyles = {
   clearIndicator: (base) => ({ ...base, color: '#8a8680' }),
 }
 
+// ─── Helper: ImageLightbox ─────────────────────────────────────────────────────
+
+function ImageLightbox({ src, onClose }) {
+  const handleDownload = () => {
+    const a = document.createElement('a')
+    a.href = src
+    a.download = 'source-image.png'
+    a.click()
+  }
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        backgroundColor: 'rgba(0,0,0,0.9)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: '16px',
+      }}
+    >
+      {/* Toolbar */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ display: 'flex', gap: '10px', alignItems: 'center' }}
+      >
+        <button
+          onClick={handleDownload}
+          style={{
+            backgroundColor: '#575ECF', color: '#fff', border: 'none',
+            borderRadius: '8px', padding: '8px 18px', fontSize: '13px',
+            fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+          }}
+        >
+          ↓ Download
+        </button>
+        <button
+          onClick={onClose}
+          style={{
+            backgroundColor: 'rgba(255,255,255,0.1)', color: '#c5c1b9', border: 'none',
+            borderRadius: '8px', padding: '8px 18px', fontSize: '13px',
+            cursor: 'pointer',
+          }}
+        >
+          ✕ Close
+        </button>
+      </div>
+      {/* Image */}
+      <img
+        src={src}
+        alt="Source screenshot fullscreen"
+        onClick={e => e.stopPropagation()}
+        style={{
+          maxWidth: '90vw', maxHeight: '80vh',
+          borderRadius: '10px',
+          border: '1px solid rgba(255,255,255,0.15)',
+          boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
+          objectFit: 'contain',
+        }}
+      />
+      <p style={{ color: '#555', fontSize: '12px', margin: 0 }}>Click outside the image or press Esc to close</p>
+    </div>
+  )
+}
+
 // ─── Helper: ImagePasteZone ────────────────────────────────────────────────────
 
 function ImagePasteZone({ value, onChange }) {
   const zoneRef = useRef(null)
   const [focused, setFocused] = useState(false)
+  const [lightbox, setLightbox] = useState(false)
 
   const handlePaste = useCallback((e) => {
     const items = e.clipboardData?.items
@@ -99,24 +171,49 @@ function ImagePasteZone({ value, onChange }) {
 
   if (value) {
     return (
-      <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
-        <img
-          src={value}
-          alt="Source screenshot"
-          style={{ maxWidth: '100%', maxHeight: '180px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', display: 'block' }}
-        />
-        <button
-          type="button"
-          onClick={() => onChange(null)}
-          style={{
-            position: 'absolute', top: '6px', right: '6px',
-            background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none',
-            borderRadius: '50%', width: '22px', height: '22px',
-            fontSize: '13px', cursor: 'pointer', lineHeight: 1,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >✕</button>
-      </div>
+      <>
+        {lightbox && <ImageLightbox src={value} onClose={() => setLightbox(false)} />}
+        <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+          <img
+            src={value}
+            alt="Source screenshot"
+            onClick={() => setLightbox(true)}
+            style={{
+              maxWidth: '100%', maxHeight: '180px', borderRadius: '8px',
+              border: '1px solid rgba(255,255,255,0.1)', display: 'block',
+              cursor: 'zoom-in',
+            }}
+          />
+          {/* Expand button */}
+          <button
+            type="button"
+            onClick={() => setLightbox(true)}
+            title="View fullscreen"
+            style={{
+              position: 'absolute', top: '6px', left: '6px',
+              background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none',
+              borderRadius: '6px', padding: '3px 8px',
+              fontSize: '12px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: '4px',
+            }}
+          >
+            ⛶ View
+          </button>
+          {/* Remove button */}
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            title="Remove image"
+            style={{
+              position: 'absolute', top: '6px', right: '6px',
+              background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none',
+              borderRadius: '50%', width: '22px', height: '22px',
+              fontSize: '13px', cursor: 'pointer', lineHeight: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >✕</button>
+        </div>
+      </>
     )
   }
 
