@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
-import { getUser } from '../../utils/auth'
+import { getUser, isAdmin } from '../../utils/auth'
 import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, upsertTouchpoint, createLeadResponse } from '../../utils/outreachApi'
 import LeadDrawer from './components/LeadDrawer'
 import PipelineTable from './components/PipelineTable'
@@ -10,7 +10,6 @@ import PipelineKanban from './components/PipelineKanban'
 import Dashboard from './components/Dashboard'
 import TouchpointQuickModal from './components/TouchpointQuickModal'
 import ResponseQuickModal from './components/ResponseQuickModal'
-import { getUser, isAdmin } from '../../utils/auth'
 
 function getTouchpointNumber(status) {
   const m = status && status.match(/^Touchpoint (\d+)$/)
