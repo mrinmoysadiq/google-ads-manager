@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import toast from 'react-hot-toast'
 import Select from 'react-select'
 import { getUser } from '../../../utils/auth'
@@ -96,12 +97,13 @@ function ImageLightbox({ src, onClose }) {
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
-  return (
+  // Portal to document.body so position:fixed escapes the drawer's transform stacking context
+  return createPortal(
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
-        backgroundColor: 'rgba(0,0,0,0.9)',
+        position: 'fixed', inset: 0, zIndex: 99999,
+        backgroundColor: 'rgba(0,0,0,0.92)',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
         gap: '16px',
@@ -133,21 +135,23 @@ function ImageLightbox({ src, onClose }) {
           ✕ Close
         </button>
       </div>
-      {/* Image */}
+      {/* Image — full size, no crop */}
       <img
         src={src}
         alt="Source screenshot fullscreen"
         onClick={e => e.stopPropagation()}
         style={{
-          maxWidth: '90vw', maxHeight: '80vh',
+          maxWidth: '92vw', maxHeight: '82vh',
           borderRadius: '10px',
           border: '1px solid rgba(255,255,255,0.15)',
           boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
           objectFit: 'contain',
+          display: 'block',
         }}
       />
-      <p style={{ color: '#555', fontSize: '12px', margin: 0 }}>Click outside the image or press Esc to close</p>
-    </div>
+      <p style={{ color: '#555', fontSize: '12px', margin: 0 }}>Click outside or press Esc to close</p>
+    </div>,
+    document.body
   )
 }
 
