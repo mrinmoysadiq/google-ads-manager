@@ -41,6 +41,12 @@ export const upsertTouchpoint = (leadId, number, data) =>
 export const getDashboard = (params) => api.get('/outreach/dashboard', { params }).then(r => r.data)
 export const getOverdueLeads = (params) => api.get('/outreach/overdue', { params }).then(r => r.data)
 
+// Dashboard Cards
+export const getDashboardCards = () => api.get('/outreach/dashboard/cards').then(r => r.data)
+export const createDashboardCard = (data) => api.post('/outreach/dashboard/cards', data).then(r => r.data)
+export const updateDashboardCard = (id, data) => api.patch(`/outreach/dashboard/cards/${id}`, data).then(r => r.data)
+export const deleteDashboardCard = (id) => api.delete(`/outreach/dashboard/cards/${id}`).then(r => r.data)
+
 // Export
 export const exportCsv = (params) => api.get('/outreach/export/csv', { params, responseType: 'blob' }).then(r => r.data)
 export const getExportPdfUrl = (params) => {

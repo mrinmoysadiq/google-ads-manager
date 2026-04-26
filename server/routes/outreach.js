@@ -570,6 +570,96 @@ router.put('/leads/:leadId/touchpoints/:number', (req, res) => {
   }
 });
 
+// ─── DASHBOARD METRIC CARDS (CRUD) ───────────────────────────────────────────
+
+function parseCard(c) {
+  if (!c) return c;
+  let numerator_statuses = [];
+  try { numerator_statuses = JSON.parse(c.numerator_statuses || '[]'); } catch { numerator_statuses = []; }
+  let denominator = 'total';
+  try {
+    const d = JSON.parse(c.denominator);
+    denominator = Array.isArray(d) ? d : c.denominator;
+  } catch { denominator = c.denominator || 'total'; }
+  return { ...c, numerator_statuses, denominator };
+}
+
+function serializeDenominator(den) {
+  if (den === 'total') return 'total';
+  if (Array.isArray(den)) return JSON.stringify(den);
+  // If it's a JSON string that starts with '[', keep as-is
+  if (typeof den === 'string' && den.trim().startsWith('[')) return den;
+  return den || 'total';
+}
+
+router.get('/dashboard/cards', (req, res) => {
+  try {
+    const cards = db.prepare('SELECT * FROM outreach_dashboard_cards ORDER BY sort_order ASC, id ASC').all();
+    res.json(cards.map(parseCard));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch dashboard cards' });
+  }
+});
+
+router.post('/dashboard/cards', (req, res) => {
+  try {
+    const { label, card_type = 'count', numerator_statuses = [], denominator = 'total', color = '#575ECF', sort_order = 0 } = req.body;
+    if (!label || !label.trim()) return res.status(400).json({ error: 'Label is required' });
+    const result = db.prepare(
+      'INSERT INTO outreach_dashboard_cards (label, card_type, numerator_statuses, denominator, color, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(label.trim(), card_type, JSON.stringify(numerator_statuses), serializeDenominator(denominator), color, sort_order);
+    const created = db.prepare('SELECT * FROM outreach_dashboard_cards WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json(parseCard(created));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create card' });
+  }
+});
+
+router.patch('/dashboard/cards/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = db.prepare('SELECT * FROM outreach_dashboard_cards WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ error: 'Card not found' });
+    const { label, card_type, numerator_statuses, denominator, color, sort_order } = req.body;
+    db.prepare(`
+      UPDATE outreach_dashboard_cards SET
+        label = COALESCE(?, label),
+        card_type = COALESCE(?, card_type),
+        numerator_statuses = COALESCE(?, numerator_statuses),
+        denominator = COALESCE(?, denominator),
+        color = COALESCE(?, color),
+        sort_order = COALESCE(?, sort_order)
+      WHERE id = ?
+    `).run(
+      label !== undefined ? label.trim() : null,
+      card_type !== undefined ? card_type : null,
+      numerator_statuses !== undefined ? JSON.stringify(numerator_statuses) : null,
+      denominator !== undefined ? serializeDenominator(denominator) : null,
+      color !== undefined ? color : null,
+      sort_order !== undefined ? sort_order : null,
+      id
+    );
+    const updated = db.prepare('SELECT * FROM outreach_dashboard_cards WHERE id = ?').get(id);
+    res.json(parseCard(updated));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update card' });
+  }
+});
+
+router.delete('/dashboard/cards/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    db.prepare('DELETE FROM outreach_dashboard_cards WHERE id = ?').run(id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete card' });
+  }
+});
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
 router.get('/dashboard', (req, res) => {
@@ -612,10 +702,10 @@ router.get('/dashboard', (req, res) => {
     const total_leads = leads.length;
 
     // ── Metrics based on CURRENT status only (no history accumulation) ─────
-    // Using current status prevents inflated rates from historical stage passes.
+    // "Responded" = lead is in Interested OR Not Interested stage (or beyond)
+    // using current status prevents inflated rates from historical stage passes.
 
-    // Funnel stages — cumulative (lead counts as "responded" if it's currently at Responded or any later stage)
-    const RESPONDED_CURRENT   = ['Responded','Interested','Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client'];
+    const RESPONDED_CURRENT   = ['Interested','Not Interested','Not interested','Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client'];
     const INTERESTED_CURRENT  = ['Interested','Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client'];
     const APPOINTMENT_CURRENT = ['Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client'];
 
@@ -659,10 +749,12 @@ router.get('/dashboard', (req, res) => {
       !NOT_OVERDUE_STATUSES.includes(l.status)
     ).length;
 
-    // by_status (current status distribution)
+    // by_status (current status distribution — includes ALL actual statuses, not just hardcoded list)
     const by_status = {};
-    STATUSES.forEach(s => { by_status[s] = 0; });
-    leads.forEach(l => { if (Object.prototype.hasOwnProperty.call(by_status, l.status)) by_status[l.status]++; });
+    STATUSES.forEach(s => { by_status[s] = 0; }); // initialize known statuses to 0
+    leads.forEach(l => {
+      if (l.status) by_status[l.status] = (by_status[l.status] || 0) + 1;
+    });
 
     // by_channel (touchpoint channels used)
     const by_channel = {};

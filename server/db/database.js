@@ -264,6 +264,16 @@ function initializeDatabase() {
       assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (lead_id, specialist_id)
     );
+
+    CREATE TABLE IF NOT EXISTS outreach_dashboard_cards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      card_type TEXT NOT NULL DEFAULT 'count',
+      numerator_statuses TEXT NOT NULL DEFAULT '[]',
+      denominator TEXT NOT NULL DEFAULT 'total',
+      color TEXT DEFAULT '#575ECF',
+      sort_order INTEGER DEFAULT 0
+    );
   `);
 
   // Seed default industries if empty
@@ -289,6 +299,35 @@ function initializeDatabase() {
       'Closed / Booked as Client', 'Disqualified / Dead',
     ].forEach((name, i) => insertStage.run(name, i + 1));
     console.log('Seeded outreach pipeline stages');
+  }
+
+  // Seed default dashboard metric cards if none exist
+  const dashCardCount = db.prepare('SELECT COUNT(*) as cnt FROM outreach_dashboard_cards').get();
+  if (dashCardCount.cnt === 0) {
+    const RESPONDED_S    = JSON.stringify(['Interested','Not Interested','Not interested','Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client']);
+    const INTERESTED_S   = JSON.stringify(['Interested','Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client']);
+    const APPOINTMENT_S  = JSON.stringify(['Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client']);
+    const NO_SHOW_S      = JSON.stringify(['No Show']);
+    const CLOSED_S       = JSON.stringify(['Closed / Booked as Client']);
+    const TRIAL_S        = JSON.stringify(['Started Trial']);
+    const insertCard = db.prepare('INSERT INTO outreach_dashboard_cards (label, card_type, numerator_statuses, denominator, color, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
+    [
+      ['Total Leads',     'count', '[]',          'total',         '#8a8680',  0],
+      ['Responded',       'count', RESPONDED_S,   'total',         '#3b82f6',  1],
+      ['Response Rate',   'rate',  RESPONDED_S,   'total',         '#3b82f6',  2],
+      ['Interested',      'count', INTERESTED_S,  RESPONDED_S,     '#a855f7',  3],
+      ['Interest Rate',   'rate',  INTERESTED_S,  RESPONDED_S,     '#a855f7',  4],
+      ['Appts Booked',    'count', APPOINTMENT_S, INTERESTED_S,    '#f59e0b',  5],
+      ['Appt Rate',       'rate',  APPOINTMENT_S, INTERESTED_S,    '#f59e0b',  6],
+      ['No Shows',        'count', NO_SHOW_S,     APPOINTMENT_S,   '#ef4444',  7],
+      ['No Show Rate',    'rate',  NO_SHOW_S,     APPOINTMENT_S,   '#ef4444',  8],
+      ['Closed',          'count', CLOSED_S,      APPOINTMENT_S,   '#22c55e',  9],
+      ['Close Rate',      'rate',  CLOSED_S,      APPOINTMENT_S,   '#22c55e', 10],
+      ['Started Trial',   'count', TRIAL_S,       'total',         '#06b6d4', 11],
+    ].forEach(([label, card_type, numerator_statuses, denominator, color, sort_order]) => {
+      insertCard.run(label, card_type, numerator_statuses, denominator, color, sort_order);
+    });
+    console.log('Seeded default dashboard cards');
   }
 
   // Seed default outreach settings
