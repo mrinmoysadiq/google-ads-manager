@@ -4,9 +4,17 @@ import Select from 'react-select';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_COLORS = {
+  'New Lead':                        { bg: 'rgba(87,94,207,0.15)',  color: '#575ECF' },
+  'Touchpoint 1':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
+  'Touchpoint 2':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
+  'Touchpoint 3':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
+  'Touchpoint 4':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
+  'Touchpoint 5':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
   'Contacted':                       { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' },
   'Responded':                       { bg: 'rgba(59,130,246,0.15)',  color: '#3b82f6' },
   'Interested':                      { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7' },
+  'Not Interested':                  { bg: 'rgba(107,114,128,0.15)', color: '#6b7280' },
+  'Not interested':                  { bg: 'rgba(107,114,128,0.15)', color: '#6b7280' },
   'Appointment Booked':              { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b' },
   'No Show':                         { bg: 'rgba(239,68,68,0.15)',   color: '#ef4444' },
   'Meeting Done - Not Interested':   { bg: 'rgba(107,114,128,0.15)', color: '#6b7280' },
@@ -15,16 +23,19 @@ const STATUS_COLORS = {
   'Disqualified / Dead':             { bg: 'rgba(55,65,81,0.2)',     color: '#6b7280' },
 };
 
-const STATUSES = [
-  'Contacted',
-  'Responded',
-  'Interested',
-  'Appointment Booked',
-  'No Show',
-  'Meeting Done - Not Interested',
-  'Started Trial',
-  'Closed / Booked as Client',
-  'Disqualified / Dead',
+// Fallback for any custom/unknown stage
+const DEFAULT_STATUS_COLOR = { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' };
+function getStatusColor(status) {
+  return STATUS_COLORS[status] || DEFAULT_STATUS_COLOR;
+}
+
+// Complete default stage list — used when stages prop is not yet loaded
+const DEFAULT_STAGES = [
+  'New Lead',
+  'Touchpoint 1', 'Touchpoint 2', 'Touchpoint 3', 'Touchpoint 4', 'Touchpoint 5',
+  'Responded', 'Interested', 'Not Interested', 'Appointment Booked',
+  'No Show', 'Meeting Done - Not Interested', 'Started Trial',
+  'Closed / Booked as Client', 'Disqualified / Dead',
 ];
 
 const CHANNEL_COLORS = {
@@ -142,14 +153,12 @@ function ChannelPills({ channels }) {
   );
 }
 
-function StatusDropdown({ currentStatus, leadId, onStatusChange, onClose }) {
+function StatusDropdown({ currentStatus, leadId, stageNames, onStatusChange, onClose }) {
   const ref = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(e) {
-      if (ref.current && !ref.current.contains(e.target)) {
-        onClose();
-      }
+      if (ref.current && !ref.current.contains(e.target)) onClose();
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -168,44 +177,31 @@ function StatusDropdown({ currentStatus, leadId, onStatusChange, onClose }) {
         borderRadius: 8,
         padding: 4,
         minWidth: 220,
+        maxHeight: 320,
+        overflowY: 'auto',
         boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      {STATUSES.map((s) => {
-        const { bg, color } = STATUS_COLORS[s];
+      {stageNames.map((s) => {
+        const { color } = getStatusColor(s);
         const isActive = s === currentStatus;
         return (
           <div
             key={s}
             onClick={() => { onStatusChange(leadId, s); onClose(); }}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '6px 10px',
-              borderRadius: 5,
-              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 10px', borderRadius: 5, cursor: 'pointer',
               background: isActive ? 'rgba(255,255,255,0.06)' : 'transparent',
               transition: 'background 0.15s',
             }}
             onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
             onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
           >
-            <span
-              style={{
-                display: 'inline-block',
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: color,
-                flexShrink: 0,
-              }}
-            />
+            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
             <span style={{ fontSize: 12, color: isActive ? '#fff' : '#c5c1b9' }}>{s}</span>
-            {isActive && (
-              <span style={{ marginLeft: 'auto', fontSize: 11, color }}>✓</span>
-            )}
+            {isActive && <span style={{ marginLeft: 'auto', fontSize: 11, color }}>✓</span>}
           </div>
         );
       })}
@@ -213,9 +209,9 @@ function StatusDropdown({ currentStatus, leadId, onStatusChange, onClose }) {
   );
 }
 
-function StatusBadge({ lead, onStatusChange }) {
+function StatusBadge({ lead, stageNames, onStatusChange }) {
   const [open, setOpen] = useState(false);
-  const { bg, color } = STATUS_COLORS[lead.status] || { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' };
+  const { bg, color } = getStatusColor(lead.status);
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -223,20 +219,11 @@ function StatusBadge({ lead, onStatusChange }) {
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
         title="Click to change status"
         style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-          padding: '3px 9px',
-          borderRadius: 20,
-          background: bg,
-          color,
-          fontSize: 11,
-          fontWeight: 600,
-          cursor: 'pointer',
-          whiteSpace: 'nowrap',
-          userSelect: 'none',
-          border: `1px solid ${color}33`,
-          transition: 'opacity 0.15s',
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '3px 9px', borderRadius: 20, background: bg, color,
+          fontSize: 11, fontWeight: 600, cursor: 'pointer',
+          whiteSpace: 'nowrap', userSelect: 'none',
+          border: `1px solid ${color}33`, transition: 'opacity 0.15s',
         }}
         onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
         onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
@@ -247,6 +234,7 @@ function StatusBadge({ lead, onStatusChange }) {
         <StatusDropdown
           currentStatus={lead.status}
           leadId={lead.id}
+          stageNames={stageNames}
           onStatusChange={onStatusChange}
           onClose={() => setOpen(false)}
         />
@@ -297,9 +285,13 @@ export default function PipelineTable({
   onStatusChange,
   specialists = [],
   industries = [],
+  stages = [],
   showSpecialistColumn = false,
 }) {
-  const sortBy = filters.sort_by || 'created_at';
+  // Use active pipeline stages from DB; fall back to the default list if not yet loaded
+  const stageNames = stages.length > 0 ? stages.map(s => s.name) : DEFAULT_STAGES;
+
+  const sortBy = filters.sort_by || 'status_updated_at';
   const sortDir = filters.sort_dir || 'DESC';
 
   function handleSort(col) {
@@ -310,7 +302,7 @@ export default function PipelineTable({
     }
   }
 
-  const statusOptions = STATUSES.map((s) => ({ value: s, label: s }));
+  const statusOptions = stageNames.map((s) => ({ value: s, label: s }));
   const industryOptions = industries.map((i) => ({ value: i.id, label: i.name }));
 
   const selectedStatuses = (filters.status ? filters.status.split(',') : [])
@@ -333,7 +325,7 @@ export default function PipelineTable({
       followup_overdue: false,
       date_from: '',
       date_to: '',
-      sort_by: 'created_at',
+      sort_by: 'status_updated_at',
       sort_dir: 'DESC',
     });
   }
@@ -648,7 +640,7 @@ export default function PipelineTable({
 
                     {/* Status */}
                     <td style={{ ...tdStyle }} onClick={(e) => e.stopPropagation()}>
-                      <StatusBadge lead={lead} onStatusChange={onStatusChange} />
+                      <StatusBadge lead={lead} stageNames={stageNames} onStatusChange={onStatusChange} />
                     </td>
 
                     {/* Channels */}

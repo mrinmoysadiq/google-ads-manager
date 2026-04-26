@@ -51,10 +51,10 @@ export default function OutreachHome() {
   const [drawerKey, setDrawerKey] = useState(0) // force remount on open
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0) // increment to refresh dashboard
 
-  // Pipeline filters
+  // Pipeline filters — default sort by most-recently-updated so moved leads surface to top
   const [filters, setFilters] = useState({
     status: '', industry_id: '', search: '', followup_overdue: false,
-    date_from: '', date_to: '', sort_by: 'created_at', sort_dir: 'DESC',
+    date_from: '', date_to: '', sort_by: 'status_updated_at', sort_dir: 'DESC',
   })
   const [page, setPage] = useState(1)
   const [searchInput, setSearchInput] = useState('')
@@ -112,12 +112,14 @@ export default function OutreachHome() {
       .catch(() => toast.error('Failed to load outreach data'))
   }, [])
 
-  // Fetch leads
+  // Fetch leads — Kanban loads up to 500 (no images in list response, so this is fast);
+  // Table stays at 25/page with server-side pagination.
   const fetchLeads = useCallback(() => {
     setLoading(true)
+    const isKanban = viewMode === 'kanban'
     const params = {
-      page,
-      limit: 25,
+      page: isKanban ? 1 : page,
+      limit: isKanban ? 500 : 25,
       sort_by: filters.sort_by,
       sort_dir: filters.sort_dir,
     }
@@ -140,7 +142,7 @@ export default function OutreachHome() {
       })
       .catch(() => toast.error('Failed to load leads'))
       .finally(() => setLoading(false))
-  }, [selectedSpecialist, filters, page])
+  }, [selectedSpecialist, filters, page, viewMode])
 
   useEffect(() => { fetchLeads() }, [fetchLeads])
 
@@ -439,6 +441,7 @@ export default function OutreachHome() {
                 onStatusChange={handleStatusChange}
                 specialists={specialists}
                 industries={industries}
+                stages={stages}
                 showSpecialistColumn={showSpecialistColumn}
               />
             ) : (

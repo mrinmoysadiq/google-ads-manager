@@ -242,7 +242,10 @@ router.get('/leads', (req, res) => {
 
     const leads = db.prepare(`
       SELECT
-        l.*,
+        l.id, l.specialist_id, l.company_name, l.contact_name, l.job_title,
+        l.website, l.industry_id, l.location, l.status, l.next_followup_date,
+        l.source_url, l.email, l.phone, l.fb_page_url, l.ig_url,
+        l.created_at, l.status_updated_at,
         s.name as specialist_name,
         i.name as industry_name,
         (SELECT GROUP_CONCAT(s2.name, ', ') FROM outreach_lead_specialists ols2
