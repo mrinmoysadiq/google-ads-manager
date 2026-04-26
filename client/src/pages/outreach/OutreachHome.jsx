@@ -186,6 +186,7 @@ export default function OutreachHome() {
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l))
     setTpModal({ open: false, leadId: null, number: null, status: null, modalKey: 0 })
     toast.success(`Touchpoint ${number} saved — moved to ${status}`)
+    bumpDashboard()
   }
 
   const handleResponseModalSave = async (fields) => {
@@ -196,6 +197,7 @@ export default function OutreachHome() {
       setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l))
       setResponseModal({ open: false, leadId: null, status: null, modalKey: 0 })
       toast.success(`Response logged — moved to "${status}"`)
+      bumpDashboard()
     } catch {
       toast.error('Failed to save response')
       throw new Error('Failed')
@@ -204,6 +206,7 @@ export default function OutreachHome() {
 
   const handleLeadUpdated = (updatedLead) => {
     setLeads(prev => prev.map(l => l.id === updatedLead.id ? { ...l, ...updatedLead } : l))
+    bumpDashboard()
   }
 
   const bumpDashboard = () => setDashboardRefreshKey(k => k + 1)
