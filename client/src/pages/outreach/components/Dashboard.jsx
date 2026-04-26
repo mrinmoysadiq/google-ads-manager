@@ -165,7 +165,7 @@ function Spinner() {
   );
 }
 
-function MetricCard({ label, value, sub, color, onEdit, onDelete }) {
+function MetricCard({ label, value, sub, color, onEdit }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -179,9 +179,9 @@ function MetricCard({ label, value, sub, color, onEdit, onDelete }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Edit / Delete buttons — appear on hover */}
+      {/* Edit button — appears on hover */}
       {hovered && (
-        <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
+        <div style={{ position: 'absolute', top: 8, right: 8 }}>
           <button
             onClick={onEdit}
             title="Edit card"
@@ -191,15 +191,6 @@ function MetricCard({ label, value, sub, color, onEdit, onDelete }) {
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem',
             }}
           >✏️</button>
-          <button
-            onClick={onDelete}
-            title="Delete card"
-            style={{
-              background: 'rgba(239,68,68,0.12)', border: 'none', borderRadius: 5,
-              color: '#ef4444', cursor: 'pointer', width: 24, height: 24,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem',
-            }}
-          >🗑</button>
         </div>
       )}
 
@@ -238,7 +229,7 @@ const BLANK_CARD = {
   color: '#575ECF',
 };
 
-function CardModal({ card, allStatuses, onClose, onSave }) {
+function CardModal({ card, allStatuses, onClose, onSave, onDelete }) {
   const isEdit = !!card?.id;
   const [form, setForm] = useState(() => {
     if (!card) return { ...BLANK_CARD };
@@ -482,26 +473,41 @@ function CardModal({ card, allStatuses, onClose, onSave }) {
         </div>
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button
-            onClick={onClose}
-            style={{
-              padding: '8px 20px', borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.12)',
-              backgroundColor: 'transparent', color: '#8a8680',
-              cursor: 'pointer', fontSize: '0.875rem',
-            }}
-          >Cancel</button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            style={{
-              padding: '8px 24px', borderRadius: 8,
-              border: 'none', backgroundColor: '#575ECF',
-              color: '#fff', cursor: saving ? 'not-allowed' : 'pointer',
-              fontSize: '0.875rem', fontWeight: 600, opacity: saving ? 0.7 : 1,
-            }}
-          >{saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Card'}</button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Delete — only shown when editing an existing card */}
+          {isEdit && onDelete ? (
+            <button
+              onClick={onDelete}
+              style={{
+                padding: '8px 16px', borderRadius: 8,
+                border: '1px solid rgba(239,68,68,0.3)',
+                backgroundColor: 'rgba(239,68,68,0.08)', color: '#ef4444',
+                cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
+              }}
+            >Delete Card</button>
+          ) : <span />}
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={onClose}
+              style={{
+                padding: '8px 20px', borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.12)',
+                backgroundColor: 'transparent', color: '#8a8680',
+                cursor: 'pointer', fontSize: '0.875rem',
+              }}
+            >Cancel</button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                padding: '8px 24px', borderRadius: 8,
+                border: 'none', backgroundColor: '#575ECF',
+                color: '#fff', cursor: saving ? 'not-allowed' : 'pointer',
+                fontSize: '0.875rem', fontWeight: 600, opacity: saving ? 0.7 : 1,
+              }}
+            >{saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Card'}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -609,7 +615,6 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
   }
 
   async function handleCardDelete(cardId) {
-    if (!window.confirm('Delete this metric card?')) return;
     try {
       await deleteDashboardCard(cardId);
       setCards(prev => prev.filter(c => c.id !== cardId));
@@ -723,7 +728,6 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
                     sub={computeCardSub(card, byStatus, totalLeads)}
                     color={card.color}
                     onEdit={() => { setModalCard(card); setModalOpen(true); }}
-                    onDelete={() => handleCardDelete(card.id)}
                   />
                 ))}
               </div>
@@ -880,6 +884,11 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
           allStatuses={allStatuses}
           onClose={() => { setModalOpen(false); setModalCard(null); }}
           onSave={handleCardSave}
+          onDelete={modalCard?.id ? async () => {
+            await handleCardDelete(modalCard.id);
+            setModalOpen(false);
+            setModalCard(null);
+          } : undefined}
         />
       )}
     </div>
