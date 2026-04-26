@@ -218,8 +218,9 @@ router.get('/leads', (req, res) => {
     }
     if (industry_id) { conditions.push('l.industry_id = ?'); params.push(industry_id); }
     if (search) {
-      conditions.push('(l.company_name LIKE ? OR l.contact_name LIKE ?)');
-      params.push(`%${search}%`, `%${search}%`);
+      conditions.push('(l.company_name LIKE ? OR l.contact_name LIKE ? OR l.email LIKE ? OR l.phone LIKE ? OR l.location LIKE ? OR l.job_title LIKE ? OR l.website LIKE ?)');
+      const s = `%${search}%`;
+      params.push(s, s, s, s, s, s, s);
     }
     if (followup_overdue === 'true') {
       const today = new Date().toISOString().slice(0, 10);

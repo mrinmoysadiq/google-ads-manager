@@ -64,15 +64,6 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function useDebounce(value, delay) {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return debounced;
-}
-
 // ─── react-select shared dark theme ──────────────────────────────────────────
 
 const selectStyles = {
@@ -308,21 +299,6 @@ export default function PipelineTable({
   industries = [],
   showSpecialistColumn = false,
 }) {
-  // Local search state for debounce
-  const [searchInput, setSearchInput] = useState(filters.search || '');
-  const debouncedSearch = useDebounce(searchInput, 400);
-
-  useEffect(() => {
-    if (debouncedSearch !== (filters.search || '')) {
-      onFiltersChange?.({ ...filters, search: debouncedSearch, page: 1 });
-    }
-  }, [debouncedSearch]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Sync external filter.search → local input when cleared externally
-  useEffect(() => {
-    if (!filters.search && searchInput) setSearchInput('');
-  }, [filters.search]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const sortBy = filters.sort_by || 'created_at';
   const sortDir = filters.sort_dir || 'DESC';
 
@@ -350,7 +326,6 @@ export default function PipelineTable({
     filters.followup_overdue;
 
   function clearFilters() {
-    setSearchInput('');
     onFiltersChange?.({
       status: '',
       industry_id: '',
@@ -425,25 +400,6 @@ export default function PipelineTable({
           alignItems: 'center',
         }}
       >
-        {/* Search */}
-        <input
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search company, contact…"
-          style={{
-            background: '#2a2a2a',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 6,
-            padding: '6px 12px',
-            color: '#c5c1b9',
-            fontSize: 13,
-            width: 220,
-            outline: 'none',
-          }}
-          onFocus={(e) => (e.target.style.borderColor = '#575ECF')}
-          onBlur={(e) => (e.target.style.borderColor = 'rgba(255,255,255,0.08)')}
-        />
-
         {/* Status multi-select */}
         <div style={{ minWidth: 200 }}>
           <Select

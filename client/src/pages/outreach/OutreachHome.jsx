@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
+import { useDebounce } from '../../hooks/useDebounce'
 import { getUser, isAdmin } from '../../utils/auth'
 import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, upsertTouchpoint, createLeadResponse } from '../../utils/outreachApi'
 import LeadDrawer from './components/LeadDrawer'
@@ -56,6 +57,22 @@ export default function OutreachHome() {
     date_from: '', date_to: '', sort_by: 'created_at', sort_dir: 'DESC',
   })
   const [page, setPage] = useState(1)
+  const [searchInput, setSearchInput] = useState('')
+  const debouncedSearch = useDebounce(searchInput, 350)
+  const searchRef = useRef(null)
+
+  // Sync debounced search → filters
+  useEffect(() => {
+    if (debouncedSearch !== (filters.search || '')) {
+      setFilters(f => ({ ...f, search: debouncedSearch }))
+      setPage(1)
+    }
+  }, [debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync filters.search → local search input (e.g. when PipelineTable clears all filters)
+  useEffect(() => {
+    if (!filters.search && searchInput) setSearchInput('')
+  }, [filters.search]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load metadata
   useEffect(() => {
@@ -346,6 +363,67 @@ export default function OutreachHome() {
         {/* Content */}
         {tab === 'pipeline' && (
           <>
+            {/* ── Global Search Bar ── */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ position: 'relative', maxWidth: 560 }}>
+                {/* Search icon */}
+                <svg
+                  style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: searchInput ? '#575ECF' : '#8a8680', transition: 'color 0.15s' }}
+                  width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                </svg>
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  placeholder="Search by company, contact, email, phone, location…"
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    paddingLeft: 38,
+                    paddingRight: searchInput ? 36 : 14,
+                    paddingTop: 9,
+                    paddingBottom: 9,
+                    backgroundColor: '#242424',
+                    border: `1px solid ${searchInput ? '#575ECF' : 'rgba(255,255,255,0.1)'}`,
+                    borderRadius: 10,
+                    color: '#c5c1b9',
+                    fontSize: '0.875rem',
+                    outline: 'none',
+                    transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#575ECF'; e.target.previousSibling && (e.target.previousSibling.style.color = '#575ECF') }}
+                  onBlur={e => { if (!searchInput) e.target.style.borderColor = 'rgba(255,255,255,0.1)' }}
+                  onKeyDown={e => e.key === 'Escape' && (setSearchInput(''), e.target.blur())}
+                />
+                {/* Clear button */}
+                {searchInput && (
+                  <button
+                    onClick={() => { setSearchInput(''); searchRef.current?.focus() }}
+                    style={{
+                      position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                      background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%',
+                      width: 18, height: 18, cursor: 'pointer', color: '#8a8680',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.7rem', lineHeight: 1,
+                    }}
+                    title="Clear search"
+                  >✕</button>
+                )}
+              </div>
+              {/* Result count hint when searching */}
+              {filters.search && (
+                <p style={{ color: '#8a8680', fontSize: '0.75rem', marginTop: 6, marginLeft: 2 }}>
+                  {loading
+                    ? 'Searching…'
+                    : `${pagination.total} result${pagination.total !== 1 ? 's' : ''} for "${filters.search}"`
+                  }
+                </p>
+              )}
+            </div>
+
             {viewMode === 'table' ? (
               <PipelineTable
                 leads={leads}
