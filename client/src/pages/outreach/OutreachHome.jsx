@@ -48,6 +48,7 @@ export default function OutreachHome() {
   // Drawer state
   const [drawerLeadId, setDrawerLeadId] = useState(undefined) // undefined=closed, null=create, number=edit
   const [drawerKey, setDrawerKey] = useState(0) // force remount on open
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0) // increment to refresh dashboard
 
   // Pipeline filters
   const [filters, setFilters] = useState({
@@ -154,6 +155,7 @@ export default function OutreachHome() {
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: newStatus } : l))
     try {
       await updateLead(leadId, { status: newStatus, performed_by: getUser()?.name || null })
+      bumpDashboard()
     } catch {
       toast.error('Failed to update status')
       fetchLeads()
@@ -187,11 +189,14 @@ export default function OutreachHome() {
     setLeads(prev => prev.map(l => l.id === updatedLead.id ? { ...l, ...updatedLead } : l))
   }
 
-  const handleLeadSaved = () => { fetchLeads() }
+  const bumpDashboard = () => setDashboardRefreshKey(k => k + 1)
+
+  const handleLeadSaved = () => { fetchLeads(); bumpDashboard() }
   const handleLeadDeleted = (id) => {
     setLeads(prev => prev.filter(l => l.id !== id))
     setDrawerLeadId(undefined)
     fetchLeads()
+    bumpDashboard()
   }
 
   const openDrawer = (leadId) => {
@@ -373,6 +378,7 @@ export default function OutreachHome() {
             specialistId={selectedSpecialist ? selectedSpecialist.id : ''}
             specialists={specialists}
             onLeadClick={openDrawer}
+            refreshKey={dashboardRefreshKey}
           />
         )}
       </div>

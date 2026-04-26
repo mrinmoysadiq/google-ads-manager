@@ -574,11 +574,28 @@ router.put('/leads/:leadId/touchpoints/:number', (req, res) => {
 
 router.get('/dashboard', (req, res) => {
   try {
-    const { specialist_id, date_from, date_to } = req.query;
+    let { specialist_id, date_from, date_to } = req.query;
+
+    // ── Server-side access enforcement ──────────────────────────────────────
+    const reqUser = getRequestUser(req);
+    const enforcedSpecId = resolveSpecialistForUser(reqUser);
+    if (enforcedSpecId === -1) {
+      return res.json({ total_leads: 0, responded: 0, interested: 0, appointments_booked: 0,
+        no_shows: 0, closed: 0, started_trial: 0, disqualified: 0, meetings_happened: 0,
+        response_rate: 0, interested_rate: 0, appointment_rate: 0, no_show_rate: 0, closed_rate: 0,
+        avg_touchpoints_before_response: 0, overdue_followups: 0,
+        by_status: {}, by_channel: {}, by_specialist: [] });
+    }
+    if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
+    // ────────────────────────────────────────────────────────────────────────
+
     const conditions = [];
     const params = [];
 
-    if (specialist_id) { conditions.push('l.specialist_id = ?'); params.push(specialist_id); }
+    if (specialist_id) {
+      conditions.push('EXISTS (SELECT 1 FROM outreach_lead_specialists ols WHERE ols.lead_id = l.id AND ols.specialist_id = ?)');
+      params.push(specialist_id);
+    }
     if (date_from) { conditions.push("date(l.created_at) >= ?"); params.push(date_from); }
     if (date_to) { conditions.push("date(l.created_at) <= ?"); params.push(date_to); }
 
@@ -592,49 +609,36 @@ router.get('/dashboard', (req, res) => {
     `).all(...params);
 
     const leadIds = leads.map(l => l.id);
-
-    // Build per-lead status sets (current + history)
-    const leadStatusSets = {};
-    leads.forEach(l => { leadStatusSets[l.id] = new Set([l.status]); });
-
-    if (leadIds.length > 0) {
-      const history = db.prepare(
-        `SELECT lead_id, new_status FROM outreach_status_history WHERE lead_id IN (${leadIds.map(() => '?').join(',')})`
-      ).all(...leadIds);
-      history.forEach(h => {
-        if (leadStatusSets[h.lead_id]) leadStatusSets[h.lead_id].add(h.new_status);
-      });
-    }
-
-    const hasAny = (leadId, statuses) => statuses.some(s => leadStatusSets[leadId] && leadStatusSets[leadId].has(s));
-
     const total_leads = leads.length;
-    const total_contacted = total_leads;
 
-    const respondedLeads = leads.filter(l => hasAny(l.id, RESPONDED_OR_BEYOND));
-    const responded = respondedLeads.length;
+    // ── Metrics based on CURRENT status only (no history accumulation) ─────
+    // Using current status prevents inflated rates from historical stage passes.
 
-    const interestedLeads = leads.filter(l => hasAny(l.id, INTERESTED_OR_BEYOND));
-    const interested = interestedLeads.length;
+    // Funnel stages — cumulative (lead counts as "responded" if it's currently at Responded or any later stage)
+    const RESPONDED_CURRENT   = ['Responded','Interested','Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client'];
+    const INTERESTED_CURRENT  = ['Interested','Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client'];
+    const APPOINTMENT_CURRENT = ['Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client'];
 
-    const appointmentLeads = leads.filter(l => hasAny(l.id, APPOINTMENT_OR_BEYOND));
-    const appointments_booked = appointmentLeads.length;
+    const respondedLeads          = leads.filter(l => RESPONDED_CURRENT.includes(l.status));
+    const responded               = respondedLeads.length;
+    const interested              = leads.filter(l => INTERESTED_CURRENT.includes(l.status)).length;
+    const appointments_booked     = leads.filter(l => APPOINTMENT_CURRENT.includes(l.status)).length;
+    const no_shows                = leads.filter(l => l.status === 'No Show').length;
+    const meetings_done_ni        = leads.filter(l => l.status === 'Meeting Done - Not Interested').length;
+    const started_trial           = leads.filter(l => l.status === 'Started Trial').length;
+    const closed                  = leads.filter(l => l.status === 'Closed / Booked as Client').length;
+    const disqualified            = leads.filter(l => l.status === 'Disqualified / Dead').length;
+    const meetings_happened       = no_shows + meetings_done_ni + started_trial + closed;
 
-    const no_shows = leads.filter(l => leadStatusSets[l.id] && leadStatusSets[l.id].has('No Show')).length;
-    const meetings_done_not_interested = leads.filter(l => leadStatusSets[l.id] && leadStatusSets[l.id].has('Meeting Done - Not Interested')).length;
-    const started_trial = leads.filter(l => leadStatusSets[l.id] && leadStatusSets[l.id].has('Started Trial')).length;
-    const closed = leads.filter(l => leadStatusSets[l.id] && leadStatusSets[l.id].has('Closed / Booked as Client')).length;
-    const disqualified = leads.filter(l => leadStatusSets[l.id] && leadStatusSets[l.id].has('Disqualified / Dead')).length;
-    const meetings_happened = meetings_done_not_interested + started_trial + closed;
+    // Rates
+    const fmt = (n, d) => d > 0 ? parseFloat((n / d * 100).toFixed(1)) : 0;
+    const response_rate    = fmt(responded, total_leads);         // responded / total leads
+    const interested_rate  = fmt(interested, responded);          // interested / responded
+    const appointment_rate = fmt(appointments_booked, interested);// booked / interested
+    const no_show_rate     = fmt(no_shows, appointments_booked);  // no shows / booked
+    const closed_rate      = fmt(closed, appointments_booked);    // closed / all booked (clean close rate)
 
-    const response_rate = total_leads > 0 ? parseFloat((responded / total_leads * 100).toFixed(1)) : 0;
-    const interested_rate = responded > 0 ? parseFloat((interested / responded * 100).toFixed(1)) : 0;
-    const leads_to_appointment_ratio = total_leads > 0 ? parseFloat((appointments_booked / total_leads * 100).toFixed(1)) : 0;
-    const no_show_rate = appointments_booked > 0 ? parseFloat((no_shows / appointments_booked * 100).toFixed(1)) : 0;
-    const closedDenominator = closed + meetings_done_not_interested + no_shows;
-    const closed_rate = closedDenominator > 0 ? parseFloat((closed / closedDenominator * 100).toFixed(1)) : 0;
-
-    // avg touchpoints for responded leads
+    // Avg touchpoints before response
     let avg_touchpoints_before_response = 0;
     if (respondedLeads.length > 0) {
       const rIds = respondedLeads.map(l => l.id);
@@ -648,19 +652,19 @@ router.get('/dashboard', (req, res) => {
       }
     }
 
-    // Overdue
+    // Overdue follow-ups count
     const today = new Date().toISOString().slice(0, 10);
     const overdue_followups = leads.filter(l =>
       l.next_followup_date && l.next_followup_date < today &&
       !NOT_OVERDUE_STATUSES.includes(l.status)
     ).length;
 
-    // by_status (current)
+    // by_status (current status distribution)
     const by_status = {};
     STATUSES.forEach(s => { by_status[s] = 0; });
-    leads.forEach(l => { if (by_status.hasOwnProperty(l.status)) by_status[l.status]++; });
+    leads.forEach(l => { if (Object.prototype.hasOwnProperty.call(by_status, l.status)) by_status[l.status]++; });
 
-    // by_channel
+    // by_channel (touchpoint channels used)
     const by_channel = {};
     if (leadIds.length > 0) {
       db.prepare(`
@@ -670,23 +674,37 @@ router.get('/dashboard', (req, res) => {
       `).all(...leadIds).forEach(r => { by_channel[r.channel] = r.cnt; });
     }
 
-    // by_specialist
+    // by_specialist — uses junction table for accurate multi-specialist attribution
     const specialistMap = {};
-    leads.forEach(l => {
-      if (!specialistMap[l.specialist_id]) {
-        specialistMap[l.specialist_id] = { name: l.specialist_name || 'Unknown', total: 0, closed: 0, responded: 0, booked: 0 };
-      }
-      specialistMap[l.specialist_id].total++;
-      if (leadStatusSets[l.id] && leadStatusSets[l.id].has('Closed / Booked as Client')) specialistMap[l.specialist_id].closed++;
-      if (hasAny(l.id, RESPONDED_OR_BEYOND)) specialistMap[l.specialist_id].responded++;
-      if (hasAny(l.id, APPOINTMENT_OR_BEYOND)) specialistMap[l.specialist_id].booked++;
-    });
+    if (leadIds.length > 0) {
+      const assignments = db.prepare(`
+        SELECT ols.lead_id, ols.specialist_id, s.name as specialist_name
+        FROM outreach_lead_specialists ols
+        JOIN outreach_specialists s ON s.id = ols.specialist_id
+        WHERE ols.lead_id IN (${leadIds.map(() => '?').join(',')})
+      `).all(...leadIds);
+
+      const leadStatusMap = {};
+      leads.forEach(l => { leadStatusMap[l.id] = l.status; });
+
+      assignments.forEach(a => {
+        if (!specialistMap[a.specialist_id]) {
+          specialistMap[a.specialist_id] = { name: a.specialist_name || 'Unknown', total: 0, closed: 0, responded: 0, booked: 0 };
+        }
+        const status = leadStatusMap[a.lead_id];
+        specialistMap[a.specialist_id].total++;
+        if (status === 'Closed / Booked as Client') specialistMap[a.specialist_id].closed++;
+        if (RESPONDED_CURRENT.includes(status)) specialistMap[a.specialist_id].responded++;
+        if (APPOINTMENT_CURRENT.includes(status)) specialistMap[a.specialist_id].booked++;
+      });
+    }
     const by_specialist = Object.values(specialistMap).sort((a, b) => b.total - a.total);
 
     res.json({
-      total_leads, total_contacted, responded, response_rate,
+      total_leads, total_contacted: total_leads,
+      responded, response_rate,
       interested, interested_rate,
-      appointments_booked, leads_to_appointment_ratio,
+      appointments_booked, appointment_rate, leads_to_appointment_ratio: appointment_rate,
       no_shows, no_show_rate,
       meetings_happened, closed, closed_rate,
       started_trial, disqualified,
@@ -703,11 +721,19 @@ router.get('/dashboard', (req, res) => {
 
 router.get('/overdue', (req, res) => {
   try {
-    const { specialist_id } = req.query;
+    let { specialist_id } = req.query;
+    const reqUser = getRequestUser(req);
+    const enforcedSpecId = resolveSpecialistForUser(reqUser);
+    if (enforcedSpecId === -1) return res.json([]);
+    if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
+
     const today = new Date().toISOString().slice(0, 10);
     const conditions = [`l.next_followup_date < ?`, `l.status NOT IN ('Closed / Booked as Client','Disqualified / Dead','Meeting Done - Not Interested')`];
     const params = [today];
-    if (specialist_id) { conditions.push('l.specialist_id = ?'); params.push(specialist_id); }
+    if (specialist_id) {
+      conditions.push('EXISTS (SELECT 1 FROM outreach_lead_specialists ols WHERE ols.lead_id = l.id AND ols.specialist_id = ?)');
+      params.push(specialist_id);
+    }
 
     const leads = db.prepare(`
       SELECT l.id, l.company_name, l.contact_name, l.status, l.next_followup_date, s.name as specialist_name

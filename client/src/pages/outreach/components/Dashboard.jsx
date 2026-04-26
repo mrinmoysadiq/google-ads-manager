@@ -26,6 +26,8 @@ function getDateParams(dateRange, customFrom, customTo) {
   const fmt = (d) => d.toISOString().slice(0, 10);
 
   switch (dateRange) {
+    case 'today':
+      return { from: fmt(today), to: fmt(today) };
     case 'week': {
       const day = today.getDay();
       const mon = new Date(today);
@@ -112,7 +114,7 @@ function pct(num, den) {
   return (((num || 0) / den) * 100).toFixed(1) + '%';
 }
 
-export default function Dashboard({ specialistId, specialists, onLeadClick }) {
+export default function Dashboard({ specialistId, specialists, onLeadClick, refreshKey }) {
   const [dateRange, setDateRange] = useState('month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -147,6 +149,12 @@ export default function Dashboard({ specialistId, specialists, onLeadClick }) {
     fetchData();
   }, [fetchData, dateRange, customFrom, customTo]);
 
+  // Refresh when pipeline changes (lead moved/deleted)
+  useEffect(() => {
+    if (refreshKey === undefined) return;
+    fetchData();
+  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleExportCsv() {
     try {
       const dateParams = getDateParams(dateRange, customFrom, customTo);
@@ -173,6 +181,7 @@ export default function Dashboard({ specialistId, specialists, onLeadClick }) {
   }
 
   const DATE_RANGE_OPTIONS = [
+    { value: 'today', label: 'Today' },
     { value: 'week', label: 'This Week' },
     { value: 'month', label: 'This Month' },
     { value: 'last30', label: 'Last 30 Days' },
@@ -190,6 +199,7 @@ export default function Dashboard({ specialistId, specialists, onLeadClick }) {
   const closed = m.closed || 0;
   const startedTrial = m.started_trial || 0;
   const totalContacted = m.total_contacted || totalLeads;
+  const appointmentRate = typeof m.appointment_rate === 'number' ? m.appointment_rate.toFixed(1) + '%' : '0%';
 
   // Server returns by_channel as { LinkedIn: 3, Email: 2, ... } — convert to array
   const byChannel = m.by_channel
@@ -323,18 +333,18 @@ export default function Dashboard({ specialistId, specialists, onLeadClick }) {
               marginBottom: 12,
             }}
           >
-            <MetricCard label="Total Leads" value={totalLeads} sub="in selected period" />
-            <MetricCard label="Responded" value={responded} sub={`of ${totalContacted} contacted`} />
+            <MetricCard label="Total Leads" value={totalLeads} sub="created in period" />
+            <MetricCard label="Responded" value={responded} sub={`of ${totalLeads} total leads`} />
             <MetricCard
               label="Response Rate"
-              value={pct(responded, totalContacted)}
-              sub="responded / contacted"
+              value={pct(responded, totalLeads)}
+              sub="responded ÷ total leads"
             />
             <MetricCard label="Interested" value={interested} sub={`of ${responded} responded`} />
             <MetricCard
-              label="Interested Rate"
+              label="Interest Rate"
               value={pct(interested, responded)}
-              sub="interested / responded"
+              sub="interested ÷ responded"
             />
           </div>
 
@@ -349,23 +359,23 @@ export default function Dashboard({ specialistId, specialists, onLeadClick }) {
           >
             <MetricCard label="Appts Booked" value={apptBooked} sub={`of ${interested} interested`} />
             <MetricCard
-              label="Lead → Appt %"
-              value={pct(apptBooked, totalLeads)}
-              sub="booked / total leads"
+              label="Appt Rate"
+              value={appointmentRate}
+              sub="booked ÷ interested"
             />
             <MetricCard label="No Shows" value={noShows} sub={`of ${apptBooked} booked`} />
             <MetricCard
               label="No Show Rate"
               value={pct(noShows, apptBooked)}
-              sub="no shows / booked"
+              sub="no shows ÷ booked"
             />
             <MetricCard label="Closed" value={closed} sub={`of ${apptBooked} booked`} />
             <MetricCard
-              label="Closed Rate"
-              value={pct(closed, totalLeads)}
-              sub="closed / total leads"
+              label="Close Rate"
+              value={pct(closed, apptBooked)}
+              sub="closed ÷ booked"
             />
-            <MetricCard label="Started Trial" value={startedTrial} sub="trial started" />
+            <MetricCard label="Started Trial" value={startedTrial} sub="currently in trial" />
           </div>
 
           {/* Funnel + Channel row */}
