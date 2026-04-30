@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
-import { getAccounts, getTeamMembers, createSession } from '../utils/api'
+import { getAccounts, getTeamMembers, createSession, createTeamMember } from '../utils/api'
 import { getUser } from '../utils/auth'
 
 const today = () => {
@@ -136,7 +136,6 @@ export default function SessionStart() {
                   placeholder="Select team member..."
                   styles={selectStyles}
                   isSearchable
-                  isDisabled
                   classNamePrefix="react-select"
                 />
               </div>
