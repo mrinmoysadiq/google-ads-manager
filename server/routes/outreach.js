@@ -25,7 +25,7 @@ function resolveSpecialistForUser(reqUser) {
 const STATUSES = [
   'New Lead',
   'Touchpoint 1', 'Touchpoint 2', 'Touchpoint 3', 'Touchpoint 4', 'Touchpoint 5',
-  'Responded', 'Interested', 'Appointment Booked',
+  'Responded', 'Interested', 'Not Interested', 'Appointment Booked',
   'No Show', 'Meeting Done - Not Interested', 'Started Trial',
   'Closed / Booked as Client', 'Disqualified / Dead',
 ];
@@ -690,8 +690,8 @@ router.get('/dashboard', (req, res) => {
       conditions.push('EXISTS (SELECT 1 FROM outreach_lead_specialists ols WHERE ols.lead_id = l.id AND ols.specialist_id = ?)');
       params.push(specialist_id);
     }
-    if (date_from) { conditions.push("date(l.created_at) >= ?"); params.push(date_from); }
-    if (date_to) { conditions.push("date(l.created_at) <= ?"); params.push(date_to); }
+    if (date_from) { conditions.push("date(l.status_updated_at) >= ?"); params.push(date_from); }
+    if (date_to) { conditions.push("date(l.status_updated_at) <= ?"); params.push(date_to); }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 

@@ -517,7 +517,7 @@ function CardModal({ card, allStatuses, onClose, onSave, onDelete }) {
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard({ specialistId, specialists, onLeadClick, refreshKey }) {
-  const [dateRange, setDateRange] = useState('month');
+  const [dateRange, setDateRange] = useState('alltime');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [metrics, setMetrics] = useState(null);
