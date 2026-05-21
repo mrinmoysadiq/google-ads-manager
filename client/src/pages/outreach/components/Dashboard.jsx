@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import {
   getDashboard, getOverdueLeads, exportCsv, getExportPdfUrl,
   getDashboardCards, createDashboardCard, updateDashboardCard, deleteDashboardCard,
+  getActivity,
 } from '../../../utils/outreachApi';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -35,13 +36,22 @@ const CHANNEL_COLORS = {
 };
 
 const DATE_RANGE_OPTIONS = [
-  { value: 'today',   label: 'Today' },
-  { value: 'week',    label: 'This Week' },
-  { value: 'month',   label: 'This Month' },
-  { value: 'last30',  label: 'Last 30 Days' },
-  { value: 'last90',  label: 'Last 90 Days' },
-  { value: 'alltime', label: 'All Time' },
-  { value: 'custom',  label: 'Custom' },
+  { value: 'today',     label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'week',      label: 'This Week' },
+  { value: 'month',     label: 'This Month' },
+  { value: 'last30',    label: 'Last 30 Days' },
+  { value: 'last90',    label: 'Last 90 Days' },
+  { value: 'alltime',   label: 'All Time' },
+  { value: 'custom',    label: 'Custom' },
+];
+
+const ACTIVITY_DATE_RANGE_OPTIONS = [
+  { value: 'today',     label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'week',      label: 'This Week' },
+  { value: 'last30',    label: 'Last 30 Days' },
+  { value: 'custom',    label: 'Custom' },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -52,6 +62,11 @@ function getDateParams(dateRange, customFrom, customTo) {
   switch (dateRange) {
     case 'today':
       return { date_from: fmt(today), date_to: fmt(today) };
+    case 'yesterday': {
+      const yest = new Date(today);
+      yest.setDate(today.getDate() - 1);
+      return { date_from: fmt(yest), date_to: fmt(yest) };
+    }
     case 'week': {
       const day = today.getDay();
       const mon = new Date(today);
@@ -527,6 +542,13 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
   const [modalCard, setModalCard] = useState(null);   // null = closed, {} = new, {...card} = edit
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Activity section — independent date filter, defaults to yesterday
+  const [actDateRange, setActDateRange] = useState('yesterday');
+  const [actCustomFrom, setActCustomFrom] = useState('');
+  const [actCustomTo, setActCustomTo] = useState('');
+  const [activity, setActivity] = useState(null);
+  const [actLoading, setActLoading] = useState(true);
+
   // Collect all statuses for the formula builder (from by_status + known statuses)
   const allStatuses = metrics?.by_status
     ? [...new Set([...ALL_KNOWN_STATUSES, ...Object.keys(metrics.by_status)])]
@@ -578,6 +600,33 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
   useEffect(() => {
     if (refreshKey === undefined) return;
     fetchData();
+  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchActivity = useCallback(async () => {
+    setActLoading(true);
+    try {
+      const dateParams = getDateParams(actDateRange, actCustomFrom, actCustomTo);
+      const params = { ...dateParams };
+      if (specialistId) params.specialist_id = specialistId;
+      const data = await getActivity(params);
+      setActivity(data);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to load activity data');
+    } finally {
+      setActLoading(false);
+    }
+  }, [actDateRange, actCustomFrom, actCustomTo, specialistId]);
+
+  useEffect(() => {
+    if (actDateRange === 'custom' && (!actCustomFrom || !actCustomTo)) return;
+    fetchActivity();
+  }, [fetchActivity]);
+
+  // Re-fetch activity when refreshKey bumps too
+  useEffect(() => {
+    if (refreshKey === undefined) return;
+    fetchActivity();
   }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Export handlers ──────────────────────────────────────────────────────
@@ -831,6 +880,130 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
               </div>
             </div>
           )}
+
+          {/* ── Daily Activity ────────────────────────────────────────── */}
+          <div style={{ marginBottom: 24 }}>
+            {/* Section header + date filter */}
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', alignItems: 'center',
+              justifyContent: 'space-between', gap: 12, marginBottom: 16,
+            }}>
+              <h3 style={{ color: '#c5c1b9', fontWeight: 700, fontSize: '1rem', margin: 0 }}>
+                Daily Activity
+              </h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                {ACTIVITY_DATE_RANGE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setActDateRange(opt.value)}
+                    style={{
+                      padding: '4px 12px', borderRadius: 999,
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      fontSize: '0.78rem', fontWeight: 500, cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      backgroundColor: actDateRange === opt.value ? '#575ECF' : 'transparent',
+                      color: actDateRange === opt.value ? '#ffffff' : '#8a8680',
+                    }}
+                  >{opt.label}</button>
+                ))}
+                {actDateRange === 'custom' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="date" value={actCustomFrom} onChange={e => setActCustomFrom(e.target.value)}
+                      style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#c5c1b9', padding: '3px 8px', fontSize: '0.78rem' }} />
+                    <span style={{ color: '#8a8680' }}>–</span>
+                    <input type="date" value={actCustomTo} onChange={e => setActCustomTo(e.target.value)}
+                      style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#c5c1b9', padding: '3px 8px', fontSize: '0.78rem' }} />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {actLoading ? <Spinner /> : activity && (
+              <>
+                {/* Summary cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 16 }}>
+                  {[
+                    { label: 'New Leads Created', value: activity.new_leads_total, color: '#22c55e' },
+                    { label: 'Stage Movements',   value: activity.stage_moves_by_stage.reduce((s, r) => s + r.moves_count, 0), color: '#575ECF' },
+                    { label: 'Leads Worked On',   value: activity.stage_moves_by_stage.reduce((s, r) => s + r.leads_count, 0), color: '#f59e0b' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="rounded-xl p-5" style={{
+                      backgroundColor: '#242424',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      position: 'relative',
+                    }}>
+                      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, borderRadius: '12px 12px 0 0', backgroundColor: color, opacity: 0.7 }} />
+                      <p style={{ color: '#8a8680', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8, fontWeight: 600, paddingTop: 4 }}>{label}</p>
+                      <p style={{ color: '#ffffff', fontSize: '1.875rem', fontWeight: 700, lineHeight: 1 }}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Stage breakdown + Team activity side by side */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+                  {/* Stage movement breakdown */}
+                  <div className="rounded-xl p-6" style={cardStyle}>
+                    <h4 style={{ ...primaryText, fontWeight: 600, fontSize: '0.85rem', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Stage Movements
+                    </h4>
+                    {activity.stage_moves_by_stage.length === 0 ? (
+                      <p style={{ ...mutedText, fontSize: '0.85rem', textAlign: 'center', padding: '20px 0' }}>No stage movements in this period</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px', gap: 8, padding: '4px 8px', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#8a8680', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 4 }}>
+                          <span>Stage</span>
+                          <span style={{ textAlign: 'right' }}>Leads</span>
+                          <span style={{ textAlign: 'right' }}>Moves</span>
+                        </div>
+                        {activity.stage_moves_by_stage.map(row => (
+                          <div key={row.stage} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px', gap: 8, padding: '6px 8px', borderRadius: 6, fontSize: '0.82rem' }}
+                            onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)')}
+                            onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                          >
+                            <span style={{ color: '#c5c1b9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.stage}</span>
+                            <span style={{ color: '#8a8680', textAlign: 'right' }}>{row.leads_count}</span>
+                            <span style={{ color: '#575ECF', fontWeight: 600, textAlign: 'right' }}>{row.moves_count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Team activity */}
+                  <div className="rounded-xl p-6" style={cardStyle}>
+                    <h4 style={{ ...primaryText, fontWeight: 600, fontSize: '0.85rem', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Team Activity
+                    </h4>
+                    {activity.activity_by_specialist.length === 0 ? (
+                      <p style={{ ...mutedText, fontSize: '0.85rem', textAlign: 'center', padding: '20px 0' }}>No activity in this period</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 70px 70px', gap: 8, padding: '4px 8px', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#8a8680', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 4 }}>
+                          <span>Specialist</span>
+                          <span style={{ textAlign: 'right' }}>New</span>
+                          <span style={{ textAlign: 'right' }}>Worked</span>
+                          <span style={{ textAlign: 'right' }}>Moves</span>
+                        </div>
+                        {activity.activity_by_specialist.map(sp => (
+                          <div key={sp.name} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 70px 70px', gap: 8, padding: '6px 8px', borderRadius: 6, fontSize: '0.82rem' }}
+                            onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)')}
+                            onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                          >
+                            <span style={{ color: '#c5c1b9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sp.name}</span>
+                            <span style={{ color: '#22c55e', fontWeight: 600, textAlign: 'right' }}>{sp.new_leads || 0}</span>
+                            <span style={{ color: '#f59e0b', fontWeight: 500, textAlign: 'right' }}>{sp.leads_worked || 0}</span>
+                            <span style={{ color: '#575ECF', fontWeight: 600, textAlign: 'right' }}>{sp.stage_moves || 0}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </>
+            )}
+          </div>
 
           {/* ── Overdue Follow-ups ────────────────────────────────────── */}
           <div className="rounded-xl p-6" style={cardStyle}>

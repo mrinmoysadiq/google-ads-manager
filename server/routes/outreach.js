@@ -813,6 +813,105 @@ router.get('/dashboard', (req, res) => {
   }
 });
 
+// ─── DAILY ACTIVITY ───────────────────────────────────────────────────────────
+// Returns new leads created + stage moves in a date range, broken down by stage
+// and by specialist. Used by the "Daily Activity" section on the dashboard.
+
+router.get('/activity', (req, res) => {
+  try {
+    let { date_from, date_to, specialist_id } = req.query;
+
+    const reqUser = getRequestUser(req);
+    const enforcedSpecId = resolveSpecialistForUser(reqUser);
+    if (enforcedSpecId === -1) {
+      return res.json({
+        new_leads_total: 0, new_leads_by_specialist: [],
+        stage_moves_by_stage: [], activity_by_specialist: [],
+      });
+    }
+    if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
+
+    // Default to yesterday when no range provided
+    const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const from = date_from || yest;
+    const to   = date_to   || yest;
+
+    // ── 1. New leads created ─────────────────────────────────────────────────
+    const nlCond   = ['date(l.created_at) >= ?', 'date(l.created_at) <= ?'];
+    const nlParams = [from, to];
+    if (specialist_id) { nlCond.push('l.specialist_id = ?'); nlParams.push(specialist_id); }
+
+    const newLeadsBySpec = db.prepare(`
+      SELECT COALESCE(s.name, 'Unassigned') as specialist_name, l.specialist_id,
+             COUNT(l.id) as count
+      FROM outreach_leads l
+      LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+      WHERE ${nlCond.join(' AND ')}
+      GROUP BY l.specialist_id
+      ORDER BY count DESC
+    `).all(...nlParams);
+
+    const new_leads_total = newLeadsBySpec.reduce((sum, r) => sum + r.count, 0);
+
+    // ── 2. Stage moves from status_history ───────────────────────────────────
+    const mvCond   = ['date(sh.changed_at) >= ?', 'date(sh.changed_at) <= ?'];
+    const mvParams = [from, to];
+    if (specialist_id) { mvCond.push('l.specialist_id = ?'); mvParams.push(specialist_id); }
+
+    const stage_moves_by_stage = db.prepare(`
+      SELECT sh.new_status as stage,
+             COUNT(DISTINCT sh.lead_id) as leads_count,
+             COUNT(*) as moves_count
+      FROM outreach_status_history sh
+      JOIN outreach_leads l ON l.id = sh.lead_id
+      WHERE ${mvCond.join(' AND ')}
+      GROUP BY sh.new_status
+      ORDER BY moves_count DESC
+    `).all(...mvParams);
+
+    // ── 3. Per-specialist: new leads + stage moves ────────────────────────────
+    const specMovesRows = db.prepare(`
+      SELECT COALESCE(s.name, 'Unassigned') as specialist_name,
+             COUNT(DISTINCT sh.lead_id) as leads_worked,
+             COUNT(*) as stage_moves
+      FROM outreach_status_history sh
+      JOIN outreach_leads l ON l.id = sh.lead_id
+      LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+      WHERE ${mvCond.join(' AND ')}
+      GROUP BY l.specialist_id
+      ORDER BY stage_moves DESC
+    `).all(...mvParams);
+
+    const specMovesMap = {};
+    specMovesRows.forEach(r => {
+      specMovesMap[r.specialist_name] = { leads_worked: r.leads_worked, stage_moves: r.stage_moves };
+    });
+
+    const allNames = new Set([
+      ...newLeadsBySpec.map(r => r.specialist_name),
+      ...Object.keys(specMovesMap),
+    ]);
+
+    const activity_by_specialist = [...allNames].map(name => ({
+      name,
+      new_leads:    newLeadsBySpec.find(r => r.specialist_name === name)?.count || 0,
+      leads_worked: specMovesMap[name]?.leads_worked || 0,
+      stage_moves:  specMovesMap[name]?.stage_moves  || 0,
+    })).sort((a, b) => (b.new_leads + b.stage_moves) - (a.new_leads + a.stage_moves));
+
+    res.json({
+      date_from: from, date_to: to,
+      new_leads_total,
+      new_leads_by_specialist: newLeadsBySpec,
+      stage_moves_by_stage,
+      activity_by_specialist,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch activity data' });
+  }
+});
+
 // ─── OVERDUE LEADS (for dashboard list) ──────────────────────────────────────
 
 router.get('/overdue', (req, res) => {

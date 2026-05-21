@@ -40,6 +40,7 @@ export const upsertTouchpoint = (leadId, number, data) =>
 // Dashboard
 export const getDashboard = (params) => api.get('/outreach/dashboard', { params }).then(r => r.data)
 export const getOverdueLeads = (params) => api.get('/outreach/overdue', { params }).then(r => r.data)
+export const getActivity = (params) => api.get('/outreach/activity', { params }).then(r => r.data)
 
 // Dashboard Cards
 export const getDashboardCards = () => api.get('/outreach/dashboard/cards').then(r => r.data)
