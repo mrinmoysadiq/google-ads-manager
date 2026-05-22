@@ -912,6 +912,87 @@ router.get('/activity', (req, res) => {
   }
 });
 
+// ─── ACTIVITY LEADS (drill-through for Daily Activity section) ───────────────
+// Returns the individual leads/move-events behind a Daily Activity number.
+// filter_type: 'new_leads' | 'stage_moves'
+// stage:            (stage_moves only) filter to a specific destination stage
+// specialist_name:  filter to leads whose primary specialist has this name
+// distinct_leads:   '1' = deduplicate by lead_id (one row per lead, latest move)
+
+router.get('/activity/leads', (req, res) => {
+  try {
+    let { date_from, date_to, filter_type, stage, specialist_name, distinct_leads } = req.query;
+
+    const reqUser = getRequestUser(req);
+    const enforcedSpecId = resolveSpecialistForUser(reqUser);
+    if (enforcedSpecId === -1) return res.json([]);
+
+    const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const from = date_from || yest;
+    const to   = date_to   || yest;
+
+    // ── New leads created ────────────────────────────────────────────────────
+    if (filter_type === 'new_leads') {
+      const cond   = ['date(l.created_at) >= ?', 'date(l.created_at) <= ?'];
+      const params = [from, to];
+      if (specialist_name) { cond.push('s.name = ?'); params.push(specialist_name); }
+      if (enforcedSpecId !== null) { cond.push('l.specialist_id = ?'); params.push(enforcedSpecId); }
+
+      const leads = db.prepare(`
+        SELECT l.id, l.company_name, l.contact_name, l.status, l.created_at,
+               COALESCE(s.name, 'Unassigned') as specialist_name
+        FROM outreach_leads l
+        LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+        WHERE ${cond.join(' AND ')}
+        ORDER BY l.created_at DESC
+      `).all(...params);
+      return res.json(leads);
+    }
+
+    // ── Stage moves (default) ────────────────────────────────────────────────
+    const cond   = ['date(sh.changed_at) >= ?', 'date(sh.changed_at) <= ?'];
+    const params = [from, to];
+    if (stage)            { cond.push('sh.new_status = ?');  params.push(stage); }
+    if (specialist_name)  { cond.push('s.name = ?');          params.push(specialist_name); }
+    if (enforcedSpecId !== null) { cond.push('l.specialist_id = ?'); params.push(enforcedSpecId); }
+
+    if (distinct_leads === '1') {
+      // One row per lead — take the latest move per lead in the period
+      const rows = db.prepare(`
+        SELECT l.id, l.company_name, l.contact_name, l.status,
+               sh.old_status, sh.new_status, sh.changed_at,
+               COALESCE(s.name, 'Unassigned') as specialist_name
+        FROM outreach_status_history sh
+        JOIN outreach_leads l ON l.id = sh.lead_id
+        LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+        WHERE ${cond.join(' AND ')}
+        ORDER BY sh.changed_at DESC
+      `).all(...params);
+
+      // Dedup — keep first occurrence per lead (already sorted latest first)
+      const seen = new Set();
+      const deduped = rows.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
+      return res.json(deduped);
+    }
+
+    // All move events
+    const rows = db.prepare(`
+      SELECT sh.id as move_id, l.id, l.company_name, l.contact_name, l.status,
+             sh.old_status, sh.new_status, sh.changed_at,
+             COALESCE(s.name, 'Unassigned') as specialist_name
+      FROM outreach_status_history sh
+      JOIN outreach_leads l ON l.id = sh.lead_id
+      LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+      WHERE ${cond.join(' AND ')}
+      ORDER BY sh.changed_at DESC
+    `).all(...params);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch activity leads' });
+  }
+});
+
 // ─── OVERDUE LEADS (for dashboard list) ──────────────────────────────────────
 
 router.get('/overdue', (req, res) => {

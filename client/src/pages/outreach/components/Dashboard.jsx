@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import {
   getDashboard, getOverdueLeads, exportCsv, getExportPdfUrl,
   getDashboardCards, createDashboardCard, updateDashboardCard, deleteDashboardCard,
-  getActivity,
+  getActivity, getActivityLeads,
 } from '../../../utils/outreachApi';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -176,6 +176,148 @@ function Spinner() {
         animation: 'spin 0.75s linear infinite',
       }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+function fmtDateTime(dt) {
+  if (!dt) return '—';
+  try {
+    const d = new Date(dt);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' +
+      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch { return dt; }
+}
+
+const STATUS_PILL_COLORS = {
+  'New Lead':                    { bg: 'rgba(87,94,207,0.15)',  color: '#575ECF' },
+  'Touchpoint 1':                { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
+  'Touchpoint 2':                { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
+  'Touchpoint 3':                { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
+  'Touchpoint 4':                { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
+  'Touchpoint 5':                { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
+  'Responded':                   { bg: 'rgba(168,85,247,0.15)', color: '#a855f7' },
+  'Interested':                  { bg: 'rgba(34,197,94,0.15)',  color: '#22c55e' },
+  'Not Interested':              { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444' },
+  'Appointment Booked':          { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
+  'No Show':                     { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444' },
+  'Meeting Done - Not Interested':{ bg: 'rgba(239,68,68,0.12)', color: '#ef4444' },
+  'Started Trial':               { bg: 'rgba(6,182,212,0.15)',  color: '#06b6d4' },
+  'Closed / Booked as Client':   { bg: 'rgba(34,197,94,0.15)',  color: '#22c55e' },
+  'Disqualified / Dead':         { bg: 'rgba(138,134,128,0.15)',color: '#8a8680' },
+};
+function statusPill(status) {
+  const c = STATUS_PILL_COLORS[status] || { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' };
+  return (
+    <span style={{
+      display: 'inline-block', padding: '2px 8px', borderRadius: 999,
+      fontSize: '0.68rem', fontWeight: 600,
+      backgroundColor: c.bg, color: c.color,
+      whiteSpace: 'nowrap',
+    }}>{status}</span>
+  );
+}
+
+function ActivityLeadsDrawer({ title, subtitle, leads, loading, onClose, onLeadClick }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9500, display: 'flex' }}>
+      {/* Backdrop */}
+      <div
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', cursor: 'pointer' }}
+        onClick={onClose}
+      />
+      {/* Panel */}
+      <div style={{
+        width: 520, maxWidth: '92vw',
+        backgroundColor: '#1b1b1b',
+        borderLeft: '1px solid rgba(255,255,255,0.1)',
+        display: 'flex', flexDirection: 'column',
+        height: '100vh', overflowY: 'hidden',
+        boxShadow: '-8px 0 40px rgba(0,0,0,0.5)',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '20px 24px 16px',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h3 style={{ color: '#ffffff', margin: '0 0 4px', fontSize: '1rem', fontWeight: 700 }}>{title}</h3>
+              {subtitle && <p style={{ color: '#8a8680', margin: 0, fontSize: '0.78rem' }}>{subtitle}</p>}
+            </div>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 8,
+                color: '#8a8680', cursor: 'pointer', width: 30, height: 30,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1rem', flexShrink: 0, marginLeft: 12,
+              }}
+            >✕</button>
+          </div>
+          {!loading && (
+            <p style={{ color: '#575ECF', fontSize: '0.75rem', margin: '10px 0 0', fontWeight: 600 }}>
+              {leads.length} lead{leads.length !== 1 ? 's' : ''}
+            </p>
+          )}
+        </div>
+
+        {/* List */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+          {loading ? <Spinner /> : leads.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#8a8680', padding: '40px 0', fontSize: '0.88rem' }}>
+              No leads found for this period
+            </p>
+          ) : leads.map((lead, idx) => (
+            <div
+              key={lead.move_id || `${lead.id}-${idx}`}
+              onClick={() => { onLeadClick(lead.id); onClose(); }}
+              style={{
+                padding: '12px 10px',
+                borderRadius: 10,
+                cursor: 'pointer',
+                borderBottom: idx < leads.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                transition: 'background 0.12s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              {/* Row 1: company + current status */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                <span style={{ color: '#575ECF', fontWeight: 600, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {lead.company_name || '—'}
+                </span>
+                {statusPill(lead.status)}
+              </div>
+
+              {/* Row 2: contact + move arrow (if stage move) */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: '#8a8680', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {lead.contact_name || '—'}
+                  {lead.specialist_name && (
+                    <span style={{ marginLeft: 8, color: 'rgba(138,134,128,0.6)' }}>· {lead.specialist_name}</span>
+                  )}
+                </span>
+                {lead.new_status ? (
+                  <span style={{ fontSize: '0.72rem', color: '#8a8680', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    <span style={{ color: 'rgba(138,134,128,0.5)' }}>{lead.old_status || '—'}</span>
+                    {' → '}
+                    <span style={{ color: '#c5c1b9', fontWeight: 600 }}>{lead.new_status}</span>
+                  </span>
+                ) : null}
+              </div>
+
+              {/* Row 3: timestamp */}
+              <div style={{ marginTop: 5 }}>
+                <span style={{ fontSize: '0.7rem', color: 'rgba(138,134,128,0.6)' }}>
+                  {lead.changed_at ? fmtDateTime(lead.changed_at) : fmtDateTime(lead.created_at)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -549,6 +691,11 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
   const [activity, setActivity] = useState(null);
   const [actLoading, setActLoading] = useState(true);
 
+  // Activity leads drill-through drawer
+  const [actDrawer, setActDrawer] = useState(null); // { title, subtitle, params }
+  const [actLeads, setActLeads] = useState([]);
+  const [actLeadsLoading, setActLeadsLoading] = useState(false);
+
   // Collect all statuses for the formula builder (from by_status + known statuses)
   const allStatuses = metrics?.by_status
     ? [...new Set([...ALL_KNOWN_STATUSES, ...Object.keys(metrics.by_status)])]
@@ -601,6 +748,18 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
     if (refreshKey === undefined) return;
     fetchData();
   }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function openActivityLeads(title, subtitle, params) {
+    const dateParams = getDateParams(actDateRange, actCustomFrom, actCustomTo);
+    const fullParams = { ...dateParams, ...params };
+    if (specialistId) fullParams.specialist_id = specialistId;
+    setActDrawer({ title, subtitle });
+    setActLeads([]);
+    setActLeadsLoading(true);
+    getActivityLeads(fullParams)
+      .then(data => { setActLeads(data); setActLeadsLoading(false); })
+      .catch(() => { toast.error('Failed to load leads'); setActLeadsLoading(false); });
+  }
 
   const fetchActivity = useCallback(async () => {
     setActLoading(true);
@@ -962,8 +1121,24 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
                             onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                           >
                             <span style={{ color: '#c5c1b9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.stage}</span>
-                            <span style={{ color: '#8a8680', textAlign: 'right' }}>{row.leads_count}</span>
-                            <span style={{ color: '#575ECF', fontWeight: 600, textAlign: 'right' }}>{row.moves_count}</span>
+                            <span
+                              onClick={() => openActivityLeads(
+                                `Moved to "${row.stage}"`,
+                                `${row.leads_count} lead${row.leads_count !== 1 ? 's' : ''} — distinct`,
+                                { filter_type: 'stage_moves', stage: row.stage, distinct_leads: '1' }
+                              )}
+                              style={{ color: '#8a8680', textAlign: 'right', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}
+                              title="Click to see leads"
+                            >{row.leads_count}</span>
+                            <span
+                              onClick={() => openActivityLeads(
+                                `All moves to "${row.stage}"`,
+                                `${row.moves_count} move event${row.moves_count !== 1 ? 's' : ''}`,
+                                { filter_type: 'stage_moves', stage: row.stage }
+                              )}
+                              style={{ color: '#575ECF', fontWeight: 600, textAlign: 'right', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}
+                              title="Click to see all move events"
+                            >{row.moves_count}</span>
                           </div>
                         ))}
                       </div>
@@ -991,9 +1166,33 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
                             onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                           >
                             <span style={{ color: '#c5c1b9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sp.name}</span>
-                            <span style={{ color: '#22c55e', fontWeight: 600, textAlign: 'right' }}>{sp.new_leads || 0}</span>
-                            <span style={{ color: '#f59e0b', fontWeight: 500, textAlign: 'right' }}>{sp.leads_worked || 0}</span>
-                            <span style={{ color: '#575ECF', fontWeight: 600, textAlign: 'right' }}>{sp.stage_moves || 0}</span>
+                            <span
+                              onClick={() => sp.new_leads > 0 && openActivityLeads(
+                                `New leads — ${sp.name}`,
+                                `${sp.new_leads} lead${sp.new_leads !== 1 ? 's' : ''} created`,
+                                { filter_type: 'new_leads', specialist_name: sp.name }
+                              )}
+                              style={{ color: '#22c55e', fontWeight: 600, textAlign: 'right', cursor: sp.new_leads > 0 ? 'pointer' : 'default', textDecoration: sp.new_leads > 0 ? 'underline dotted' : 'none', textUnderlineOffset: 3 }}
+                              title={sp.new_leads > 0 ? 'Click to see new leads' : undefined}
+                            >{sp.new_leads || 0}</span>
+                            <span
+                              onClick={() => sp.leads_worked > 0 && openActivityLeads(
+                                `Leads worked on — ${sp.name}`,
+                                `${sp.leads_worked} distinct lead${sp.leads_worked !== 1 ? 's' : ''}`,
+                                { filter_type: 'stage_moves', specialist_name: sp.name, distinct_leads: '1' }
+                              )}
+                              style={{ color: '#f59e0b', fontWeight: 500, textAlign: 'right', cursor: sp.leads_worked > 0 ? 'pointer' : 'default', textDecoration: sp.leads_worked > 0 ? 'underline dotted' : 'none', textUnderlineOffset: 3 }}
+                              title={sp.leads_worked > 0 ? 'Click to see leads worked on' : undefined}
+                            >{sp.leads_worked || 0}</span>
+                            <span
+                              onClick={() => sp.stage_moves > 0 && openActivityLeads(
+                                `All stage moves — ${sp.name}`,
+                                `${sp.stage_moves} move event${sp.stage_moves !== 1 ? 's' : ''}`,
+                                { filter_type: 'stage_moves', specialist_name: sp.name }
+                              )}
+                              style={{ color: '#575ECF', fontWeight: 600, textAlign: 'right', cursor: sp.stage_moves > 0 ? 'pointer' : 'default', textDecoration: sp.stage_moves > 0 ? 'underline dotted' : 'none', textUnderlineOffset: 3 }}
+                              title={sp.stage_moves > 0 ? 'Click to see all move events' : undefined}
+                            >{sp.stage_moves || 0}</span>
                           </div>
                         ))}
                       </div>
@@ -1048,6 +1247,18 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
             )}
           </div>
         </>
+      )}
+
+      {/* ── Activity Leads Drill-through Drawer ─────────────────────── */}
+      {actDrawer && (
+        <ActivityLeadsDrawer
+          title={actDrawer.title}
+          subtitle={actDrawer.subtitle}
+          leads={actLeads}
+          loading={actLeadsLoading}
+          onClose={() => setActDrawer(null)}
+          onLeadClick={onLeadClick}
+        />
       )}
 
       {/* ── Card Add/Edit Modal ──────────────────────────────────────── */}
