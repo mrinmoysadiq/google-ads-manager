@@ -155,7 +155,10 @@ export default function FbSessionStart() {
             )}
           </div>
 
-          <div className="text-center mt-6">
+          <div className="flex items-center justify-center gap-6 mt-6">
+            <Link to="/facebook/changelog" className="text-xs text-[#8a8680] hover:text-[#c5c1b9] transition-colors">
+              Change Log →
+            </Link>
             <Link to="/facebook/admin" className="text-xs text-[#8a8680] hover:text-[#c5c1b9] transition-colors">
               Admin Panel →
             </Link>

@@ -19,6 +19,7 @@ import FbSessionStart from './pages/facebook/FbSessionStart'
 import FbChecklist from './pages/facebook/FbChecklist'
 import FbComplete from './pages/facebook/FbComplete'
 import FbAdmin from './pages/facebook/FbAdmin'
+import FbChangeLog from './pages/facebook/FbChangeLog'
 import Login from './pages/auth/Login'
 import Profile from './pages/auth/Profile'
 import AppAdminPanel from './pages/auth/AppAdminPanel'
@@ -114,6 +115,7 @@ export default function App() {
           <Route path="/facebook/checklist" element={<ProtectedRoute><FbChecklist /></ProtectedRoute>} />
           <Route path="/facebook/complete" element={<ProtectedRoute><FbComplete /></ProtectedRoute>} />
           <Route path="/facebook/admin" element={<ProtectedRoute><FbAdmin /></ProtectedRoute>} />
+          <Route path="/facebook/changelog" element={<ProtectedRoute><FbChangeLog /></ProtectedRoute>} />
 
           {/* ── Tracking Audit module ─────────────────────────────────── */}
           <Route path="/tracking" element={<ProtectedRoute><TrackingHome /></ProtectedRoute>} />

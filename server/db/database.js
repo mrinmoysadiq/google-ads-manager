@@ -511,6 +511,24 @@ function initializeDatabase() {
     console.log('Seeded fb_ad_accounts');
   }
 
+  // ── Facebook Change Log ──────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fb_change_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      change_level TEXT NOT NULL,
+      media_buyer TEXT,
+      ad_account TEXT,
+      campaign_name TEXT,
+      ad_set_name TEXT,
+      ad_name TEXT,
+      changes_made_to TEXT,
+      what_changed TEXT,
+      why_changed TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── App Users (JWT auth) ─────────────────────────────────────────────────
   db.prepare(`CREATE TABLE IF NOT EXISTS app_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
