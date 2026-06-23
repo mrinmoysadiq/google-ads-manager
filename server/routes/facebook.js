@@ -122,6 +122,77 @@ router.delete('/ad-accounts/:id', (req, res) => {
   }
 });
 
+// ─── AUDIT SESSIONS ───────────────────────────────────────────────────────────
+
+router.post('/audit-sessions', (req, res) => {
+  try {
+    const { date, media_buyer, ad_account, answers, issue_count } = req.body;
+    if (!date || !ad_account || !answers) return res.status(400).json({ error: 'date, ad_account, and answers are required' });
+    const result = db.prepare(`
+      INSERT INTO fb_audit_sessions (date, media_buyer, ad_account, answers, issue_count)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(date, media_buyer || null, ad_account, JSON.stringify(answers), issue_count || 0);
+    const row = db.prepare('SELECT * FROM fb_audit_sessions WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json({ ...row, answers: JSON.parse(row.answers) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save audit session' });
+  }
+});
+
+router.patch('/audit-sessions/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const row = db.prepare('SELECT * FROM fb_audit_sessions WHERE id = ?').get(id);
+    if (!row) return res.status(404).json({ error: 'Session not found' });
+    const { date, media_buyer, ad_account, answers, issue_count } = req.body;
+    db.prepare(`
+      UPDATE fb_audit_sessions SET
+        date = COALESCE(?, date), media_buyer = ?, ad_account = COALESCE(?, ad_account),
+        answers = COALESCE(?, answers), issue_count = COALESCE(?, issue_count)
+      WHERE id = ?
+    `).run(date || null, media_buyer ?? row.media_buyer, ad_account || null, answers ? JSON.stringify(answers) : null, issue_count ?? null, id);
+    const updated = db.prepare('SELECT * FROM fb_audit_sessions WHERE id = ?').get(id);
+    res.json({ ...updated, answers: JSON.parse(updated.answers) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update audit session' });
+  }
+});
+
+router.get('/audit-sessions', (req, res) => {
+  try {
+    const { ad_account, media_buyer, date_from, date_to, page: pg, limit: lm } = req.query;
+    const page = parseInt(pg) || 1;
+    const limit = parseInt(lm) || 50;
+    const offset = (page - 1) * limit;
+    const conditions = [];
+    const params = [];
+    if (ad_account) { conditions.push('ad_account = ?'); params.push(ad_account); }
+    if (media_buyer) { conditions.push('media_buyer = ?'); params.push(media_buyer); }
+    if (date_from) { conditions.push('date >= ?'); params.push(date_from); }
+    if (date_to) { conditions.push('date <= ?'); params.push(date_to); }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const total = db.prepare(`SELECT COUNT(*) as cnt FROM fb_audit_sessions ${where}`).get(...params).cnt;
+    const rows = db.prepare(`SELECT * FROM fb_audit_sessions ${where} ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
+    res.json({ data: rows.map(r => ({ ...r, answers: JSON.parse(r.answers) })), total, page, totalPages: Math.ceil(total / limit) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch audit sessions' });
+  }
+});
+
+router.get('/audit-sessions/:id', (req, res) => {
+  try {
+    const row = db.prepare('SELECT * FROM fb_audit_sessions WHERE id = ?').get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json({ ...row, answers: JSON.parse(row.answers) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch session' });
+  }
+});
+
 // ─── CHANGE LOG ───────────────────────────────────────────────────────────────
 
 function buildChangeLogFilter(query, forCount = false) {

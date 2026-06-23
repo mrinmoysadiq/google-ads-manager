@@ -511,6 +511,19 @@ function initializeDatabase() {
     console.log('Seeded fb_ad_accounts');
   }
 
+  // ── Facebook Audit Sessions ──────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fb_audit_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      media_buyer TEXT,
+      ad_account TEXT NOT NULL,
+      answers TEXT NOT NULL,
+      issue_count INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Facebook Change Log ──────────────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS fb_change_log (

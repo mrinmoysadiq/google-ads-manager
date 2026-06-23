@@ -5,7 +5,6 @@ const mk = () => ({
   hasIssue: false,
   issueText: '',
   issueImage: null,
-  spendAmount: '',
 });
 
 export const fbState = {
@@ -13,7 +12,8 @@ export const fbState = {
   date: '',
   account: '',
   currentQuestion: 0,
-  items: Array.from({ length: 7 }, mk),
+  sessionId: null,        // set after first save; used to PATCH on edit
+  items: Array.from({ length: 4 }, mk),
 };
 
 export function resetFbState() {
@@ -21,5 +21,6 @@ export function resetFbState() {
   fbState.date = '';
   fbState.account = '';
   fbState.currentQuestion = 0;
-  fbState.items = Array.from({ length: 7 }, mk);
+  fbState.sessionId = null;
+  fbState.items = Array.from({ length: 4 }, mk);
 }
