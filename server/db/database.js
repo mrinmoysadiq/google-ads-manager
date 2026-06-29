@@ -335,6 +335,27 @@ function initializeDatabase() {
 
   console.log('Outreach tables initialized');
 
+  // ── Facebook custom fields tables ────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fb_account_fields (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      field_key TEXT NOT NULL UNIQUE,
+      field_type TEXT NOT NULL DEFAULT 'text',
+      sort_order INTEGER DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS fb_account_field_values (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL REFERENCES fb_ad_accounts(id) ON DELETE CASCADE,
+      field_key TEXT NOT NULL,
+      value TEXT,
+      UNIQUE(account_id, field_key)
+    );
+  `);
+
   // Column migrations — safe to run every startup (errors ignored if column exists)
   const columnMigrations = [
     'ALTER TABLE outreach_leads ADD COLUMN source_url TEXT',
@@ -344,6 +365,8 @@ function initializeDatabase() {
     'ALTER TABLE outreach_leads ADD COLUMN fb_page_url TEXT',
     'ALTER TABLE outreach_leads ADD COLUMN ig_url TEXT',
     'ALTER TABLE outreach_status_history ADD COLUMN performed_by TEXT',
+    'ALTER TABLE fb_ad_accounts ADD COLUMN website TEXT',
+    'ALTER TABLE fb_ad_accounts ADD COLUMN notes TEXT',
   ];
   // Migrate old 'Contacted' status to 'New Lead' (one-time)
   try { db.exec("UPDATE outreach_leads SET status = 'New Lead' WHERE status = 'Contacted'"); } catch (e) { /* ignore */ }

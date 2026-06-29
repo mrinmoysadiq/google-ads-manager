@@ -156,6 +156,9 @@ export default function FbSessionStart() {
           </div>
 
           <div className="flex items-center justify-center gap-6 mt-6">
+            <Link to="/facebook/accounts" className="text-xs text-[#8a8680] hover:text-[#c5c1b9] transition-colors">
+              Accounts →
+            </Link>
             <Link to="/facebook/audit-log" className="text-xs text-[#8a8680] hover:text-[#c5c1b9] transition-colors">
               Audit Log →
             </Link>

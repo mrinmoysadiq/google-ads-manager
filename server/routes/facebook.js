@@ -64,9 +64,20 @@ router.delete('/media-buyers/:id', (req, res) => {
 
 // ─── AD ACCOUNTS ──────────────────────────────────────────────────────────────
 
+function enrichAccountWithFieldValues(account) {
+  const values = db.prepare('SELECT field_key, value FROM fb_account_field_values WHERE account_id = ?').all(account.id);
+  const custom = {};
+  values.forEach(v => { custom[v.field_key] = v.value; });
+  return { ...account, custom_fields: custom };
+}
+
 router.get('/ad-accounts', (req, res) => {
   try {
-    const accounts = db.prepare('SELECT * FROM fb_ad_accounts WHERE active = 1 ORDER BY name ASC').all();
+    const { all } = req.query;
+    const query = all === '1'
+      ? 'SELECT * FROM fb_ad_accounts ORDER BY name ASC'
+      : 'SELECT * FROM fb_ad_accounts WHERE active = 1 ORDER BY name ASC';
+    const accounts = db.prepare(query).all().map(enrichAccountWithFieldValues);
     res.json(accounts);
   } catch (err) {
     console.error(err);
@@ -76,10 +87,10 @@ router.get('/ad-accounts', (req, res) => {
 
 router.post('/ad-accounts', (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, website, notes } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
-    const result = db.prepare('INSERT INTO fb_ad_accounts (name) VALUES (?)').run(name.trim());
-    const created = db.prepare('SELECT * FROM fb_ad_accounts WHERE id = ?').get(result.lastInsertRowid);
+    const result = db.prepare('INSERT INTO fb_ad_accounts (name, website, notes) VALUES (?, ?, ?)').run(name.trim(), website || null, notes || null);
+    const created = enrichAccountWithFieldValues(db.prepare('SELECT * FROM fb_ad_accounts WHERE id = ?').get(result.lastInsertRowid));
     res.status(201).json(created);
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE')) {
@@ -93,12 +104,16 @@ router.post('/ad-accounts', (req, res) => {
 router.patch('/ad-accounts/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { name, active } = req.body;
+    const { name, active, website, notes, custom_fields } = req.body;
     const existing = db.prepare('SELECT * FROM fb_ad_accounts WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Ad account not found' });
-    db.prepare('UPDATE fb_ad_accounts SET name = COALESCE(?, name), active = COALESCE(?, active) WHERE id = ?')
-      .run(name || null, active !== undefined ? active : null, id);
-    const updated = db.prepare('SELECT * FROM fb_ad_accounts WHERE id = ?').get(id);
+    db.prepare('UPDATE fb_ad_accounts SET name = COALESCE(?, name), active = COALESCE(?, active), website = COALESCE(?, website), notes = COALESCE(?, notes) WHERE id = ?')
+      .run(name || null, active !== undefined ? active : null, website !== undefined ? (website || null) : null, notes !== undefined ? (notes || null) : null, id);
+    if (custom_fields && typeof custom_fields === 'object') {
+      const upsert = db.prepare('INSERT INTO fb_account_field_values (account_id, field_key, value) VALUES (?, ?, ?) ON CONFLICT(account_id, field_key) DO UPDATE SET value = excluded.value');
+      Object.entries(custom_fields).forEach(([key, val]) => upsert.run(id, key, val || null));
+    }
+    const updated = enrichAccountWithFieldValues(db.prepare('SELECT * FROM fb_ad_accounts WHERE id = ?').get(id));
     res.json(updated);
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE')) {
@@ -119,6 +134,67 @@ router.delete('/ad-accounts/:id', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete ad account' });
+  }
+});
+
+// ─── ACCOUNT CUSTOM FIELDS ────────────────────────────────────────────────────
+
+router.get('/account-fields', (req, res) => {
+  try {
+    const fields = db.prepare('SELECT * FROM fb_account_fields WHERE active = 1 ORDER BY sort_order ASC, id ASC').all();
+    res.json(fields);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch account fields' });
+  }
+});
+
+router.post('/account-fields', (req, res) => {
+  try {
+    const { label, field_type = 'text' } = req.body;
+    if (!label || !label.trim()) return res.status(400).json({ error: 'Label is required' });
+    const field_key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM fb_account_fields').get();
+    const sort_order = (maxOrder.m || 0) + 1;
+    const result = db.prepare('INSERT INTO fb_account_fields (label, field_key, field_type, sort_order) VALUES (?, ?, ?, ?)').run(label.trim(), field_key, field_type, sort_order);
+    const created = db.prepare('SELECT * FROM fb_account_fields WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json(created);
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE')) {
+      return res.status(409).json({ error: 'A field with this key already exists' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create account field' });
+  }
+});
+
+router.patch('/account-fields/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { label, field_type, sort_order, active } = req.body;
+    const existing = db.prepare('SELECT * FROM fb_account_fields WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ error: 'Field not found' });
+    db.prepare('UPDATE fb_account_fields SET label = COALESCE(?, label), field_type = COALESCE(?, field_type), sort_order = COALESCE(?, sort_order), active = COALESCE(?, active) WHERE id = ?')
+      .run(label || null, field_type || null, sort_order !== undefined ? sort_order : null, active !== undefined ? active : null, id);
+    const updated = db.prepare('SELECT * FROM fb_account_fields WHERE id = ?').get(id);
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update account field' });
+  }
+});
+
+router.delete('/account-fields/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = db.prepare('SELECT * FROM fb_account_fields WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ error: 'Field not found' });
+    db.prepare('DELETE FROM fb_account_field_values WHERE field_key = ?').run(existing.field_key);
+    db.prepare('DELETE FROM fb_account_fields WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete account field' });
   }
 });
 
