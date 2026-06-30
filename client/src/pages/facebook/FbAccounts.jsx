@@ -360,12 +360,7 @@ function AccountDrawer({ accountId, fields, onClose, onFieldsSaved, onDelete }) 
               </>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {data && onDelete && (
-              <button onClick={() => onDelete(data)} style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: '#ef4444', cursor: 'pointer', fontSize: 13, padding: '6px 12px', fontWeight: 500 }}>🗑 Delete</button>
-            )}
-            <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#8a8680', cursor: 'pointer', fontSize: 16, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#8a8680', cursor: 'pointer', fontSize: 16, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
 
         {/* Tabs */}
@@ -389,6 +384,20 @@ function AccountDrawer({ accountId, fields, onClose, onFieldsSaved, onDelete }) 
             <DrawerChangelog entries={data.change_log} />
           )}
         </div>
+
+        {/* Footer — delete action */}
+        {data && onDelete && (
+          <div style={{ padding: '14px 24px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+            <button
+              onClick={() => onDelete(data)}
+              style={{ background: 'none', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '8px 16px', color: '#8a8680', cursor: 'pointer', fontSize: 13, width: '100%', transition: 'all 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.35)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#8a8680'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.2)'; }}
+            >
+              🗑 Move to Trash
+            </button>
+          </div>
+        )}
       </div>
     </>
   );
