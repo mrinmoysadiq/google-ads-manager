@@ -367,6 +367,8 @@ function initializeDatabase() {
     'ALTER TABLE outreach_status_history ADD COLUMN performed_by TEXT',
     'ALTER TABLE fb_ad_accounts ADD COLUMN website TEXT',
     'ALTER TABLE fb_ad_accounts ADD COLUMN notes TEXT',
+    'ALTER TABLE fb_account_fields ADD COLUMN options TEXT',
+    'ALTER TABLE fb_account_fields ADD COLUMN pinned INTEGER DEFAULT 0',
   ];
   // Migrate old 'Contacted' status to 'New Lead' (one-time)
   try { db.exec("UPDATE outreach_leads SET status = 'New Lead' WHERE status = 'Contacted'"); } catch (e) { /* ignore */ }

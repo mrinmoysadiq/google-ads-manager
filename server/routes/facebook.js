@@ -141,7 +141,11 @@ router.delete('/ad-accounts/:id', (req, res) => {
 
 router.get('/account-fields', (req, res) => {
   try {
-    const fields = db.prepare('SELECT * FROM fb_account_fields WHERE active = 1 ORDER BY sort_order ASC, id ASC').all();
+    const { all } = req.query;
+    const query = all === '1'
+      ? 'SELECT * FROM fb_account_fields ORDER BY sort_order ASC, id ASC'
+      : 'SELECT * FROM fb_account_fields WHERE active = 1 ORDER BY sort_order ASC, id ASC';
+    const fields = db.prepare(query).all().map(parseField);
     res.json(fields);
   } catch (err) {
     console.error(err);
@@ -149,15 +153,20 @@ router.get('/account-fields', (req, res) => {
   }
 });
 
+function parseField(f) {
+  if (!f) return f;
+  return { ...f, options: f.options ? JSON.parse(f.options) : [] };
+}
+
 router.post('/account-fields', (req, res) => {
   try {
-    const { label, field_type = 'text' } = req.body;
+    const { label, field_type = 'text', options = [], pinned = 0 } = req.body;
     if (!label || !label.trim()) return res.status(400).json({ error: 'Label is required' });
     const field_key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM fb_account_fields').get();
     const sort_order = (maxOrder.m || 0) + 1;
-    const result = db.prepare('INSERT INTO fb_account_fields (label, field_key, field_type, sort_order) VALUES (?, ?, ?, ?)').run(label.trim(), field_key, field_type, sort_order);
-    const created = db.prepare('SELECT * FROM fb_account_fields WHERE id = ?').get(result.lastInsertRowid);
+    const result = db.prepare('INSERT INTO fb_account_fields (label, field_key, field_type, sort_order, options, pinned) VALUES (?, ?, ?, ?, ?, ?)').run(label.trim(), field_key, field_type, sort_order, JSON.stringify(options), pinned ? 1 : 0);
+    const created = parseField(db.prepare('SELECT * FROM fb_account_fields WHERE id = ?').get(result.lastInsertRowid));
     res.status(201).json(created);
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE')) {
@@ -171,12 +180,12 @@ router.post('/account-fields', (req, res) => {
 router.patch('/account-fields/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { label, field_type, sort_order, active } = req.body;
+    const { label, field_type, sort_order, active, options, pinned } = req.body;
     const existing = db.prepare('SELECT * FROM fb_account_fields WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Field not found' });
-    db.prepare('UPDATE fb_account_fields SET label = COALESCE(?, label), field_type = COALESCE(?, field_type), sort_order = COALESCE(?, sort_order), active = COALESCE(?, active) WHERE id = ?')
-      .run(label || null, field_type || null, sort_order !== undefined ? sort_order : null, active !== undefined ? active : null, id);
-    const updated = db.prepare('SELECT * FROM fb_account_fields WHERE id = ?').get(id);
+    db.prepare('UPDATE fb_account_fields SET label = COALESCE(?, label), field_type = COALESCE(?, field_type), sort_order = COALESCE(?, sort_order), active = COALESCE(?, active), options = COALESCE(?, options), pinned = COALESCE(?, pinned) WHERE id = ?')
+      .run(label || null, field_type || null, sort_order !== undefined ? sort_order : null, active !== undefined ? active : null, options !== undefined ? JSON.stringify(options) : null, pinned !== undefined ? (pinned ? 1 : 0) : null, id);
+    const updated = parseField(db.prepare('SELECT * FROM fb_account_fields WHERE id = ?').get(id));
     res.json(updated);
   } catch (err) {
     console.error(err);
@@ -195,6 +204,38 @@ router.delete('/account-fields/:id', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete account field' });
+  }
+});
+
+// ─── ACCOUNT DETAIL ───────────────────────────────────────────────────────────
+
+router.get('/ad-accounts/:id/detail', (req, res) => {
+  try {
+    const { id } = req.params;
+    const account = db.prepare('SELECT * FROM fb_ad_accounts WHERE id = ?').get(id);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+
+    const enriched = enrichAccountWithFieldValues(account);
+
+    // Auto-match: distinct media buyers who have audited this account
+    const buyers = db.prepare(
+      'SELECT DISTINCT media_buyer FROM fb_audit_sessions WHERE ad_account = ? AND media_buyer IS NOT NULL ORDER BY media_buyer ASC'
+    ).all(account.name).map(r => r.media_buyer);
+
+    // Recent audit sessions (last 20)
+    const auditSessions = db.prepare(
+      'SELECT * FROM fb_audit_sessions WHERE ad_account = ? ORDER BY date DESC, created_at DESC LIMIT 20'
+    ).all(account.name).map(r => ({ ...r, answers: JSON.parse(r.answers) }));
+
+    // Recent change log entries (last 20)
+    const changeLog = db.prepare(
+      'SELECT * FROM fb_change_log WHERE ad_account = ? ORDER BY date DESC, created_at DESC LIMIT 20'
+    ).all(account.name);
+
+    res.json({ ...enriched, assigned_buyers: buyers, audit_sessions: auditSessions, change_log: changeLog });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch account detail' });
   }
 });
 

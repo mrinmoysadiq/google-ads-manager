@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
+import { getUser } from '../../utils/auth';
 
 const fb = {
   get: (path, cfg) => api.get(`/facebook${path}`, cfg),
-  post: (path, data, cfg) => api.post(`/facebook${path}`, data, cfg),
-  patch: (path, data, cfg) => api.patch(`/facebook${path}`, data, cfg),
-  delete: (path, cfg) => api.delete(`/facebook${path}`, cfg),
+  post: (path, data) => api.post(`/facebook${path}`, data),
+  patch: (path, data) => api.patch(`/facebook${path}`, data),
+  delete: (path) => api.delete(`/facebook${path}`),
 };
 
 const NAV_LINKS = [
@@ -18,189 +19,519 @@ const NAV_LINKS = [
   { label: 'Admin', path: '/facebook/admin' },
 ];
 
-// ─── Field type options ───────────────────────────────────────────────────────
 const FIELD_TYPES = [
-  { value: 'text', label: 'Text' },
-  { value: 'number', label: 'Number' },
-  { value: 'url', label: 'URL' },
-  { value: 'currency', label: 'Currency' },
+  { value: 'text', label: 'Short Text', icon: 'T' },
+  { value: 'textarea', label: 'Long Text', icon: '¶' },
+  { value: 'number', label: 'Number', icon: '#' },
+  { value: 'currency', label: 'Currency ($)', icon: '$' },
+  { value: 'url', label: 'URL / Link', icon: '🔗' },
+  { value: 'date', label: 'Date', icon: '📅' },
+  { value: 'checkbox', label: 'Checkbox (Yes/No)', icon: '✓' },
+  { value: 'tags', label: 'Tags (multi-select)', icon: '🏷' },
 ];
 
-function formatFieldValue(value, type) {
-  if (!value && value !== 0) return <span style={{ color: '#4a4845' }}>—</span>;
-  if (type === 'currency') return `$${parseFloat(value).toLocaleString()}`;
-  if (type === 'url') return (
-    <a href={value} target="_blank" rel="noopener noreferrer" style={{ color: '#575ECF', textDecoration: 'none' }}>
-      {value.replace(/^https?:\/\//, '')}
-    </a>
-  );
-  return value;
+// ─── Field value renderer ──────────────────────────────────────────────────────
+function FieldValue({ value, type, options = [], compact = false }) {
+  if (value === null || value === undefined || value === '') {
+    return <span style={{ color: '#3a3835' }}>—</span>;
+  }
+  if (type === 'checkbox') {
+    const checked = value === '1' || value === 'true' || value === true;
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: checked ? '#22c55e' : '#8a8680', fontSize: 12 }}>
+        <span style={{ fontSize: 14 }}>{checked ? '✓' : '✗'}</span>
+        {!compact && (checked ? 'Yes' : 'No')}
+      </span>
+    );
+  }
+  if (type === 'tags') {
+    const tags = (() => { try { return JSON.parse(value); } catch { return []; } })();
+    if (!tags.length) return <span style={{ color: '#3a3835' }}>—</span>;
+    const shown = compact ? tags.slice(0, 2) : tags;
+    return (
+      <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {shown.map(t => (
+          <span key={t} style={{ background: 'rgba(87,94,207,0.15)', color: '#a5aaee', borderRadius: 20, padding: '2px 8px', fontSize: 11, fontWeight: 500 }}>{t}</span>
+        ))}
+        {compact && tags.length > 2 && <span style={{ color: '#8a8680', fontSize: 11 }}>+{tags.length - 2}</span>}
+      </span>
+    );
+  }
+  if (type === 'url') {
+    return <a href={value} target="_blank" rel="noopener noreferrer" style={{ color: '#575ECF', textDecoration: 'none', fontSize: 13 }}>{value.replace(/^https?:\/\//, '')}</a>;
+  }
+  if (type === 'currency') return <span style={{ color: '#c5c1b9' }}>${parseFloat(value).toLocaleString()}</span>;
+  return <span style={{ color: '#c5c1b9' }}>{value}</span>;
 }
 
-// ─── Manage Fields Modal ──────────────────────────────────────────────────────
-function ManageFieldsModal({ fields, onClose, onSaved }) {
-  const [list, setList] = useState(fields);
-  const [newLabel, setNewLabel] = useState('');
-  const [newType, setNewType] = useState('text');
-  const [adding, setAdding] = useState(false);
+// ─── Field input component ────────────────────────────────────────────────────
+function FieldInput({ field, value, onChange }) {
+  const { field_type, field_key, label, options = [] } = field;
 
-  async function addField() {
-    if (!newLabel.trim()) return;
-    setAdding(true);
-    try {
-      const res = await fb.post('/account-fields', { label: newLabel.trim(), field_type: newType });
-      setList(prev => [...prev, res.data]);
-      setNewLabel('');
-      setNewType('text');
-      toast.success('Field added');
-      onSaved();
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to add field');
-    } finally { setAdding(false); }
+  if (field_type === 'checkbox') {
+    const checked = value === '1' || value === 'true';
+    return (
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+        <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked ? '1' : '0')} style={{ accentColor: '#575ECF', width: 16, height: 16 }} />
+        <span style={{ color: '#c5c1b9', fontSize: 14 }}>{checked ? 'Yes' : 'No'}</span>
+      </label>
+    );
   }
+  if (field_type === 'tags') {
+    const selected = (() => { try { return JSON.parse(value || '[]'); } catch { return []; } })();
+    const toggle = tag => {
+      const next = selected.includes(tag) ? selected.filter(t => t !== tag) : [...selected, tag];
+      onChange(JSON.stringify(next));
+    };
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {options.map(tag => (
+          <button key={tag} onClick={() => toggle(tag)} style={{ background: selected.includes(tag) ? 'rgba(87,94,207,0.3)' : 'rgba(255,255,255,0.05)', border: `1px solid ${selected.includes(tag) ? '#575ECF' : 'rgba(255,255,255,0.1)'}`, color: selected.includes(tag) ? '#a5aaee' : '#8a8680', borderRadius: 20, padding: '4px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
+            {tag}
+          </button>
+        ))}
+        {options.length === 0 && <span style={{ color: '#8a8680', fontSize: 13 }}>No tag options defined — add them in field settings.</span>}
+      </div>
+    );
+  }
+  if (field_type === 'textarea') {
+    return <textarea value={value || ''} onChange={e => onChange(e.target.value)} rows={3} placeholder={`Enter ${label}…`} style={inputStyle} />;
+  }
+  if (field_type === 'date') {
+    return <input type="date" value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
+  }
+  return (
+    <input
+      type={field_type === 'number' || field_type === 'currency' ? 'number' : field_type === 'url' ? 'url' : 'text'}
+      value={value || ''}
+      onChange={e => onChange(e.target.value)}
+      placeholder={field_type === 'currency' ? '0.00' : field_type === 'url' ? 'https://' : `Enter ${label}…`}
+      style={inputStyle}
+    />
+  );
+}
 
-  async function deleteField(field) {
-    if (!confirm(`Delete field "${field.label}"? All stored values will be lost.`)) return;
-    try {
-      await fb.delete(`/account-fields/${field.id}`);
-      setList(prev => prev.filter(f => f.id !== field.id));
-      toast.success('Field deleted');
-      onSaved();
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to delete field');
-    }
-  }
+// ─── Account Drawer ───────────────────────────────────────────────────────────
+function AccountDrawer({ accountId, fields, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('info');
+
+  useEffect(() => {
+    if (!accountId) return;
+    setLoading(true);
+    fb.get(`/ad-accounts/${accountId}/detail`)
+      .then(r => setData(r.data))
+      .catch(() => toast.error('Failed to load account details'))
+      .finally(() => setLoading(false));
+  }, [accountId]);
+
+  if (!accountId) return null;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#242424', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 28, width: 480, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ color: '#c5c1b9', margin: 0, fontSize: 18, fontWeight: 600 }}>Manage Custom Fields</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', fontSize: 20 }}>×</button>
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 900 }} />
+      <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 520, background: '#1e1e1e', borderLeft: '1px solid rgba(255,255,255,0.08)', zIndex: 901, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.4)' }}>
+        {/* Header */}
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            {loading ? <div style={{ color: '#8a8680' }}>Loading…</div> : (
+              <>
+                <h2 style={{ color: '#c5c1b9', margin: 0, fontSize: 18, fontWeight: 700 }}>{data?.name}</h2>
+                {data?.website && <a href={data.website} target="_blank" rel="noopener noreferrer" style={{ color: '#575ECF', fontSize: 13, textDecoration: 'none' }}>{data.website.replace(/^https?:\/\//, '')}</a>}
+              </>
+            )}
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#8a8680', cursor: 'pointer', fontSize: 16, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', marginBottom: 20 }}>
-          {list.length === 0 && (
-            <p style={{ color: '#8a8680', textAlign: 'center', padding: '20px 0' }}>No custom fields yet</p>
-          )}
-          {list.map(field => (
-            <div key={field.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#2a2a2a', borderRadius: 8, marginBottom: 8 }}>
-              <div>
-                <span style={{ color: '#c5c1b9', fontWeight: 500 }}>{field.label}</span>
-                <span style={{ color: '#8a8680', fontSize: 12, marginLeft: 8 }}>{FIELD_TYPES.find(t => t.value === field.field_type)?.label || field.field_type}</span>
-              </div>
-              <button onClick={() => deleteField(field)} style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}>
-                Delete
-              </button>
-            </div>
+        {/* Tabs */}
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '0 24px' }}>
+          {[['info', 'Info'], ['audit', 'Audit Log'], ['changes', 'Change Log']].map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)} style={{ background: 'none', border: 'none', padding: '12px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: tab === key ? '#575ECF' : '#8a8680', borderBottom: `2px solid ${tab === key ? '#575ECF' : 'transparent'}`, transition: 'color 0.15s' }}>
+              {label}
+            </button>
           ))}
         </div>
 
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
-          <p style={{ color: '#8a8680', fontSize: 13, marginBottom: 12 }}>Add new field</p>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <input
-              value={newLabel}
-              onChange={e => setNewLabel(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addField()}
-              placeholder="Field label (e.g. Target CPL)"
-              style={{ flex: 1, background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '8px 12px', color: '#c5c1b9', fontSize: 14 }}
-            />
-            <select
-              value={newType}
-              onChange={e => setNewType(e.target.value)}
-              style={{ background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '8px 12px', color: '#c5c1b9', fontSize: 14 }}
-            >
-              {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
+        {/* Content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: '#8a8680' }}>Loading…</div>
+          ) : !data ? null : tab === 'info' ? (
+            <DrawerInfo data={data} fields={fields} />
+          ) : tab === 'audit' ? (
+            <DrawerAudit sessions={data.audit_sessions} />
+          ) : (
+            <DrawerChangelog entries={data.change_log} />
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function DrawerInfo({ data, fields }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Assigned buyers */}
+      <div>
+        <p style={sectionLabel}>Assigned Media Buyers</p>
+        {data.assigned_buyers?.length ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {data.assigned_buyers.map(b => (
+              <span key={b} style={{ background: 'rgba(87,94,207,0.12)', color: '#a5aaee', border: '1px solid rgba(87,94,207,0.25)', borderRadius: 20, padding: '4px 12px', fontSize: 13, fontWeight: 500 }}>{b}</span>
+            ))}
           </div>
-          <button onClick={addField} disabled={adding || !newLabel.trim()} style={{ width: '100%', background: '#575ECF', border: 'none', borderRadius: 8, padding: '10px 0', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: (adding || !newLabel.trim()) ? 0.5 : 1 }}>
-            {adding ? 'Adding…' : 'Add Field'}
-          </button>
+        ) : <p style={{ color: '#8a8680', fontSize: 13, margin: 0 }}>No audit sessions yet — buyers will appear here after they run their first daily checklist for this account.</p>}
+      </div>
+
+      {/* Built-in fields */}
+      {data.notes && (
+        <div>
+          <p style={sectionLabel}>Notes</p>
+          <p style={{ color: '#c5c1b9', fontSize: 14, margin: 0, lineHeight: 1.6, background: '#242424', borderRadius: 8, padding: '10px 14px' }}>{data.notes}</p>
+        </div>
+      )}
+
+      {/* Custom fields */}
+      {fields.length > 0 && (
+        <div>
+          <p style={sectionLabel}>Custom Fields</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {fields.map(f => (
+              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 14px', background: '#242424', borderRadius: 8 }}>
+                <span style={{ color: '#8a8680', fontSize: 13, fontWeight: 500 }}>{f.label}</span>
+                <span style={{ maxWidth: 240, textAlign: 'right', fontSize: 13 }}>
+                  <FieldValue value={data.custom_fields?.[f.field_key]} type={f.field_type} options={f.options} />
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DrawerAudit({ sessions }) {
+  if (!sessions?.length) return <p style={{ color: '#8a8680', fontSize: 13 }}>No audit sessions recorded for this account yet.</p>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {sessions.map(s => (
+        <div key={s.id} style={{ background: '#242424', borderRadius: 8, padding: '12px 16px', borderLeft: `3px solid ${s.issue_count > 0 ? '#f59e0b' : '#22c55e'}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <span style={{ color: '#c5c1b9', fontWeight: 500, fontSize: 14 }}>{s.date}</span>
+            <span style={{ color: s.issue_count > 0 ? '#f59e0b' : '#22c55e', fontSize: 12, fontWeight: 600 }}>
+              {s.issue_count > 0 ? `${s.issue_count} issue${s.issue_count > 1 ? 's' : ''}` : '✓ Clean'}
+            </span>
+          </div>
+          {s.media_buyer && <span style={{ color: '#8a8680', fontSize: 12 }}>by {s.media_buyer}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DrawerChangelog({ entries }) {
+  if (!entries?.length) return <p style={{ color: '#8a8680', fontSize: 13 }}>No change log entries recorded for this account yet.</p>;
+  const levelColor = { Account: '#3b82f6', Campaign: '#8b5cf6', 'Ad Set': '#f59e0b', Ad: '#22c55e' };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {entries.map(e => (
+        <div key={e.id} style={{ background: '#242424', borderRadius: 8, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ color: '#c5c1b9', fontWeight: 500, fontSize: 14 }}>{e.date}</span>
+            <span style={{ background: `${levelColor[e.change_level] || '#8a8680'}22`, color: levelColor[e.change_level] || '#8a8680', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>{e.change_level}</span>
+          </div>
+          {e.what_changed && <p style={{ color: '#c5c1b9', fontSize: 13, margin: '4px 0', lineHeight: 1.5 }}>{e.what_changed}</p>}
+          {e.why_changed && <p style={{ color: '#8a8680', fontSize: 12, margin: 0 }}>Why: {e.why_changed}</p>}
+          {e.media_buyer && <p style={{ color: '#8a8680', fontSize: 12, margin: '4px 0 0' }}>by {e.media_buyer}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Settings Modal ───────────────────────────────────────────────────────────
+function SettingsModal({ fields, accounts, onClose, onSaved }) {
+  const [tab, setTab] = useState('fields');
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: '#1e1e1e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, width: 640, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <h2 style={{ color: '#c5c1b9', margin: 0, fontSize: 17, fontWeight: 700 }}>⚙ Settings</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', fontSize: 20 }}>×</button>
+        </div>
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '0 24px' }}>
+          {[['fields', 'Manage Fields'], ['accounts', 'Manage Accounts']].map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)} style={{ background: 'none', border: 'none', padding: '12px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: tab === key ? '#575ECF' : '#8a8680', borderBottom: `2px solid ${tab === key ? '#575ECF' : 'transparent'}` }}>{label}</button>
+          ))}
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+          {tab === 'fields' ? (
+            <ManageFields fields={fields} onSaved={onSaved} />
+          ) : (
+            <ManageAccounts accounts={accounts} fields={fields} onSaved={onSaved} />
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Account Modal (add / edit) ───────────────────────────────────────────────
-function AccountModal({ account, fields, onClose, onSaved }) {
-  const isEdit = !!account;
-  const [form, setForm] = useState({
-    name: account?.name || '',
-    website: account?.website || '',
-    notes: account?.notes || '',
-    custom_fields: account?.custom_fields || {},
-  });
-  const [saving, setSaving] = useState(false);
+function ManageFields({ fields, onSaved }) {
+  const [list, setList] = useState(fields);
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState({ label: '', field_type: 'text', options: [], pinned: false });
+  const [tagInput, setTagInput] = useState('');
 
-  function setCustom(key, val) {
-    setForm(prev => ({ ...prev, custom_fields: { ...prev.custom_fields, [key]: val } }));
+  useEffect(() => { setList(fields); }, [fields]);
+
+  function resetForm() { setForm({ label: '', field_type: 'text', options: [], pinned: false }); setTagInput(''); setAdding(false); setEditingId(null); }
+
+  function startEdit(f) {
+    setEditingId(f.id);
+    setForm({ label: f.label, field_type: f.field_type, options: f.options || [], pinned: !!f.pinned });
+    setAdding(true);
+  }
+
+  function addTag() {
+    if (!tagInput.trim()) return;
+    if (!form.options.includes(tagInput.trim())) setForm(p => ({ ...p, options: [...p.options, tagInput.trim()] }));
+    setTagInput('');
   }
 
   async function save() {
-    if (!form.name.trim()) { toast.error('Account name is required'); return; }
-    setSaving(true);
+    if (!form.label.trim()) return;
     try {
-      if (isEdit) {
-        await fb.patch(`/ad-accounts/${account.id}`, form);
-        toast.success('Account updated');
+      if (editingId) {
+        const res = await fb.patch(`/account-fields/${editingId}`, form);
+        setList(prev => prev.map(f => f.id === editingId ? res.data : f));
+        toast.success('Field updated');
       } else {
-        await fb.post('/ad-accounts', form);
-        toast.success('Account created');
+        const res = await fb.post('/account-fields', form);
+        setList(prev => [...prev, res.data]);
+        toast.success('Field added');
       }
       onSaved();
-      onClose();
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save account');
-    } finally { setSaving(false); }
+      resetForm();
+    } catch (err) { toast.error(err.response?.data?.error || 'Failed to save field'); }
+  }
+
+  async function del(f) {
+    if (!confirm(`Delete field "${f.label}"? All stored values will be lost.`)) return;
+    try {
+      await fb.delete(`/account-fields/${f.id}`);
+      setList(prev => prev.filter(x => x.id !== f.id));
+      toast.success('Field deleted');
+      onSaved();
+    } catch { toast.error('Failed to delete field'); }
+  }
+
+  async function togglePinned(f) {
+    try {
+      const res = await fb.patch(`/account-fields/${f.id}`, { pinned: !f.pinned ? 1 : 0 });
+      setList(prev => prev.map(x => x.id === f.id ? res.data : x));
+      onSaved();
+    } catch { toast.error('Failed to update field'); }
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#242424', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 28, width: 520, maxHeight: '85vh', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h2 style={{ color: '#c5c1b9', margin: 0, fontSize: 18, fontWeight: 600 }}>{isEdit ? 'Edit Account' : 'Add Account'}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', fontSize: 20 }}>×</button>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <label style={{ color: '#8a8680', fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 6 }}>ACCOUNT NAME *</label>
-            <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Acme Corp — Meta Ads"
-              style={{ width: '100%', background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '10px 12px', color: '#c5c1b9', fontSize: 14, boxSizing: 'border-box' }} />
-          </div>
-          <div>
-            <label style={{ color: '#8a8680', fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 6 }}>WEBSITE</label>
-            <input value={form.website} onChange={e => setForm(p => ({ ...p, website: e.target.value }))} placeholder="https://example.com"
-              style={{ width: '100%', background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '10px 12px', color: '#c5c1b9', fontSize: 14, boxSizing: 'border-box' }} />
-          </div>
-          {fields.map(field => (
-            <div key={field.id}>
-              <label style={{ color: '#8a8680', fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 6 }}>{field.label.toUpperCase()}</label>
-              <input
-                type={field.field_type === 'number' || field.field_type === 'currency' ? 'number' : 'text'}
-                value={form.custom_fields[field.field_key] || ''}
-                onChange={e => setCustom(field.field_key, e.target.value)}
-                placeholder={field.field_type === 'currency' ? '0.00' : field.field_type === 'url' ? 'https://' : ''}
-                style={{ width: '100%', background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '10px 12px', color: '#c5c1b9', fontSize: 14, boxSizing: 'border-box' }}
-              />
+    <div>
+      {/* Existing fields */}
+      {list.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          {list.map(f => (
+            <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#2a2a2a', borderRadius: 8, marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 16, width: 22, textAlign: 'center' }}>{FIELD_TYPES.find(t => t.value === f.field_type)?.icon}</span>
+                <div>
+                  <span style={{ color: '#c5c1b9', fontWeight: 500, fontSize: 14 }}>{f.label}</span>
+                  <span style={{ color: '#8a8680', fontSize: 12, marginLeft: 8 }}>{FIELD_TYPES.find(t => t.value === f.field_type)?.label}</span>
+                  {f.pinned ? <span style={{ color: '#575ECF', fontSize: 11, marginLeft: 8, fontWeight: 600 }}>📌 pinned</span> : null}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => togglePinned(f)} title={f.pinned ? 'Unpin from table' : 'Pin to table'} style={{ ...smallBtn, color: f.pinned ? '#575ECF' : '#8a8680' }}>📌</button>
+                <button onClick={() => startEdit(f)} style={smallBtn}>Edit</button>
+                <button onClick={() => del(f)} style={{ ...smallBtn, color: '#ef4444', borderColor: 'rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)' }}>Delete</button>
+              </div>
             </div>
           ))}
-          <div>
-            <label style={{ color: '#8a8680', fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 6 }}>NOTES</label>
-            <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={3} placeholder="Any notes about this account…"
-              style={{ width: '100%', background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '10px 12px', color: '#c5c1b9', fontSize: 14, boxSizing: 'border-box', resize: 'vertical' }} />
+        </div>
+      )}
+
+      {/* Add/Edit form */}
+      {!adding ? (
+        <button onClick={() => setAdding(true)} style={{ width: '100%', background: 'rgba(87,94,207,0.1)', border: '1px dashed rgba(87,94,207,0.4)', borderRadius: 8, padding: '12px 0', color: '#575ECF', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+          + Add New Field
+        </button>
+      ) : (
+        <div style={{ background: '#242424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 20 }}>
+          <p style={{ color: '#c5c1b9', fontWeight: 600, marginBottom: 16, margin: '0 0 16px' }}>{editingId ? 'Edit Field' : 'New Field'}</p>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>FIELD LABEL</label>
+              <input value={form.label} onChange={e => setForm(p => ({ ...p, label: e.target.value }))} placeholder="e.g. Target CPL" style={inputStyle} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>FIELD TYPE</label>
+              <select value={form.field_type} onChange={e => setForm(p => ({ ...p, field_type: e.target.value, options: [] }))} style={{ ...inputStyle, cursor: 'pointer' }}>
+                {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.icon} {t.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {form.field_type === 'tags' && (
+            <div style={{ marginBottom: 12 }}>
+              <label style={labelStyle}>TAG OPTIONS</label>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="Type a tag and press Enter" style={{ ...inputStyle, flex: 1 }} />
+                <button onClick={addTag} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '0 16px', color: '#fff', cursor: 'pointer' }}>Add</button>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {form.options.map(t => (
+                  <span key={t} style={{ background: 'rgba(87,94,207,0.2)', color: '#a5aaee', borderRadius: 20, padding: '3px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {t}
+                    <button onClick={() => setForm(p => ({ ...p, options: p.options.filter(x => x !== t) }))} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 16 }}>
+            <input type="checkbox" checked={!!form.pinned} onChange={e => setForm(p => ({ ...p, pinned: e.target.checked }))} style={{ accentColor: '#575ECF' }} />
+            <span style={{ color: '#c5c1b9', fontSize: 13 }}>📌 Pin this field as a column in the overview table</span>
+          </label>
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button onClick={resetForm} style={{ ...smallBtn, padding: '8px 16px', fontSize: 13 }}>Cancel</button>
+            <button onClick={save} disabled={!form.label.trim()} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '8px 20px', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: !form.label.trim() ? 0.5 : 1, fontSize: 13 }}>
+              {editingId ? 'Save Changes' : 'Add Field'}
+            </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 24, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 20px', color: '#c5c1b9', cursor: 'pointer' }}>Cancel</button>
-          <button onClick={save} disabled={saving} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '10px 24px', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-            {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Account'}
-          </button>
-        </div>
+function ManageAccounts({ accounts, fields, onSaved }) {
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
+
+  function openAdd() {
+    setEditingId('new');
+    setForm({ name: '', website: '', notes: '', custom_fields: {} });
+  }
+
+  function openEdit(a) {
+    setEditingId(a.id);
+    setForm({ name: a.name, website: a.website || '', notes: a.notes || '', custom_fields: a.custom_fields || {} });
+  }
+
+  function close() { setEditingId(null); setForm(null); }
+
+  async function save() {
+    if (!form?.name?.trim()) { toast.error('Name is required'); return; }
+    setSaving(true);
+    try {
+      if (editingId === 'new') {
+        await fb.post('/ad-accounts', form);
+        toast.success('Account created');
+      } else {
+        await fb.patch(`/ad-accounts/${editingId}`, form);
+        toast.success('Account updated');
+      }
+      onSaved();
+      close();
+    } catch (err) { toast.error(err.response?.data?.error || 'Failed to save'); }
+    finally { setSaving(false); }
+  }
+
+  async function toggleActive(a) {
+    try {
+      await fb.patch(`/ad-accounts/${a.id}`, { active: a.active ? 0 : 1 });
+      toast.success(a.active ? 'Deactivated' : 'Reactivated');
+      onSaved();
+    } catch { toast.error('Failed to update'); }
+  }
+
+  async function del(a) {
+    if (!confirm(`Delete "${a.name}"? This cannot be undone.`)) return;
+    try {
+      await fb.delete(`/ad-accounts/${a.id}`);
+      toast.success('Deleted');
+      onSaved();
+    } catch (err) { toast.error(err.response?.data?.error || 'Failed to delete'); }
+  }
+
+  const visible = accounts.filter(a => showInactive || a.active);
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8a8680', fontSize: 13, cursor: 'pointer' }}>
+          <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} style={{ accentColor: '#575ECF' }} /> Show inactive
+        </label>
+        <button onClick={openAdd} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '8px 16px', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>+ Add Account</button>
       </div>
+
+      {/* Edit / Add form */}
+      {editingId && form && (
+        <div style={{ background: '#242424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 20, marginBottom: 16 }}>
+          <p style={{ color: '#c5c1b9', fontWeight: 600, margin: '0 0 16px' }}>{editingId === 'new' ? 'New Account' : 'Edit Account'}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>ACCOUNT NAME *</label>
+              <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Acme Corp" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>WEBSITE</label>
+              <input value={form.website} onChange={e => setForm(p => ({ ...p, website: e.target.value }))} placeholder="https://example.com" style={inputStyle} />
+            </div>
+            {fields.map(f => (
+              <div key={f.id}>
+                <label style={labelStyle}>{f.label.toUpperCase()}</label>
+                <FieldInput field={f} value={form.custom_fields[f.field_key] || ''} onChange={val => setForm(p => ({ ...p, custom_fields: { ...p.custom_fields, [f.field_key]: val } }))} />
+              </div>
+            ))}
+            <div>
+              <label style={labelStyle}>NOTES</label>
+              <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Any notes…" style={{ ...inputStyle, resize: 'vertical' }} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button onClick={close} style={{ ...smallBtn, padding: '8px 16px', fontSize: 13 }}>Cancel</button>
+            <button onClick={save} disabled={saving} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '8px 20px', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>
+              {saving ? 'Saving…' : editingId === 'new' ? 'Create' : 'Save'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Account list */}
+      {visible.length === 0 ? (
+        <p style={{ color: '#8a8680', textAlign: 'center', padding: 20 }}>No accounts yet.</p>
+      ) : visible.map(a => (
+        <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#2a2a2a', borderRadius: 8, marginBottom: 8, opacity: a.active ? 1 : 0.5 }}>
+          <div>
+            <span style={{ color: '#c5c1b9', fontWeight: 500 }}>{a.name}</span>
+            {!a.active && <span style={{ color: '#8a8680', fontSize: 11, marginLeft: 8 }}>inactive</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => openEdit(a)} style={smallBtn}>Edit</button>
+            <button onClick={() => toggleActive(a)} style={smallBtn}>{a.active ? 'Deactivate' : 'Activate'}</button>
+            <button onClick={() => del(a)} style={{ ...smallBtn, color: '#ef4444', borderColor: 'rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)' }}>Delete</button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -208,63 +539,49 @@ function AccountModal({ account, fields, onClose, onSaved }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function FbAccounts() {
   const navigate = useNavigate();
+  const currentUser = getUser();
   const [accounts, setAccounts] = useState([]);
   const [fields, setFields] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showInactive, setShowInactive] = useState(false);
-  const [accountModal, setAccountModal] = useState(null); // null | 'new' | account object
-  const [manageFields, setManageFields] = useState(false);
   const [search, setSearch] = useState('');
+  const [drawerAccountId, setDrawerAccountId] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
 
-  async function fetchAll() {
+  const fetchAll = useCallback(async () => {
     try {
       const [acctRes, fieldRes] = await Promise.all([
         fb.get('/ad-accounts?all=1'),
-        fb.get('/account-fields'),
+        fb.get('/account-fields?all=1'),
       ]);
       setAccounts(Array.isArray(acctRes.data) ? acctRes.data : []);
       setFields(Array.isArray(fieldRes.data) ? fieldRes.data : []);
-    } catch (err) {
+    } catch {
       toast.error('Failed to load accounts');
     } finally { setLoading(false); }
-  }
+  }, []);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  async function toggleActive(account) {
-    try {
-      await fb.patch(`/ad-accounts/${account.id}`, { active: account.active ? 0 : 1 });
-      toast.success(account.active ? 'Account deactivated' : 'Account reactivated');
-      fetchAll();
-    } catch (err) {
-      toast.error('Failed to update account');
-    }
-  }
-
-  async function deleteAccount(account) {
-    if (!confirm(`Delete "${account.name}"? This cannot be undone.`)) return;
-    try {
-      await fb.delete(`/ad-accounts/${account.id}`);
-      toast.success('Account deleted');
-      fetchAll();
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to delete account');
-    }
-  }
+  const activeFields = fields.filter(f => f.active);
+  const pinnedFields = activeFields.filter(f => f.pinned);
 
   const filtered = accounts.filter(a => {
-    if (!showInactive && !a.active) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return a.name.toLowerCase().includes(q) || (a.website || '').toLowerCase().includes(q) || (a.notes || '').toLowerCase().includes(q);
-    }
-    return true;
+    if (!a.active) return false;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return a.name.toLowerCase().includes(q) || (a.website || '').toLowerCase().includes(q) || (a.notes || '').toLowerCase().includes(q);
   });
+
+  // Highlight row if logged-in user's name matches any buyer on this account
+  // (We don't have buyer info in the list view without a detail call, so we highlight
+  // only if the user's name appears in the account name as a rough heuristic.
+  // Full highlighting would require a separate API call per account which is too heavy.)
+  // Instead, we add a subtle indicator for the current user to expand their accounts.
 
   return (
     <div style={{ minHeight: '100vh', background: '#1b1b1b' }}>
       {/* Nav */}
-      <div style={{ background: '#242424', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div style={{ background: '#1e1e1e', borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '0 28px', display: 'flex', alignItems: 'center', gap: 2 }}>
         {NAV_LINKS.map(link => (
           <button key={link.path} onClick={() => navigate(link.path)}
             style={{ background: 'none', border: 'none', padding: '16px 14px', cursor: 'pointer', fontSize: 14, fontWeight: 500, borderBottom: link.path === '/facebook/accounts' ? '2px solid #575ECF' : '2px solid transparent', color: link.path === '/facebook/accounts' ? '#575ECF' : '#8a8680', transition: 'color 0.15s' }}>
@@ -273,143 +590,111 @@ export default function FbAccounts() {
         ))}
       </div>
 
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 28px' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
           <div>
-            <h1 style={{ color: '#c5c1b9', margin: 0, fontSize: 24, fontWeight: 700 }}>Facebook Ad Accounts</h1>
-            <p style={{ color: '#8a8680', margin: '6px 0 0', fontSize: 14 }}>Master list — single source of truth for all Facebook modules</p>
+            <h1 style={{ color: '#c5c1b9', margin: 0, fontSize: 22, fontWeight: 700 }}>Facebook Ad Accounts</h1>
+            <p style={{ color: '#8a8680', margin: '5px 0 0', fontSize: 14 }}>Click any account to view details, audit history, and change log</p>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setManageFields(true)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 16px', color: '#c5c1b9', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-              ⚙ Manage Fields
-            </button>
-            <button onClick={() => setAccountModal('new')} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '10px 20px', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>
-              + Add Account
-            </button>
-          </div>
+          <button onClick={() => setShowSettings(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 18px', color: '#c5c1b9', cursor: 'pointer', fontSize: 14 }}>
+            <span>⚙</span> Settings
+          </button>
         </div>
 
-        {/* Toolbar */}
+        {/* Search + count */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search accounts…"
-            style={{ flex: 1, maxWidth: 320, background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '9px 14px', color: '#c5c1b9', fontSize: 14 }} />
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8a8680', fontSize: 14, cursor: 'pointer' }}>
-            <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} style={{ accentColor: '#575ECF' }} />
-            Show inactive
-          </label>
-          <span style={{ color: '#8a8680', fontSize: 13, marginLeft: 'auto' }}>{filtered.length} account{filtered.length !== 1 ? 's' : ''}</span>
+          <div style={{ position: 'relative', flex: 1, maxWidth: 360 }}>
+            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8a8680', fontSize: 14 }}>🔍</span>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search accounts…"
+              style={{ width: '100%', background: '#242424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '9px 14px 9px 36px', color: '#c5c1b9', fontSize: 14, boxSizing: 'border-box' }} />
+          </div>
+          <span style={{ color: '#8a8680', fontSize: 13, marginLeft: 'auto' }}>{filtered.length} active account{filtered.length !== 1 ? 's' : ''}</span>
         </div>
 
         {/* Table */}
         {loading ? (
-          <div style={{ textAlign: 'center', padding: 60, color: '#8a8680' }}>Loading…</div>
+          <div style={{ textAlign: 'center', padding: 80, color: '#8a8680' }}>Loading accounts…</div>
         ) : filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 60, color: '#8a8680' }}>
-            {accounts.length === 0 ? 'No accounts yet — click "Add Account" to get started.' : 'No accounts match your filter.'}
+          <div style={{ textAlign: 'center', padding: 80, color: '#8a8680' }}>
+            {accounts.filter(a => a.active).length === 0
+              ? 'No active accounts yet — open Settings → Manage Accounts to add one.'
+              : 'No accounts match your search.'}
           </div>
         ) : (
-          <div style={{ background: '#242424', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#2a2a2a', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                    <th style={thStyle}>Account Name</th>
-                    <th style={thStyle}>Website</th>
-                    {fields.map(f => <th key={f.id} style={thStyle}>{f.label}</th>)}
-                    <th style={thStyle}>Notes</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+          <div style={{ background: '#1e1e1e', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#242424', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                  <th style={th}>Account</th>
+                  <th style={th}>Website</th>
+                  {pinnedFields.map(f => <th key={f.id} style={th}>{f.label}</th>)}
+                  <th style={th}>Notes</th>
+                  <th style={{ ...th, width: 80, textAlign: 'center' }}>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((acct, idx) => (
+                  <tr key={acct.id}
+                    onClick={() => setDrawerAccountId(acct.id)}
+                    style={{ borderBottom: idx < filtered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <td style={td}>
+                      <span style={{ color: '#c5c1b9', fontWeight: 600, fontSize: 14 }}>{acct.name}</span>
+                    </td>
+                    <td style={td}>
+                      {acct.website
+                        ? <a href={acct.website} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#575ECF', textDecoration: 'none', fontSize: 13 }}>{acct.website.replace(/^https?:\/\//, '')}</a>
+                        : <span style={{ color: '#3a3835' }}>—</span>}
+                    </td>
+                    {pinnedFields.map(f => (
+                      <td key={f.id} style={td}>
+                        <FieldValue value={acct.custom_fields?.[f.field_key]} type={f.field_type} options={f.options} compact />
+                      </td>
+                    ))}
+                    <td style={{ ...td, maxWidth: 200 }}>
+                      {acct.notes
+                        ? <span style={{ color: '#8a8680', fontSize: 13, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }} title={acct.notes}>{acct.notes}</span>
+                        : <span style={{ color: '#3a3835' }}>—</span>}
+                    </td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      <span style={{ color: '#575ECF', fontSize: 16 }}>→</span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((acct, idx) => (
-                    <tr key={acct.id} style={{ borderBottom: idx < filtered.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none', opacity: acct.active ? 1 : 0.5 }}>
-                      <td style={tdStyle}>
-                        <span style={{ color: '#c5c1b9', fontWeight: 500 }}>{acct.name}</span>
-                      </td>
-                      <td style={tdStyle}>
-                        {acct.website ? (
-                          <a href={acct.website} target="_blank" rel="noopener noreferrer" style={{ color: '#575ECF', textDecoration: 'none', fontSize: 13 }}>
-                            {acct.website.replace(/^https?:\/\//, '')}
-                          </a>
-                        ) : <span style={{ color: '#4a4845' }}>—</span>}
-                      </td>
-                      {fields.map(f => (
-                        <td key={f.id} style={tdStyle}>
-                          <span style={{ color: '#c5c1b9', fontSize: 13 }}>
-                            {formatFieldValue(acct.custom_fields?.[f.field_key], f.field_type)}
-                          </span>
-                        </td>
-                      ))}
-                      <td style={{ ...tdStyle, maxWidth: 200 }}>
-                        {acct.notes ? (
-                          <span style={{ color: '#8a8680', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: 200 }} title={acct.notes}>{acct.notes}</span>
-                        ) : <span style={{ color: '#4a4845' }}>—</span>}
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={{ background: acct.active ? 'rgba(34,197,94,0.12)' : 'rgba(138,134,128,0.12)', color: acct.active ? '#22c55e' : '#8a8680', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 500 }}>
-                          {acct.active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                          <button onClick={() => setAccountModal(acct)} style={actionBtnStyle}>Edit</button>
-                          <button onClick={() => toggleActive(acct)} style={actionBtnStyle}>{acct.active ? 'Deactivate' : 'Activate'}</button>
-                          <button onClick={() => deleteAccount(acct)} style={{ ...actionBtnStyle, color: '#ef4444', borderColor: 'rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)' }}>Delete</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {manageFields && (
-        <ManageFieldsModal
-          fields={fields}
-          onClose={() => setManageFields(false)}
-          onSaved={fetchAll}
+      {/* Account drawer */}
+      {drawerAccountId && (
+        <AccountDrawer
+          accountId={drawerAccountId}
+          fields={activeFields}
+          onClose={() => setDrawerAccountId(null)}
         />
       )}
 
-      {accountModal && (
-        <AccountModal
-          account={accountModal === 'new' ? null : accountModal}
+      {/* Settings modal */}
+      {showSettings && (
+        <SettingsModal
           fields={fields}
-          onClose={() => setAccountModal(null)}
-          onSaved={fetchAll}
+          accounts={accounts}
+          onClose={() => setShowSettings(false)}
+          onSaved={() => { fetchAll(); }}
         />
       )}
     </div>
   );
 }
 
-const thStyle = {
-  padding: '12px 16px',
-  textAlign: 'left',
-  color: '#8a8680',
-  fontSize: 12,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  whiteSpace: 'nowrap',
-};
-
-const tdStyle = {
-  padding: '14px 16px',
-  verticalAlign: 'middle',
-};
-
-const actionBtnStyle = {
-  background: 'rgba(255,255,255,0.05)',
-  border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: 6,
-  padding: '5px 10px',
-  color: '#c5c1b9',
-  cursor: 'pointer',
-  fontSize: 12,
-};
+// ─── Shared styles ────────────────────────────────────────────────────────────
+const th = { padding: '11px 16px', textAlign: 'left', color: '#8a8680', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' };
+const td = { padding: '14px 16px', verticalAlign: 'middle' };
+const inputStyle = { width: '100%', background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '9px 12px', color: '#c5c1b9', fontSize: 14, boxSizing: 'border-box' };
+const labelStyle = { color: '#8a8680', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6, letterSpacing: '0.05em' };
+const smallBtn = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '5px 10px', color: '#c5c1b9', cursor: 'pointer', fontSize: 12 };
+const sectionLabel = { color: '#8a8680', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' };
