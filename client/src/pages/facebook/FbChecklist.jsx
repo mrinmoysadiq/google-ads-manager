@@ -24,12 +24,6 @@ const QUESTIONS = [
     verifyOnYes: true,
     issuePlaceholder: 'Describe the sync issue and resolution steps taken…',
   },
-  {
-    text: 'Are Workflows triggering for new leads?',
-    issueOnNo: true,
-    verifyOnYes: true,
-    issuePlaceholder: 'Which workflows are not triggering and what did you do?',
-  },
 ]
 
 const CHECKLIST_COUNT = QUESTIONS.length   // 4
