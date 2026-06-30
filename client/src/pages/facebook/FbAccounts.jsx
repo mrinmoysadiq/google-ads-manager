@@ -39,6 +39,42 @@ const CURRENCIES = [
   { code: 'AUD', symbol: 'A$',   label: 'AUD — Australian Dollar' },
 ];
 
+// ─── Column order helpers ─────────────────────────────────────────────────────
+const BUILTIN_COLS = [
+  { key: '__last_audit__', label: 'Last Audit', icon: '📅' },
+  { key: '__7d_cpl__',    label: '7D CPL',     icon: '📊' },
+  { key: '__3d_cpl__',   label: '3D CPL',     icon: '📊' },
+  { key: '__notes__',    label: 'Notes',      icon: '📝' },
+];
+const BUILTIN_KEYS = BUILTIN_COLS.map(c => c.key);
+
+function defaultColOrder(pinnedFields) {
+  return ['__last_audit__', '__7d_cpl__', '__3d_cpl__', ...pinnedFields.map(f => f.field_key), '__notes__'];
+}
+
+function reconcileColOrder(saved, pinnedFields) {
+  const valid = new Set([...BUILTIN_KEYS, ...pinnedFields.map(f => f.field_key)]);
+  const filtered = (saved || []).filter(k => valid.has(k));
+  // Add any valid keys missing from saved order
+  for (const k of valid) {
+    if (!filtered.includes(k)) {
+      // Insert custom fields before __notes__, builtins at start
+      const notesIdx = filtered.indexOf('__notes__');
+      if (BUILTIN_KEYS.includes(k)) filtered.unshift(k);
+      else if (notesIdx >= 0) filtered.splice(notesIdx, 0, k);
+      else filtered.push(k);
+    }
+  }
+  return filtered.length ? filtered : defaultColOrder(pinnedFields);
+}
+
+function loadColOrder() {
+  try { return JSON.parse(localStorage.getItem('fb_column_order') || 'null'); } catch { return null; }
+}
+function saveColOrder(order) {
+  localStorage.setItem('fb_column_order', JSON.stringify(order));
+}
+
 function parseCurrency(raw) {
   if (!raw) return { currency: 'USD', amount: '' };
   try {
@@ -461,8 +497,84 @@ function DrawerChangelog({ entries }) {
   );
 }
 
+// ─── Column Order Tab ─────────────────────────────────────────────────────────
+function ColumnOrderTab({ columnOrder, pinnedFields, onChange }) {
+  const [list, setList] = useState(columnOrder);
+  const dragIdx = useRef(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+
+  useEffect(() => { setList(columnOrder); }, [columnOrder]);
+
+  function getLabel(key) {
+    const b = BUILTIN_COLS.find(c => c.key === key);
+    if (b) return { label: b.label, icon: b.icon, builtin: true };
+    const f = pinnedFields.find(f => f.field_key === key);
+    if (f) return { label: f.label, icon: FIELD_TYPES.find(t => t.value === f.field_type)?.icon || '□', builtin: false };
+    return null;
+  }
+
+  function move(idx, dir) {
+    const next = [...list];
+    const swap = idx + dir;
+    if (swap < 0 || swap >= next.length) return;
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    setList(next);
+    saveColOrder(next);
+    onChange(next);
+  }
+
+  function onDragStart(idx) { dragIdx.current = idx; }
+  function onDragEnter(idx) { setDragOverIdx(idx); }
+  function onDragEnd() {
+    if (dragIdx.current !== null && dragOverIdx !== null && dragIdx.current !== dragOverIdx) {
+      const next = [...list];
+      const [moved] = next.splice(dragIdx.current, 1);
+      next.splice(dragOverIdx, 0, moved);
+      setList(next);
+      saveColOrder(next);
+      onChange(next);
+    }
+    dragIdx.current = null;
+    setDragOverIdx(null);
+  }
+
+  return (
+    <div>
+      <p style={{ color: '#8a8680', fontSize: 13, marginBottom: 16 }}>Drag or use arrows to reorder columns. The Account column is always first.</p>
+      {/* Fixed first column */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#2a2a2a', borderRadius: 8, marginBottom: 8, opacity: 0.5 }}>
+        <span style={{ color: '#444', fontSize: 14 }}>⠿</span>
+        <span style={{ color: '#c5c1b9', fontSize: 14, fontWeight: 500 }}>Account</span>
+        <span style={{ color: '#8a8680', fontSize: 11, marginLeft: 4 }}>— always first</span>
+      </div>
+      {list.map((key, idx) => {
+        const meta = getLabel(key);
+        if (!meta) return null;
+        return (
+          <div key={key}
+            draggable
+            onDragStart={() => onDragStart(idx)}
+            onDragEnter={() => onDragEnter(idx)}
+            onDragOver={e => e.preventDefault()}
+            onDragEnd={onDragEnd}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: dragOverIdx === idx ? 'rgba(87,94,207,0.12)' : '#2a2a2a', borderRadius: 8, marginBottom: 8, border: `1px solid ${dragOverIdx === idx ? 'rgba(87,94,207,0.4)' : 'transparent'}`, cursor: 'grab', transition: 'background 0.12s' }}>
+            <span style={{ color: '#444', fontSize: 14, userSelect: 'none' }}>⠿</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <button onClick={() => move(idx, -1)} disabled={idx === 0} style={{ background: 'none', border: 'none', color: idx === 0 ? '#333' : '#8a8680', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 10, lineHeight: 1, padding: '1px 3px' }}>▲</button>
+              <button onClick={() => move(idx, 1)} disabled={idx === list.length - 1} style={{ background: 'none', border: 'none', color: idx === list.length - 1 ? '#333' : '#8a8680', cursor: idx === list.length - 1 ? 'default' : 'pointer', fontSize: 10, lineHeight: 1, padding: '1px 3px' }}>▼</button>
+            </div>
+            <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>{meta.icon}</span>
+            <span style={{ color: '#c5c1b9', fontWeight: 500, fontSize: 14 }}>{meta.label}</span>
+            {meta.builtin && <span style={{ color: '#555', fontSize: 11, marginLeft: 4 }}>built-in</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Settings Modal ───────────────────────────────────────────────────────────
-function SettingsModal({ fields, accounts, onClose, onSaved }) {
+function SettingsModal({ fields, accounts, pinnedFields, columnOrder, onColumnOrderChange, onClose, onSaved }) {
   const [tab, setTab] = useState('fields');
 
   return (
@@ -473,13 +585,15 @@ function SettingsModal({ fields, accounts, onClose, onSaved }) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', fontSize: 20 }}>×</button>
         </div>
         <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '0 24px' }}>
-          {[['fields', 'Manage Fields'], ['accounts', 'Manage Accounts']].map(([key, label]) => (
+          {[['fields', 'Manage Fields'], ['columns', 'Column Order'], ['accounts', 'Manage Accounts']].map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)} style={{ background: 'none', border: 'none', padding: '12px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: tab === key ? '#575ECF' : '#8a8680', borderBottom: `2px solid ${tab === key ? '#575ECF' : 'transparent'}` }}>{label}</button>
           ))}
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
           {tab === 'fields' ? (
             <ManageFields fields={fields} onSaved={onSaved} />
+          ) : tab === 'columns' ? (
+            <ColumnOrderTab columnOrder={columnOrder} pinnedFields={pinnedFields} onChange={onColumnOrderChange} />
           ) : (
             <ManageAccounts accounts={accounts} fields={fields} onSaved={onSaved} />
           )}
@@ -832,6 +946,18 @@ export default function FbAccounts() {
   const activeFields = fields.filter(f => f.active);
   const pinnedFields = activeFields.filter(f => f.pinned);
 
+  const [columnOrder, setColumnOrder] = useState(() => reconcileColOrder(loadColOrder(), []));
+
+  // Sync column order whenever pinned fields change
+  useEffect(() => {
+    setColumnOrder(prev => {
+      const next = reconcileColOrder(prev, pinnedFields);
+      saveColOrder(next);
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(pinnedFields.map(f => f.field_key))]);
+
   // Collect all unique tags from pinned tag-type fields across all accounts
   const tagFields = pinnedFields.filter(f => f.field_type === 'tags');
   const allTags = [...new Set(
@@ -950,11 +1076,12 @@ export default function FbAccounts() {
               <thead>
                 <tr style={{ background: '#242424', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                   <th style={th}>Account</th>
-                  <th style={th}>Last Audit</th>
-                  <th style={th}>7d CPL</th>
-                  <th style={th}>3d CPL</th>
-                  {pinnedFields.map(f => <th key={f.id} style={th}>{f.label}</th>)}
-                  <th style={th}>Notes</th>
+                  {columnOrder.map(key => {
+                    const builtin = BUILTIN_COLS.find(c => c.key === key);
+                    if (builtin) return <th key={key} style={th}>{builtin.label}</th>;
+                    const f = pinnedFields.find(f => f.field_key === key);
+                    return f ? <th key={key} style={th}>{f.label}</th> : null;
+                  })}
                   <th style={{ ...th, width: 32 }}></th>
                 </tr>
               </thead>
@@ -962,62 +1089,69 @@ export default function FbAccounts() {
                 {filtered.map((acct, idx) => {
                   const health = getHealth(acct.last_audit_date);
                   const isMyAccount = currentUserName && (acct.assigned_buyers || []).includes(currentUserName);
+                  const pd = acct.last_performance_data;
+                  const sessId = acct.last_performance_session_id;
                   return (
                     <tr key={acct.id}
                       onClick={() => setDrawerAccountId(acct.id)}
                       style={{ borderBottom: idx < filtered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', cursor: 'pointer', transition: 'background 0.12s', background: isMyAccount ? 'rgba(87,94,207,0.04)' : 'transparent', borderLeft: isMyAccount ? '3px solid rgba(87,94,207,0.5)' : '3px solid transparent' }}
                       onMouseEnter={e => e.currentTarget.style.background = isMyAccount ? 'rgba(87,94,207,0.08)' : 'rgba(255,255,255,0.03)'}
                       onMouseLeave={e => e.currentTarget.style.background = isMyAccount ? 'rgba(87,94,207,0.04)' : 'transparent'}>
+                      {/* Fixed: Account name */}
                       <td style={td}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <span style={{ color: '#c5c1b9', fontWeight: 600, fontSize: 14 }}>{acct.name}</span>
                           {acct.website && <a href={acct.website} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#575ECF', textDecoration: 'none', fontSize: 12 }}>{acct.website.replace(/^https?:\/\//, '')}</a>}
                         </div>
                       </td>
-                      <td style={td}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: health.bg, color: health.color, borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: health.dot, display: 'inline-block' }} />
-                          {health.label}
-                        </span>
-                      </td>
-                      {(() => {
-                        const pd = acct.last_performance_data;
-                        const sessId = acct.last_performance_session_id;
-                        const clickable = { cursor: 'pointer', userSelect: 'none' };
-                        const cplCell = (period, label) => {
+                      {/* Dynamic ordered columns */}
+                      {columnOrder.map(key => {
+                        if (key === '__last_audit__') return (
+                          <td key={key} style={td}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: health.bg, color: health.color, borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: health.dot, display: 'inline-block' }} />
+                              {health.label}
+                            </span>
+                          </td>
+                        );
+                        if (key === '__7d_cpl__' || key === '__3d_cpl__') {
+                          const period = key === '__7d_cpl__' ? 'days7' : 'days3';
                           const d = pd?.[period];
                           return (
-                            <td key={period} style={{ ...td, ...clickable }} onClick={e => { e.stopPropagation(); if (sessId) setPerfEdit({ sessionId: sessId, data: pd, accountId: acct.id }); else toast('No performance session yet — complete a checklist first.'); }}>
+                            <td key={key} style={{ ...td, cursor: 'pointer' }} onClick={e => { e.stopPropagation(); if (sessId) setPerfEdit({ sessionId: sessId, data: pd, accountId: acct.id }); else toast('No performance session yet — complete a checklist first.'); }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 <span style={{ color: d?.cpl ? '#22c55e' : '#3a3835', fontSize: 13, fontWeight: d?.cpl ? 600 : 400 }}>
                                   {d?.cpl ? `$${parseFloat(d.cpl).toFixed(2)}` : '—'}
                                 </span>
                                 {d?.from && d?.to && <span style={{ color: '#555', fontSize: 10 }}>{d.from} → {d.to}</span>}
-                                {!d && sessId && <span style={{ color: '#3a3835', fontSize: 10 }}>click to add</span>}
                               </div>
                             </td>
                           );
-                        };
-                        return (<>{cplCell('days7', '7d')}{cplCell('days3', '3d')}</>);
-                      })()}
-                      {pinnedFields.map(f => (
-                        <td key={f.id} style={{ ...td, cursor: 'pointer' }}
-                          onClick={e => { e.stopPropagation(); setCellEdit({ accountId: acct.id, fieldDef: f, value: acct.custom_fields?.[f.field_key] ?? '' }); }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }} className="group">
-                            <FieldValue value={acct.custom_fields?.[f.field_key]} type={f.field_type} options={f.options} compact />
-                            <span style={{ color: '#575ECF', fontSize: 10, opacity: 0.5 }}>✏</span>
-                          </div>
-                        </td>
-                      ))}
-                      <td style={{ ...td, maxWidth: 220, cursor: 'pointer' }}
-                        onClick={e => { e.stopPropagation(); setCellEdit({ accountId: acct.id, fieldDef: { field_key: '__notes__', label: 'Notes', field_type: 'textarea', options: [] }, value: acct.notes || '' }); }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {acct.notes
-                            ? <span style={{ color: '#8a8680', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }} title={acct.notes}>{acct.notes}</span>
-                            : <span style={{ color: '#3a3835' }}>—</span>}
-                          <span style={{ color: '#575ECF', fontSize: 10, opacity: 0.5, flexShrink: 0 }}>✏</span>
-                        </div>
-                      </td>
+                        }
+                        if (key === '__notes__') return (
+                          <td key={key} style={{ ...td, maxWidth: 220, cursor: 'pointer' }}
+                            onClick={e => { e.stopPropagation(); setCellEdit({ accountId: acct.id, fieldDef: { field_key: '__notes__', label: 'Notes', field_type: 'textarea', options: [] }, value: acct.notes || '' }); }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {acct.notes
+                                ? <span style={{ color: '#8a8680', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }} title={acct.notes}>{acct.notes}</span>
+                                : <span style={{ color: '#3a3835' }}>—</span>}
+                              <span style={{ color: '#575ECF', fontSize: 10, opacity: 0.5, flexShrink: 0 }}>✏</span>
+                            </div>
+                          </td>
+                        );
+                        // Custom pinned field
+                        const f = pinnedFields.find(f => f.field_key === key);
+                        if (!f) return null;
+                        return (
+                          <td key={key} style={{ ...td, cursor: 'pointer' }}
+                            onClick={e => { e.stopPropagation(); setCellEdit({ accountId: acct.id, fieldDef: f, value: acct.custom_fields?.[f.field_key] ?? '' }); }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+                              <FieldValue value={acct.custom_fields?.[f.field_key]} type={f.field_type} options={f.options} compact />
+                              <span style={{ color: '#575ECF', fontSize: 10, opacity: 0.5 }}>✏</span>
+                            </div>
+                          </td>
+                        );
+                      })}
                       <td style={{ ...td, textAlign: 'center' }}>
                         <span style={{ color: '#575ECF', fontSize: 16 }}>→</span>
                       </td>
@@ -1076,6 +1210,9 @@ export default function FbAccounts() {
         <SettingsModal
           fields={fields}
           accounts={accounts}
+          pinnedFields={pinnedFields}
+          columnOrder={columnOrder}
+          onColumnOrderChange={next => { setColumnOrder(next); saveColOrder(next); }}
           onClose={() => setShowSettings(false)}
           onSaved={() => { fetchAll(); }}
         />
