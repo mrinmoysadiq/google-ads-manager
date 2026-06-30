@@ -1,10 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import toast from 'react-hot-toast';
+import api from '../../utils/api';
 
-const api = axios.create({ baseURL: '/api/facebook' });
-const setAuth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('app_token')}` } });
+const fb = {
+  get: (path, cfg) => api.get(`/facebook${path}`, cfg),
+  post: (path, data, cfg) => api.post(`/facebook${path}`, data, cfg),
+  patch: (path, data, cfg) => api.patch(`/facebook${path}`, data, cfg),
+  delete: (path, cfg) => api.delete(`/facebook${path}`, cfg),
+};
 
 const NAV_LINKS = [
   { label: 'Daily Checklist', path: '/facebook' },
@@ -44,7 +48,7 @@ function ManageFieldsModal({ fields, onClose, onSaved }) {
     if (!newLabel.trim()) return;
     setAdding(true);
     try {
-      const res = await api.post('/account-fields', { label: newLabel.trim(), field_type: newType }, setAuth());
+      const res = await fb.post('/account-fields', { label: newLabel.trim(), field_type: newType });
       setList(prev => [...prev, res.data]);
       setNewLabel('');
       setNewType('text');
@@ -58,7 +62,7 @@ function ManageFieldsModal({ fields, onClose, onSaved }) {
   async function deleteField(field) {
     if (!confirm(`Delete field "${field.label}"? All stored values will be lost.`)) return;
     try {
-      await api.delete(`/account-fields/${field.id}`, setAuth());
+      await fb.delete(`/account-fields/${field.id}`);
       setList(prev => prev.filter(f => f.id !== field.id));
       toast.success('Field deleted');
       onSaved();
@@ -139,10 +143,10 @@ function AccountModal({ account, fields, onClose, onSaved }) {
     setSaving(true);
     try {
       if (isEdit) {
-        await api.patch(`/ad-accounts/${account.id}`, form, setAuth());
+        await fb.patch(`/ad-accounts/${account.id}`, form);
         toast.success('Account updated');
       } else {
-        await api.post('/ad-accounts', form, setAuth());
+        await fb.post('/ad-accounts', form);
         toast.success('Account created');
       }
       onSaved();
@@ -215,11 +219,11 @@ export default function FbAccounts() {
   async function fetchAll() {
     try {
       const [acctRes, fieldRes] = await Promise.all([
-        api.get('/ad-accounts?all=1', setAuth()),
-        api.get('/account-fields', setAuth()),
+        fb.get('/ad-accounts?all=1'),
+        fb.get('/account-fields'),
       ]);
-      setAccounts(acctRes.data);
-      setFields(fieldRes.data);
+      setAccounts(Array.isArray(acctRes.data) ? acctRes.data : []);
+      setFields(Array.isArray(fieldRes.data) ? fieldRes.data : []);
     } catch (err) {
       toast.error('Failed to load accounts');
     } finally { setLoading(false); }
@@ -229,7 +233,7 @@ export default function FbAccounts() {
 
   async function toggleActive(account) {
     try {
-      await api.patch(`/ad-accounts/${account.id}`, { active: account.active ? 0 : 1 }, setAuth());
+      await fb.patch(`/ad-accounts/${account.id}`, { active: account.active ? 0 : 1 });
       toast.success(account.active ? 'Account deactivated' : 'Account reactivated');
       fetchAll();
     } catch (err) {
@@ -240,7 +244,7 @@ export default function FbAccounts() {
   async function deleteAccount(account) {
     if (!confirm(`Delete "${account.name}"? This cannot be undone.`)) return;
     try {
-      await api.delete(`/ad-accounts/${account.id}`, setAuth());
+      await fb.delete(`/ad-accounts/${account.id}`);
       toast.success('Account deleted');
       fetchAll();
     } catch (err) {
