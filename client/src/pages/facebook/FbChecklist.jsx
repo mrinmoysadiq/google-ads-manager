@@ -430,6 +430,7 @@ export default function FbChecklist() {
           answer: it.answer,
           hasIssue: it.hasIssue,
           note: it.hasIssue ? it.issueText : it.chatText,
+          image: it.hasIssue ? (it.issueImage || null) : (it.image || null),
         }
       })
       const issueCount = answers.filter(a => a.hasIssue).length

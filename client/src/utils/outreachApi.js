@@ -31,6 +31,9 @@ export const createLead = (data) => api.post('/outreach/leads', data).then(r => 
 export const getLead = (id) => api.get(`/outreach/leads/${id}`).then(r => r.data)
 export const updateLead = (id, data) => api.patch(`/outreach/leads/${id}`, data).then(r => r.data)
 export const deleteLead = (id) => api.delete(`/outreach/leads/${id}`).then(r => r.data)
+export const getTrashLeads = () => api.get('/outreach/trash').then(r => r.data)
+export const restoreTrashLead = (id) => api.post(`/outreach/trash/restore/${id}`).then(r => r.data)
+export const permanentDeleteLead = (id) => api.delete(`/outreach/trash/permanent/${id}`).then(r => r.data)
 
 // Touchpoints
 export const getTouchpoints = (leadId) => api.get(`/outreach/leads/${leadId}/touchpoints`).then(r => r.data)

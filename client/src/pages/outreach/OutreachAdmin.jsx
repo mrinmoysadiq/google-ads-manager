@@ -16,6 +16,9 @@ import {
   deletePipelineStage,
   getSettings,
   updateSettings,
+  getTrashLeads,
+  restoreTrashLead,
+  permanentDeleteLead,
 } from '../../utils/outreachApi';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -838,6 +841,72 @@ function SettingsSection({ settings, setSettings }) {
 
 // ─── Page root ────────────────────────────────────────────────────────────────
 
+function daysLeft(deletedAt) {
+  const del = new Date(deletedAt);
+  const expiry = new Date(del.getTime() + 7 * 24 * 60 * 60 * 1000);
+  return Math.max(0, Math.ceil((expiry - Date.now()) / (1000 * 60 * 60 * 24)));
+}
+
+function LeadsTrashSection() {
+  const [leads, setLeads] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getTrashLeads().then(d => setLeads(d.leads || [])).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const restore = async (lead) => {
+    try {
+      await restoreTrashLead(lead.id);
+      setLeads(prev => prev.filter(l => l.id !== lead.id));
+      toast.success(`"${lead.company_name}" restored`);
+    } catch { toast.error('Failed to restore'); }
+  };
+
+  const deletePermanent = async (lead) => {
+    if (!window.confirm(`Permanently delete "${lead.company_name}"? This cannot be undone.`)) return;
+    try {
+      await permanentDeleteLead(lead.id);
+      setLeads(prev => prev.filter(l => l.id !== lead.id));
+      toast.success('Permanently deleted');
+    } catch { toast.error('Failed to delete'); }
+  };
+
+  return (
+    <div className="bg-[#242424] border border-white/[0.08] rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: '#1e1e1e' }}>
+        <div>
+          <h2 className="text-sm font-semibold text-[#c5c1b9]">🗑 Leads Trash</h2>
+          <p className="text-xs text-[#8a8680] mt-0.5">Deleted leads are permanently removed after 7 days.</p>
+        </div>
+        <span className="text-xs font-medium px-2 py-1 rounded-full" style={{ background: leads.length ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.05)', color: leads.length ? '#ef4444' : '#555' }}>{leads.length} item{leads.length !== 1 ? 's' : ''}</span>
+      </div>
+      {loading ? (
+        <div className="px-6 py-6 text-sm text-[#8a8680]">Loading…</div>
+      ) : leads.length === 0 ? (
+        <div className="px-6 py-8 text-sm text-center text-[#555]">No deleted leads</div>
+      ) : (
+        <div>
+          {leads.map(lead => {
+            const days = daysLeft(lead.deleted_at);
+            return (
+              <div key={lead.id} className="flex items-center gap-4 px-6 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p className="text-sm font-medium text-[#c5c1b9]">{lead.company_name}</p>
+                  <p className="text-xs text-[#8a8680]">{lead.contact_name || ''}{lead.specialist_name ? ` · ${lead.specialist_name}` : ''} · {lead.status}</p>
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: days <= 2 ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.1)', color: days <= 2 ? '#ef4444' : '#f59e0b' }}>{days === 0 ? 'Expiring today' : `${days}d left`}</span>
+                <button onClick={() => restore(lead)} className="text-xs font-medium px-3 py-1.5 rounded-lg transition-all" style={{ background: 'rgba(87,94,207,0.12)', border: '1px solid rgba(87,94,207,0.3)', color: '#a5aaee' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(87,94,207,0.2)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(87,94,207,0.12)'}>Restore</button>
+                <button onClick={() => deletePermanent(lead)} className="text-xs font-medium px-3 py-1.5 rounded-lg transition-all" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.18)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}>Delete forever</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OutreachAdmin() {
   const [specialists, setSpecialists] = useState([]);
   const [industries, setIndustries] = useState([]);
@@ -923,6 +992,7 @@ export default function OutreachAdmin() {
               settings={settings}
               setSettings={setSettings}
             />
+            <LeadsTrashSection />
           </div>
         )}
       </div>

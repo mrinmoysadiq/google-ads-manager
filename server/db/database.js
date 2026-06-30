@@ -372,6 +372,9 @@ function initializeDatabase() {
     'ALTER TABLE fb_account_fields ADD COLUMN sort_order INTEGER DEFAULT 0',
     'ALTER TABLE fb_audit_sessions ADD COLUMN performance_data TEXT',
     'ALTER TABLE fb_audit_sessions ADD COLUMN flagged_ads TEXT',
+    'ALTER TABLE fb_audit_sessions ADD COLUMN deleted_at TEXT DEFAULT NULL',
+    'ALTER TABLE fb_ad_accounts ADD COLUMN deleted_at TEXT DEFAULT NULL',
+    'ALTER TABLE outreach_leads ADD COLUMN deleted_at TEXT DEFAULT NULL',
   ];
   // Migrate old 'Contacted' status to 'New Lead' (one-time)
   try { db.exec("UPDATE outreach_leads SET status = 'New Lead' WHERE status = 'Contacted'"); } catch (e) { /* ignore */ }
@@ -379,6 +382,12 @@ function initializeDatabase() {
   columnMigrations.forEach(sql => {
     try { db.exec(sql); } catch (e) { /* column already exists */ }
   });
+  // Auto-purge trash items older than 7 days
+  try {
+    db.exec(`DELETE FROM fb_audit_sessions WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', '-7 days')`);
+    db.exec(`DELETE FROM fb_ad_accounts WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', '-7 days')`);
+    db.exec(`DELETE FROM outreach_leads WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', '-7 days')`);
+  } catch (e) { /* ignore */ }
   // Migrate existing specialist_id data into junction table (one-time, safe to re-run)
   try {
     db.exec(`

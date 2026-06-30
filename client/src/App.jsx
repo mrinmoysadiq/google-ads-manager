@@ -23,6 +23,7 @@ import FbAdmin from './pages/facebook/FbAdmin'
 import FbChangeLog from './pages/facebook/FbChangeLog'
 import FbAuditLog from './pages/facebook/FbAuditLog'
 import FbAccounts from './pages/facebook/FbAccounts'
+import FbTrash from './pages/facebook/FbTrash'
 import Login from './pages/auth/Login'
 import Profile from './pages/auth/Profile'
 import AppAdminPanel from './pages/auth/AppAdminPanel'
@@ -122,6 +123,7 @@ export default function App() {
           <Route path="/facebook/changelog" element={<ProtectedRoute><FbChangeLog /></ProtectedRoute>} />
           <Route path="/facebook/audit-log" element={<ProtectedRoute><FbAuditLog /></ProtectedRoute>} />
           <Route path="/facebook/accounts" element={<ProtectedRoute><FbAccounts /></ProtectedRoute>} />
+          <Route path="/facebook/trash" element={<ProtectedRoute><FbTrash /></ProtectedRoute>} />
 
           {/* ── Tracking Audit module ─────────────────────────────────── */}
           <Route path="/tracking" element={<ProtectedRoute><TrackingHome /></ProtectedRoute>} />

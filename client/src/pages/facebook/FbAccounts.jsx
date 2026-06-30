@@ -18,6 +18,7 @@ const NAV_LINKS = [
   { label: 'Audit Log', path: '/facebook/audit-log' },
   { label: 'Change Log', path: '/facebook/changelog' },
   { label: 'Admin', path: '/facebook/admin' },
+  { label: '🗑 Trash', path: '/facebook/trash' },
 ];
 
 const FIELD_TYPES = [
@@ -1156,7 +1157,10 @@ export default function FbAccounts() {
                         );
                       })}
                       <td style={{ ...td, textAlign: 'center' }}>
-                        <span style={{ color: '#575ECF', fontSize: 16 }}>→</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
+                          <button onClick={e => { e.stopPropagation(); if (window.confirm(`Move "${acct.name}" to trash? You can restore it within 7 days.`)) { fb.delete(`/ad-accounts/${acct.id}`).then(() => { setAccounts(prev => prev.filter(a => a.id !== acct.id)); toast.success('Moved to trash'); }).catch(() => toast.error('Failed')); } }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#555', fontSize: 14, padding: 4 }} title="Move to trash" onMouseEnter={e => e.currentTarget.style.color = '#ef4444'} onMouseLeave={e => e.currentTarget.style.color = '#555'}>🗑</button>
+                          <span style={{ color: '#575ECF', fontSize: 16 }}>→</span>
+                        </div>
                       </td>
                     </tr>
                   );

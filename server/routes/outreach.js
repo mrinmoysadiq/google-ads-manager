@@ -202,7 +202,7 @@ router.get('/leads', (req, res) => {
     }
     // ────────────────────────────────────────────────────────────────────────
 
-    const conditions = [];
+    const conditions = ['l.deleted_at IS NULL'];
     const params = [];
 
     if (specialist_id) {
@@ -520,13 +520,52 @@ router.delete('/leads/:id', (req, res) => {
     const { id } = req.params;
     const existing = db.prepare('SELECT id FROM outreach_leads WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Lead not found' });
-    db.prepare('DELETE FROM outreach_touchpoints WHERE lead_id = ?').run(id);
-    db.prepare('DELETE FROM outreach_status_history WHERE lead_id = ?').run(id);
-    db.prepare('DELETE FROM outreach_leads WHERE id = ?').run(id);
+    db.prepare("UPDATE outreach_leads SET deleted_at = datetime('now') WHERE id = ?").run(id);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete lead' });
+  }
+});
+
+router.get('/trash', (req, res) => {
+  try {
+    const leads = db.prepare(`
+      SELECT l.id, l.company_name, l.contact_name, l.status, l.deleted_at,
+        s.name as specialist_name
+      FROM outreach_leads l
+      LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+      WHERE l.deleted_at IS NOT NULL ORDER BY l.deleted_at DESC
+    `).all();
+    res.json({ leads });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch trash' });
+  }
+});
+
+router.post('/trash/restore/:id', (req, res) => {
+  try {
+    db.prepare('UPDATE outreach_leads SET deleted_at = NULL WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to restore lead' });
+  }
+});
+
+router.delete('/trash/permanent/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    db.prepare('DELETE FROM outreach_lead_specialists WHERE lead_id = ?').run(id);
+    db.prepare('DELETE FROM outreach_touchpoints WHERE lead_id = ?').run(id);
+    db.prepare('DELETE FROM outreach_status_history WHERE lead_id = ?').run(id);
+    db.prepare('DELETE FROM outreach_lead_responses WHERE lead_id = ?').run(id);
+    db.prepare('DELETE FROM outreach_leads WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to permanently delete lead' });
   }
 });
 

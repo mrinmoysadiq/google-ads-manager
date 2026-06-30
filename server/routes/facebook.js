@@ -74,7 +74,7 @@ function enrichAccountWithFieldValues(account) {
 router.get('/ad-accounts', (req, res) => {
   try {
     const { all } = req.query;
-    const whereClause = all === '1' ? '' : 'WHERE a.active = 1';
+    const whereClause = all === '1' ? 'WHERE a.deleted_at IS NULL' : 'WHERE a.active = 1 AND a.deleted_at IS NULL';
     const accounts = db.prepare(`
       SELECT a.*,
         (SELECT MAX(s.date) FROM fb_audit_sessions s WHERE s.ad_account = a.name) AS last_audit_date,
@@ -147,7 +147,7 @@ router.delete('/ad-accounts/:id', (req, res) => {
     const { id } = req.params;
     const existing = db.prepare('SELECT * FROM fb_ad_accounts WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Ad account not found' });
-    db.prepare('DELETE FROM fb_ad_accounts WHERE id = ?').run(id);
+    db.prepare("UPDATE fb_ad_accounts SET deleted_at = datetime('now') WHERE id = ?").run(id);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -357,13 +357,13 @@ router.get('/audit-sessions', (req, res) => {
     const page = parseInt(pg) || 1;
     const limit = parseInt(lm) || 50;
     const offset = (page - 1) * limit;
-    const conditions = [];
+    const conditions = ['deleted_at IS NULL'];
     const params = [];
     if (ad_account) { conditions.push('ad_account = ?'); params.push(ad_account); }
     if (media_buyer) { conditions.push('media_buyer = ?'); params.push(media_buyer); }
     if (date_from) { conditions.push('date >= ?'); params.push(date_from); }
     if (date_to) { conditions.push('date <= ?'); params.push(date_to); }
-    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const where = 'WHERE ' + conditions.join(' AND ');
     const total = db.prepare(`SELECT COUNT(*) as cnt FROM fb_audit_sessions ${where}`).get(...params).cnt;
     const rows = db.prepare(`SELECT * FROM fb_audit_sessions ${where} ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
     res.json({ data: rows.map(r => ({ ...r, answers: JSON.parse(r.answers) })), total, page, totalPages: Math.ceil(total / limit) });
@@ -381,6 +381,65 @@ router.get('/audit-sessions/:id', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch session' });
+  }
+});
+
+router.delete('/audit-sessions/:id', (req, res) => {
+  try {
+    const row = db.prepare('SELECT id FROM fb_audit_sessions WHERE id = ?').get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    db.prepare("UPDATE fb_audit_sessions SET deleted_at = datetime('now') WHERE id = ?").run(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete session' });
+  }
+});
+
+// ─── TRASH ───────────────────────────────────────────────────────────────────
+
+router.get('/trash', (req, res) => {
+  try {
+    const sessions = db.prepare(`SELECT id, date, media_buyer, ad_account, issue_count, deleted_at FROM fb_audit_sessions WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC`).all();
+    const accounts = db.prepare(`SELECT id, name, deleted_at FROM fb_ad_accounts WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC`);
+    res.json({ sessions, accounts: accounts.all() });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch trash' });
+  }
+});
+
+router.post('/trash/restore', (req, res) => {
+  try {
+    const { type, id } = req.body;
+    if (type === 'session') {
+      db.prepare('UPDATE fb_audit_sessions SET deleted_at = NULL WHERE id = ?').run(id);
+    } else if (type === 'account') {
+      db.prepare('UPDATE fb_ad_accounts SET deleted_at = NULL WHERE id = ?').run(id);
+    } else {
+      return res.status(400).json({ error: 'Invalid type' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to restore item' });
+  }
+});
+
+router.delete('/trash/permanent', (req, res) => {
+  try {
+    const { type, id } = req.body;
+    if (type === 'session') {
+      db.prepare('DELETE FROM fb_audit_sessions WHERE id = ?').run(id);
+    } else if (type === 'account') {
+      db.prepare('DELETE FROM fb_ad_accounts WHERE id = ?').run(id);
+    } else {
+      return res.status(400).json({ error: 'Invalid type' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to permanently delete item' });
   }
 });
 
