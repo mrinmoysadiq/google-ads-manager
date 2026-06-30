@@ -74,11 +74,24 @@ function enrichAccountWithFieldValues(account) {
 router.get('/ad-accounts', (req, res) => {
   try {
     const { all } = req.query;
-    const query = all === '1'
-      ? 'SELECT * FROM fb_ad_accounts ORDER BY name ASC'
-      : 'SELECT * FROM fb_ad_accounts WHERE active = 1 ORDER BY name ASC';
-    const accounts = db.prepare(query).all().map(enrichAccountWithFieldValues);
-    res.json(accounts);
+    const whereClause = all === '1' ? '' : 'WHERE a.active = 1';
+    const accounts = db.prepare(`
+      SELECT a.*,
+        (SELECT MAX(s.date) FROM fb_audit_sessions s WHERE s.ad_account = a.name) AS last_audit_date
+      FROM fb_ad_accounts a
+      ${whereClause}
+      ORDER BY a.name ASC
+    `).all().map(enrichAccountWithFieldValues);
+
+    // Attach assigned buyers (auto-matched from audit history) — single query for all accounts
+    const buyerRows = db.prepare('SELECT DISTINCT ad_account, media_buyer FROM fb_audit_sessions WHERE media_buyer IS NOT NULL').all();
+    const buyerMap = {};
+    buyerRows.forEach(r => {
+      if (!buyerMap[r.ad_account]) buyerMap[r.ad_account] = [];
+      if (!buyerMap[r.ad_account].includes(r.media_buyer)) buyerMap[r.ad_account].push(r.media_buyer);
+    });
+
+    res.json(accounts.map(a => ({ ...a, assigned_buyers: buyerMap[a.name] || [] })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch ad accounts' });

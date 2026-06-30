@@ -536,6 +536,17 @@ function ManageAccounts({ accounts, fields, onSaved }) {
   );
 }
 
+// ─── Health status helper ─────────────────────────────────────────────────────
+function getHealth(lastAuditDate) {
+  if (!lastAuditDate) return { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', label: 'Never', dot: '#ef4444' };
+  const today = new Date().toISOString().slice(0, 10);
+  const days = Math.floor((new Date(today) - new Date(lastAuditDate)) / 86400000);
+  if (days === 0) return { color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: 'Today', dot: '#22c55e' };
+  if (days === 1) return { color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: 'Yesterday', dot: '#22c55e' };
+  if (days <= 7) return { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: `${days}d ago`, dot: '#f59e0b' };
+  return { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', label: `${days}d ago`, dot: '#ef4444' };
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function FbAccounts() {
   const navigate = useNavigate();
@@ -544,6 +555,8 @@ export default function FbAccounts() {
   const [fields, setFields] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [buyerFilter, setBuyerFilter] = useState('');
   const [drawerAccountId, setDrawerAccountId] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -565,18 +578,43 @@ export default function FbAccounts() {
   const activeFields = fields.filter(f => f.active);
   const pinnedFields = activeFields.filter(f => f.pinned);
 
+  // Collect all unique tags from pinned tag-type fields across all accounts
+  const tagFields = pinnedFields.filter(f => f.field_type === 'tags');
+  const allTags = [...new Set(
+    accounts.flatMap(a =>
+      tagFields.flatMap(f => {
+        try { return JSON.parse(a.custom_fields?.[f.field_key] || '[]'); } catch { return []; }
+      })
+    )
+  )].sort();
+
+  // Collect all unique buyers across all accounts (from assigned_buyers)
+  const allBuyers = [...new Set(accounts.flatMap(a => a.assigned_buyers || []))].sort();
+
   const filtered = accounts.filter(a => {
     if (!a.active) return false;
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return a.name.toLowerCase().includes(q) || (a.website || '').toLowerCase().includes(q) || (a.notes || '').toLowerCase().includes(q);
+    // Search
+    if (search) {
+      const q = search.toLowerCase();
+      if (!a.name.toLowerCase().includes(q) && !(a.website || '').toLowerCase().includes(q) && !(a.notes || '').toLowerCase().includes(q)) return false;
+    }
+    // Tag filter — account must have ALL selected tags
+    if (selectedTags.length > 0) {
+      const acctTags = tagFields.flatMap(f => {
+        try { return JSON.parse(a.custom_fields?.[f.field_key] || '[]'); } catch { return []; }
+      });
+      if (!selectedTags.every(t => acctTags.includes(t))) return false;
+    }
+    // Buyer filter
+    if (buyerFilter && !(a.assigned_buyers || []).includes(buyerFilter)) return false;
+    return true;
   });
 
-  // Highlight row if logged-in user's name matches any buyer on this account
-  // (We don't have buyer info in the list view without a detail call, so we highlight
-  // only if the user's name appears in the account name as a rough heuristic.
-  // Full highlighting would require a separate API call per account which is too heavy.)
-  // Instead, we add a subtle indicator for the current user to expand their accounts.
+  function toggleTag(tag) {
+    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  }
+
+  const currentUserName = currentUser?.name || '';
 
   return (
     <div style={{ minHeight: '100vh', background: '#1b1b1b' }}>
@@ -592,25 +630,56 @@ export default function FbAccounts() {
 
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 28px' }}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
           <div>
             <h1 style={{ color: '#c5c1b9', margin: 0, fontSize: 22, fontWeight: 700 }}>Facebook Ad Accounts</h1>
-            <p style={{ color: '#8a8680', margin: '5px 0 0', fontSize: 14 }}>Click any account to view details, audit history, and change log</p>
+            <p style={{ color: '#8a8680', margin: '5px 0 0', fontSize: 14 }}>Click any row to view details, audit history, and change log</p>
           </div>
           <button onClick={() => setShowSettings(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 18px', color: '#c5c1b9', cursor: 'pointer', fontSize: 14 }}>
             <span>⚙</span> Settings
           </button>
         </div>
 
-        {/* Search + count */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: 1, maxWidth: 360 }}>
-            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8a8680', fontSize: 14 }}>🔍</span>
+        {/* Filters row */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Search */}
+          <div style={{ position: 'relative', width: 280 }}>
+            <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: '#8a8680', fontSize: 13, pointerEvents: 'none' }}>🔍</span>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search accounts…"
-              style={{ width: '100%', background: '#242424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '9px 14px 9px 36px', color: '#c5c1b9', fontSize: 14, boxSizing: 'border-box' }} />
+              style={{ width: '100%', background: '#242424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '8px 12px 8px 32px', color: '#c5c1b9', fontSize: 13, boxSizing: 'border-box' }} />
           </div>
-          <span style={{ color: '#8a8680', fontSize: 13, marginLeft: 'auto' }}>{filtered.length} active account{filtered.length !== 1 ? 's' : ''}</span>
+
+          {/* Media buyer filter */}
+          {allBuyers.length > 0 && (
+            <select value={buyerFilter} onChange={e => setBuyerFilter(e.target.value)}
+              style={{ background: buyerFilter ? 'rgba(87,94,207,0.15)' : '#242424', border: `1px solid ${buyerFilter ? '#575ECF' : 'rgba(255,255,255,0.1)'}`, borderRadius: 8, padding: '8px 12px', color: buyerFilter ? '#a5aaee' : '#8a8680', fontSize: 13, cursor: 'pointer' }}>
+              <option value="">All media buyers</option>
+              {allBuyers.map(b => <option key={b} value={b}>{b}{b === currentUserName ? ' (you)' : ''}</option>)}
+            </select>
+          )}
+
+          {/* Result count */}
+          <span style={{ color: '#8a8680', fontSize: 13, marginLeft: 'auto' }}>
+            {filtered.length} account{filtered.length !== 1 ? 's' : ''}
+            {(search || selectedTags.length || buyerFilter) && <button onClick={() => { setSearch(''); setSelectedTags([]); setBuyerFilter(''); }} style={{ marginLeft: 10, background: 'none', border: 'none', color: '#575ECF', cursor: 'pointer', fontSize: 12 }}>Clear filters</button>}
+          </span>
         </div>
+
+        {/* Tag filter chips */}
+        {allTags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+            {allTags.map(tag => {
+              const active = selectedTags.includes(tag);
+              return (
+                <button key={tag} onClick={() => toggleTag(tag)}
+                  style={{ background: active ? 'rgba(87,94,207,0.25)' : 'rgba(255,255,255,0.04)', border: `1px solid ${active ? '#575ECF' : 'rgba(255,255,255,0.08)'}`, borderRadius: 20, padding: '4px 12px', color: active ? '#a5aaee' : '#8a8680', fontSize: 12, cursor: 'pointer', fontWeight: active ? 600 : 400, transition: 'all 0.12s' }}>
+                  {tag}
+                </button>
+              );
+            })}
+            {selectedTags.length > 0 && <button onClick={() => setSelectedTags([])} style={{ background: 'none', border: 'none', color: '#8a8680', fontSize: 12, cursor: 'pointer', padding: '4px 8px' }}>✕ clear</button>}
+          </div>
+        )}
 
         {/* Table */}
         {loading ? (
@@ -619,7 +688,7 @@ export default function FbAccounts() {
           <div style={{ textAlign: 'center', padding: 80, color: '#8a8680' }}>
             {accounts.filter(a => a.active).length === 0
               ? 'No active accounts yet — open Settings → Manage Accounts to add one.'
-              : 'No accounts match your search.'}
+              : 'No accounts match your filters.'}
           </div>
         ) : (
           <div style={{ background: '#1e1e1e', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, overflow: 'hidden' }}>
@@ -627,42 +696,50 @@ export default function FbAccounts() {
               <thead>
                 <tr style={{ background: '#242424', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                   <th style={th}>Account</th>
-                  <th style={th}>Website</th>
+                  <th style={th}>Last Audit</th>
                   {pinnedFields.map(f => <th key={f.id} style={th}>{f.label}</th>)}
                   <th style={th}>Notes</th>
-                  <th style={{ ...th, width: 80, textAlign: 'center' }}>Details</th>
+                  <th style={{ ...th, width: 32 }}></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((acct, idx) => (
-                  <tr key={acct.id}
-                    onClick={() => setDrawerAccountId(acct.id)}
-                    style={{ borderBottom: idx < filtered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <td style={td}>
-                      <span style={{ color: '#c5c1b9', fontWeight: 600, fontSize: 14 }}>{acct.name}</span>
-                    </td>
-                    <td style={td}>
-                      {acct.website
-                        ? <a href={acct.website} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#575ECF', textDecoration: 'none', fontSize: 13 }}>{acct.website.replace(/^https?:\/\//, '')}</a>
-                        : <span style={{ color: '#3a3835' }}>—</span>}
-                    </td>
-                    {pinnedFields.map(f => (
-                      <td key={f.id} style={td}>
-                        <FieldValue value={acct.custom_fields?.[f.field_key]} type={f.field_type} options={f.options} compact />
+                {filtered.map((acct, idx) => {
+                  const health = getHealth(acct.last_audit_date);
+                  const isMyAccount = currentUserName && (acct.assigned_buyers || []).includes(currentUserName);
+                  return (
+                    <tr key={acct.id}
+                      onClick={() => setDrawerAccountId(acct.id)}
+                      style={{ borderBottom: idx < filtered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', cursor: 'pointer', transition: 'background 0.12s', background: isMyAccount ? 'rgba(87,94,207,0.04)' : 'transparent', borderLeft: isMyAccount ? '3px solid rgba(87,94,207,0.5)' : '3px solid transparent' }}
+                      onMouseEnter={e => e.currentTarget.style.background = isMyAccount ? 'rgba(87,94,207,0.08)' : 'rgba(255,255,255,0.03)'}
+                      onMouseLeave={e => e.currentTarget.style.background = isMyAccount ? 'rgba(87,94,207,0.04)' : 'transparent'}>
+                      <td style={td}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <span style={{ color: '#c5c1b9', fontWeight: 600, fontSize: 14 }}>{acct.name}</span>
+                          {acct.website && <a href={acct.website} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#575ECF', textDecoration: 'none', fontSize: 12 }}>{acct.website.replace(/^https?:\/\//, '')}</a>}
+                        </div>
                       </td>
-                    ))}
-                    <td style={{ ...td, maxWidth: 200 }}>
-                      {acct.notes
-                        ? <span style={{ color: '#8a8680', fontSize: 13, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }} title={acct.notes}>{acct.notes}</span>
-                        : <span style={{ color: '#3a3835' }}>—</span>}
-                    </td>
-                    <td style={{ ...td, textAlign: 'center' }}>
-                      <span style={{ color: '#575ECF', fontSize: 16 }}>→</span>
-                    </td>
-                  </tr>
-                ))}
+                      <td style={td}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: health.bg, color: health.color, borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: health.dot, display: 'inline-block' }} />
+                          {health.label}
+                        </span>
+                      </td>
+                      {pinnedFields.map(f => (
+                        <td key={f.id} style={td}>
+                          <FieldValue value={acct.custom_fields?.[f.field_key]} type={f.field_type} options={f.options} compact />
+                        </td>
+                      ))}
+                      <td style={{ ...td, maxWidth: 220 }}>
+                        {acct.notes
+                          ? <span style={{ color: '#8a8680', fontSize: 13, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }} title={acct.notes}>{acct.notes}</span>
+                          : <span style={{ color: '#3a3835' }}>—</span>}
+                      </td>
+                      <td style={{ ...td, textAlign: 'center' }}>
+                        <span style={{ color: '#575ECF', fontSize: 16 }}>→</span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
