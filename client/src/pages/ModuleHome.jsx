@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import infinixLogo from '../assets/infinix-logo.svg'
-import { isAdmin } from '../utils/auth'
 
 // ── Infinix brand logo (large hero version) ───────────────────────────────────
 function InfinixLogoLarge() {
@@ -12,7 +11,7 @@ function InfinixLogoLarge() {
 }
 
 // ── Module card ───────────────────────────────────────────────────────────────
-function ModuleCard({ href, icon, title, description, accentColor, accentAlpha, tags, cta }) {
+function ModuleCard({ href, icon, title, description, accentColor, accentAlpha, tags }) {
   return (
     <Link
       to={href}
@@ -74,16 +73,6 @@ function ModuleCard({ href, icon, title, description, accentColor, accentAlpha, 
         </div>
       )}
 
-      {/* CTA row */}
-      <div className="flex items-center gap-2 text-sm font-semibold transition-colors" style={{ color: accentColor }}>
-        <span>{cta}</span>
-        <svg
-          className="w-4 h-4 transition-transform group-hover:translate-x-1"
-          fill="none" viewBox="0 0 24 24" stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-        </svg>
-      </div>
     </Link>
   )
 }
@@ -128,8 +117,6 @@ function UtilCard({ href, icon, title, description, accentColor, accentAlpha }) 
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ModuleHome() {
-  const admin = isAdmin()
-
   return (
     <div className="min-h-[calc(100vh-64px)] bg-[#1b1b1b] flex flex-col items-center justify-center px-4 py-16">
 
@@ -226,25 +213,6 @@ export default function ModuleHome() {
           }
         />
       </div>
-
-      {/* Admin Panel shortcut — only visible to admins */}
-      {admin && (
-        <div className="w-full max-w-5xl mt-10">
-          <p className="text-xs font-semibold text-[#8a8680]/60 uppercase tracking-widest mb-3 px-1">Administration</p>
-          <UtilCard
-            href="/admin-panel"
-            accentColor="#f59e0b"
-            accentAlpha="rgba(245,158,11,0.25)"
-            title="User Management"
-            description="Add, update, or remove user accounts and reset passwords"
-            icon={
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            }
-          />
-        </div>
-      )}
 
       {/* Footer note */}
       <p className="mt-10 text-xs text-[#8a8680]/50 tracking-wide">
