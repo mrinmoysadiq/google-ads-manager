@@ -78,7 +78,8 @@ router.get('/ad-accounts', (req, res) => {
     const accounts = db.prepare(`
       SELECT a.*,
         (SELECT MAX(s.date) FROM fb_audit_sessions s WHERE s.ad_account = a.name) AS last_audit_date,
-        (SELECT s.performance_data FROM fb_audit_sessions s WHERE s.ad_account = a.name AND s.performance_data IS NOT NULL ORDER BY s.date DESC, s.created_at DESC LIMIT 1) AS last_performance_data
+        (SELECT s.performance_data FROM fb_audit_sessions s WHERE s.ad_account = a.name AND s.performance_data IS NOT NULL ORDER BY s.date DESC, s.created_at DESC LIMIT 1) AS last_performance_data,
+        (SELECT s.id FROM fb_audit_sessions s WHERE s.ad_account = a.name AND s.performance_data IS NOT NULL ORDER BY s.date DESC, s.created_at DESC LIMIT 1) AS last_performance_session_id
       FROM fb_ad_accounts a
       ${whereClause}
       ORDER BY a.name ASC

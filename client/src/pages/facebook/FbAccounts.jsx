@@ -153,8 +153,91 @@ function FieldInput({ field, value, onChange }) {
   );
 }
 
+// ─── Cell Edit Modal (single custom field) ───────────────────────────────────
+function CellEditModal({ fieldDef, value, onSave, onClose }) {
+  const [val, setVal] = useState(value ?? '');
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }} onClick={onClose}>
+      <div style={{ background: '#1e1e1e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 24, width: 340, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <p style={{ color: '#c5c1b9', fontWeight: 600, margin: 0, fontSize: 15 }}>{fieldDef.label}</p>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', fontSize: 18 }}>×</button>
+        </div>
+        <FieldInput field={fieldDef} value={val} onChange={setVal} />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <button onClick={onClose} style={{ ...smallBtn, padding: '8px 16px', fontSize: 13 }}>Cancel</button>
+          <button onClick={() => onSave(val)} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '8px 20px', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Perf Edit Modal (7d/3d performance data) ─────────────────────────────────
+function PerfEditModal({ sessionId, initialData, onSave, onClose }) {
+  const [form, setForm] = useState({
+    days7: { leads: initialData?.days7?.leads ?? '', cpl: initialData?.days7?.cpl ?? '', from: initialData?.days7?.from ?? '', to: initialData?.days7?.to ?? '' },
+    days3: { leads: initialData?.days3?.leads ?? '', cpl: initialData?.days3?.cpl ?? '', from: initialData?.days3?.from ?? '', to: initialData?.days3?.to ?? '' },
+  });
+  const [saving, setSaving] = useState(false);
+
+  const set = (period, field, val) => setForm(p => ({ ...p, [period]: { ...p[period], [field]: val } }));
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.patch(`/facebook/audit-sessions/${sessionId}`, { performance_data: form });
+      onSave(form);
+      toast.success('Performance data updated');
+    } catch { toast.error('Failed to save'); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }} onClick={onClose}>
+      <div style={{ background: '#1e1e1e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: 24, width: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <p style={{ color: '#c5c1b9', fontWeight: 700, margin: 0, fontSize: 16 }}>📊 Edit Performance Data</p>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', fontSize: 18 }}>×</button>
+        </div>
+        {[['days7', 'Last 7 Days'], ['days3', 'Last 3 Days']].map(([key, label]) => (
+          <div key={key} style={{ background: '#242424', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+            <p style={{ color: '#8a8680', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px' }}>{label}</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={labelStyle}>LEADS</label>
+                <input type="number" min="0" value={form[key].leads} onChange={e => set(key, 'leads', e.target.value)} placeholder="e.g. 24" style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>CPL</label>
+                <input type="number" min="0" step="0.01" value={form[key].cpl} onChange={e => set(key, 'cpl', e.target.value)} placeholder="e.g. 12.50" style={inputStyle} />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <label style={labelStyle}>FROM DATE</label>
+                <input type="date" value={form[key].from} onChange={e => set(key, 'from', e.target.value)} style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>TO DATE</label>
+                <input type="date" value={form[key].to} onChange={e => set(key, 'to', e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button onClick={onClose} style={{ ...smallBtn, padding: '8px 16px', fontSize: 13 }}>Cancel</button>
+          <button onClick={save} disabled={saving} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '8px 20px', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13, opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Account Drawer ───────────────────────────────────────────────────────────
-function AccountDrawer({ accountId, fields, onClose }) {
+function AccountDrawer({ accountId, fields, onClose, onFieldsSaved }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('info');
@@ -201,7 +284,7 @@ function AccountDrawer({ accountId, fields, onClose }) {
           {loading ? (
             <div style={{ textAlign: 'center', padding: 40, color: '#8a8680' }}>Loading…</div>
           ) : !data ? null : tab === 'info' ? (
-            <DrawerInfo data={data} fields={fields} />
+            <DrawerInfo data={data} fields={fields} onFieldsSaved={onFieldsSaved} />
           ) : tab === 'audit' ? (
             <DrawerAudit sessions={data.audit_sessions} />
           ) : (
@@ -213,7 +296,27 @@ function AccountDrawer({ accountId, fields, onClose }) {
   );
 }
 
-function DrawerInfo({ data, fields }) {
+function DrawerInfo({ data, fields, onFieldsSaved }) {
+  const [editMode, setEditMode] = useState(false);
+  const [form, setForm] = useState({ notes: data.notes || '', custom_fields: { ...(data.custom_fields || {}) } });
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await fb.patch(`/ad-accounts/${data.id}`, form);
+      toast.success('Saved');
+      setEditMode(false);
+      onFieldsSaved?.();
+    } catch { toast.error('Failed to save'); }
+    finally { setSaving(false); }
+  }
+
+  function cancel() {
+    setForm({ notes: data.notes || '', custom_fields: { ...(data.custom_fields || {}) } });
+    setEditMode(false);
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Assigned buyers */}
@@ -237,10 +340,10 @@ function DrawerInfo({ data, fields }) {
           <div>
             <p style={sectionLabel}>Latest Performance <span style={{ fontWeight: 400, textTransform: 'none', color: '#555', marginLeft: 4 }}>{latest.date}</span></p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {[{ label: 'Last 7 Days', data: pd.days7 }, { label: 'Last 3 Days', data: pd.days3 }].map(({ label, data: d }) => (
+              {[{ label: 'Last 7 Days', d: pd.days7 }, { label: 'Last 3 Days', d: pd.days3 }].map(({ label, d }) => d && (
                 <div key={label} style={{ background: '#242424', borderRadius: 8, padding: '12px 14px' }}>
-                  <p style={{ color: '#8a8680', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>{label}</p>
-                  {(d.from && d.to) && <p style={{ color: '#555', fontSize: 11, margin: '0 0 8px' }}>{d.from} → {d.to}</p>}
+                  <p style={{ color: '#8a8680', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>{label}</p>
+                  {(d.from && d.to) && <p style={{ color: '#555', fontSize: 11, margin: '0 0 10px' }}>{d.from} → {d.to}</p>}
                   <div style={{ display: 'flex', gap: 16 }}>
                     <div>
                       <p style={{ color: '#8a8680', fontSize: 11, margin: '0 0 2px' }}>Leads</p>
@@ -258,30 +361,52 @@ function DrawerInfo({ data, fields }) {
         );
       })()}
 
-      {/* Built-in fields */}
-      {data.notes && (
-        <div>
-          <p style={sectionLabel}>Notes</p>
-          <p style={{ color: '#c5c1b9', fontSize: 14, margin: 0, lineHeight: 1.6, background: '#242424', borderRadius: 8, padding: '10px 14px' }}>{data.notes}</p>
-        </div>
-      )}
-
-      {/* Custom fields */}
-      {fields.length > 0 && (
-        <div>
-          <p style={sectionLabel}>Custom Fields</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {fields.map(f => (
-              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 14px', background: '#242424', borderRadius: 8 }}>
-                <span style={{ color: '#8a8680', fontSize: 13, fontWeight: 500 }}>{f.label}</span>
-                <span style={{ maxWidth: 240, textAlign: 'right', fontSize: 13 }}>
-                  <FieldValue value={data.custom_fields?.[f.field_key]} type={f.field_type} options={f.options} />
-                </span>
+      {/* Notes + custom fields with edit toggle */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <p style={{ ...sectionLabel, margin: 0 }}>Fields</p>
+          {!editMode
+            ? <button onClick={() => setEditMode(true)} style={{ ...smallBtn, fontSize: 12 }}>✏️ Edit</button>
+            : <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={cancel} style={{ ...smallBtn, fontSize: 12 }}>Cancel</button>
+                <button onClick={save} disabled={saving} style={{ background: '#575ECF', border: 'none', borderRadius: 6, padding: '5px 14px', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 12, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
               </div>
-            ))}
-          </div>
+          }
         </div>
-      )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Notes */}
+          <div style={{ padding: '10px 14px', background: '#242424', borderRadius: 8 }}>
+            <span style={{ color: '#8a8680', fontSize: 12, fontWeight: 500, display: 'block', marginBottom: editMode ? 6 : 0 }}>Notes</span>
+            {editMode
+              ? <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Any notes…" style={{ ...inputStyle, marginTop: 4, resize: 'vertical', fontSize: 13 }} />
+              : <p style={{ color: form.notes ? '#c5c1b9' : '#3a3835', fontSize: 13, margin: '4px 0 0', lineHeight: 1.6 }}>{form.notes || '—'}</p>
+            }
+          </div>
+
+          {/* Custom fields */}
+          {fields.map(f => (
+            <div key={f.id} style={{ padding: '10px 14px', background: '#242424', borderRadius: 8 }}>
+              {editMode
+                ? <>
+                    <span style={{ color: '#8a8680', fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 6 }}>{f.label}</span>
+                    <FieldInput field={f} value={form.custom_fields[f.field_key] ?? ''} onChange={val => setForm(p => ({ ...p, custom_fields: { ...p.custom_fields, [f.field_key]: val } }))} />
+                  </>
+                : <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <span style={{ color: '#8a8680', fontSize: 13, fontWeight: 500 }}>{f.label}</span>
+                    <span style={{ maxWidth: 240, textAlign: 'right', fontSize: 13 }}>
+                      <FieldValue value={form.custom_fields[f.field_key]} type={f.field_type} options={f.options} />
+                    </span>
+                  </div>
+              }
+            </div>
+          ))}
+
+          {fields.length === 0 && !editMode && (
+            <p style={{ color: '#8a8680', fontSize: 13, margin: 0 }}>No custom fields yet — add them in Settings.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -642,6 +767,8 @@ export default function FbAccounts() {
   const [buyerFilter, setBuyerFilter] = useState('');
   const [drawerAccountId, setDrawerAccountId] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [cellEdit, setCellEdit] = useState(null); // { accountId, fieldDef, value }
+  const [perfEdit, setPerfEdit] = useState(null); // { sessionId, data, accountId }
 
   const fetchAll = useCallback(async () => {
     try {
@@ -810,19 +937,32 @@ export default function FbAccounts() {
                         </span>
                       </td>
                       {(() => {
-                        const pd = (() => { try { return JSON.parse(acct.last_performance_data || 'null'); } catch { return null; } })();
-                        const sym = CURRENCIES.find(c => c.code === (acct.custom_fields?.target_cpl_currency || 'USD'))?.symbol || '$';
-                        const fmtCpl = v => v ? `${sym}${parseFloat(v).toFixed(2)}` : <span style={{ color: '#3a3835' }}>—</span>;
-                        return (
-                          <>
-                            <td style={td}><span style={{ color: '#c5c1b9', fontSize: 13 }}>{pd?.days7?.cpl ? fmtCpl(pd.days7.cpl) : <span style={{ color: '#3a3835' }}>—</span>}</span></td>
-                            <td style={td}><span style={{ color: '#c5c1b9', fontSize: 13 }}>{pd?.days3?.cpl ? fmtCpl(pd.days3.cpl) : <span style={{ color: '#3a3835' }}>—</span>}</span></td>
-                          </>
-                        );
+                        const pd = acct.last_performance_data;
+                        const sessId = acct.last_performance_session_id;
+                        const clickable = { cursor: 'pointer', userSelect: 'none' };
+                        const cplCell = (period, label) => {
+                          const d = pd?.[period];
+                          return (
+                            <td key={period} style={{ ...td, ...clickable }} onClick={e => { e.stopPropagation(); if (sessId) setPerfEdit({ sessionId: sessId, data: pd, accountId: acct.id }); else toast('No performance session yet — complete a checklist first.'); }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <span style={{ color: d?.cpl ? '#22c55e' : '#3a3835', fontSize: 13, fontWeight: d?.cpl ? 600 : 400 }}>
+                                  {d?.cpl ? `$${parseFloat(d.cpl).toFixed(2)}` : '—'}
+                                </span>
+                                {d?.from && d?.to && <span style={{ color: '#555', fontSize: 10 }}>{d.from} → {d.to}</span>}
+                                {!d && sessId && <span style={{ color: '#3a3835', fontSize: 10 }}>click to add</span>}
+                              </div>
+                            </td>
+                          );
+                        };
+                        return (<>{cplCell('days7', '7d')}{cplCell('days3', '3d')}</>);
                       })()}
                       {pinnedFields.map(f => (
-                        <td key={f.id} style={td}>
-                          <FieldValue value={acct.custom_fields?.[f.field_key]} type={f.field_type} options={f.options} compact />
+                        <td key={f.id} style={{ ...td, cursor: 'pointer' }}
+                          onClick={e => { e.stopPropagation(); setCellEdit({ accountId: acct.id, fieldDef: f, value: acct.custom_fields?.[f.field_key] ?? '' }); }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }} className="group">
+                            <FieldValue value={acct.custom_fields?.[f.field_key]} type={f.field_type} options={f.options} compact />
+                            <span style={{ color: '#575ECF', fontSize: 10, opacity: 0.5 }}>✏</span>
+                          </div>
                         </td>
                       ))}
                       <td style={{ ...td, maxWidth: 220 }}>
@@ -848,6 +988,36 @@ export default function FbAccounts() {
           accountId={drawerAccountId}
           fields={activeFields}
           onClose={() => setDrawerAccountId(null)}
+          onFieldsSaved={fetchAll}
+        />
+      )}
+
+      {/* Cell edit modal */}
+      {cellEdit && (
+        <CellEditModal
+          fieldDef={cellEdit.fieldDef}
+          value={cellEdit.value}
+          onClose={() => setCellEdit(null)}
+          onSave={async (val) => {
+            try {
+              const acct = accounts.find(a => a.id === cellEdit.accountId);
+              const newFields = { ...(acct?.custom_fields || {}), [cellEdit.fieldDef.field_key]: val };
+              await fb.patch(`/ad-accounts/${cellEdit.accountId}`, { custom_fields: newFields });
+              toast.success('Saved');
+              setCellEdit(null);
+              fetchAll();
+            } catch { toast.error('Failed to save'); }
+          }}
+        />
+      )}
+
+      {/* Perf edit modal */}
+      {perfEdit && (
+        <PerfEditModal
+          sessionId={perfEdit.sessionId}
+          initialData={perfEdit.data}
+          onClose={() => setPerfEdit(null)}
+          onSave={() => { setPerfEdit(null); fetchAll(); }}
         />
       )}
 
