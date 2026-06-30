@@ -965,10 +965,14 @@ export default function FbAccounts() {
                           </div>
                         </td>
                       ))}
-                      <td style={{ ...td, maxWidth: 220 }}>
-                        {acct.notes
-                          ? <span style={{ color: '#8a8680', fontSize: 13, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }} title={acct.notes}>{acct.notes}</span>
-                          : <span style={{ color: '#3a3835' }}>—</span>}
+                      <td style={{ ...td, maxWidth: 220, cursor: 'pointer' }}
+                        onClick={e => { e.stopPropagation(); setCellEdit({ accountId: acct.id, fieldDef: { field_key: '__notes__', label: 'Notes', field_type: 'textarea', options: [] }, value: acct.notes || '' }); }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {acct.notes
+                            ? <span style={{ color: '#8a8680', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }} title={acct.notes}>{acct.notes}</span>
+                            : <span style={{ color: '#3a3835' }}>—</span>}
+                          <span style={{ color: '#575ECF', fontSize: 10, opacity: 0.5, flexShrink: 0 }}>✏</span>
+                        </div>
                       </td>
                       <td style={{ ...td, textAlign: 'center' }}>
                         <span style={{ color: '#575ECF', fontSize: 16 }}>→</span>
@@ -1001,8 +1005,10 @@ export default function FbAccounts() {
           onSave={async (val) => {
             try {
               const acct = accounts.find(a => a.id === cellEdit.accountId);
-              const newFields = { ...(acct?.custom_fields || {}), [cellEdit.fieldDef.field_key]: val };
-              await fb.patch(`/ad-accounts/${cellEdit.accountId}`, { custom_fields: newFields });
+              const payload = cellEdit.fieldDef.field_key === '__notes__'
+                ? { notes: val }
+                : { custom_fields: { ...(acct?.custom_fields || {}), [cellEdit.fieldDef.field_key]: val } };
+              await fb.patch(`/ad-accounts/${cellEdit.accountId}`, payload);
               toast.success('Saved');
               setCellEdit(null);
               fetchAll();
