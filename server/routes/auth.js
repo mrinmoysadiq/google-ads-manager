@@ -3,7 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcryptjs = require('bcryptjs');
 const { db } = require('../db/database');
-const SECRET = process.env.JWT_SECRET || 'infinix_secret_key';
+const SECRET = process.env.JWT_SECRET || 'infinix_secret_key_v2';
 
 router.post('/login', (req, res) => {
   const { username, password } = req.body;
@@ -11,7 +11,7 @@ router.post('/login', (req, res) => {
   const user = db.prepare('SELECT * FROM app_users WHERE username = ? AND active = 1').get(username);
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
   if (!bcryptjs.compareSync(password, user.password_hash)) return res.status(401).json({ error: 'Invalid credentials' });
-  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, SECRET, { expiresIn: '100y' });
+  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, SECRET, { expiresIn: '24h' });
   const { password_hash, ...userOut } = user;
   res.json({ token, user: userOut });
 });

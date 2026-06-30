@@ -14,6 +14,19 @@ api.interceptors.request.use(config => {
   return config
 })
 
+// Redirect to login on 401 (expired or invalid token)
+api.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('app_token')
+      localStorage.removeItem('app_user')
+      window.location.href = '/login'
+    }
+    return Promise.reject(err)
+  }
+)
+
 // Sessions
 export const createSession = (data) => api.post('/sessions', data).then(r => r.data)
 export const getSession = (id) => api.get(`/sessions/${id}`).then(r => r.data)
