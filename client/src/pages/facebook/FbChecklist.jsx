@@ -524,7 +524,20 @@ export default function FbChecklist() {
         ) : (
           /* Standard checklist card */
           <div className="bg-[#242424] border border-white/[0.08] rounded-xl p-6 mb-4">
-            <p className="text-lg font-semibold text-[#c5c1b9] mb-6">{q.text}</p>
+            <p className="text-lg font-semibold text-[#c5c1b9] mb-4">{q.text}</p>
+
+            {qi === 2 && (
+              <a href="https://developers.facebook.com/tools/lead-ads-testing" target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 mb-5 px-4 py-2.5 rounded-lg text-sm font-medium transition-all"
+                style={{ background: 'rgba(24,119,242,0.12)', border: '1px solid rgba(24,119,242,0.3)', color: '#4a9ef8', textDecoration: 'none' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(24,119,242,0.2)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(24,119,242,0.12)'}
+              >
+                <span>🧪</span>
+                Test Lead Ads &amp; CRM Sync
+                <span style={{ fontSize: 11, opacity: 0.6 }}>↗</span>
+              </a>
+            )}
 
             <div className="grid grid-cols-2 gap-3 mb-6">
               {['yes', 'no'].map(side => (
