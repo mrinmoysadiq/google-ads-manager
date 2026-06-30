@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
@@ -495,6 +495,8 @@ function ManageFields({ fields, onSaved }) {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ label: '', field_type: 'text', options: [], pinned: false });
   const [tagInput, setTagInput] = useState('');
+  const dragIdx = useRef(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
 
   useEffect(() => { setList(fields); }, [fields]);
 
@@ -547,14 +549,56 @@ function ManageFields({ fields, onSaved }) {
     } catch { toast.error('Failed to update field'); }
   }
 
+  async function move(idx, dir) {
+    const next = [...list];
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= next.length) return;
+    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+    await persistOrder(next);
+  }
+
+  async function persistOrder(newList) {
+    setList(newList);
+    try {
+      await fb.post('/account-fields/reorder', { order: newList.map((f, i) => ({ id: f.id, sort_order: i + 1 })) });
+      onSaved();
+    } catch { toast.error('Failed to save order'); }
+  }
+
+  function onDragStart(idx) { dragIdx.current = idx; }
+  function onDragEnter(idx) { setDragOverIdx(idx); }
+  function onDragEnd() {
+    if (dragIdx.current !== null && dragOverIdx !== null && dragIdx.current !== dragOverIdx) {
+      const next = [...list];
+      const [moved] = next.splice(dragIdx.current, 1);
+      next.splice(dragOverIdx, 0, moved);
+      persistOrder(next);
+    }
+    dragIdx.current = null;
+    setDragOverIdx(null);
+  }
+
   return (
     <div>
       {/* Existing fields */}
       {list.length > 0 && (
         <div style={{ marginBottom: 24 }}>
-          {list.map(f => (
-            <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#2a2a2a', borderRadius: 8, marginBottom: 8 }}>
+          {list.map((f, idx) => (
+            <div key={f.id}
+              draggable
+              onDragStart={() => onDragStart(idx)}
+              onDragEnter={() => onDragEnter(idx)}
+              onDragOver={e => e.preventDefault()}
+              onDragEnd={onDragEnd}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: dragOverIdx === idx ? 'rgba(87,94,207,0.12)' : '#2a2a2a', borderRadius: 8, marginBottom: 8, border: `1px solid ${dragOverIdx === idx ? 'rgba(87,94,207,0.4)' : 'transparent'}`, transition: 'background 0.12s, border-color 0.12s', cursor: 'grab' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Drag handle */}
+                <span style={{ color: '#444', fontSize: 14, cursor: 'grab', userSelect: 'none', padding: '0 2px' }} title="Drag to reorder">⠿</span>
+                {/* Up/down buttons */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <button onClick={() => move(idx, -1)} disabled={idx === 0} style={{ background: 'none', border: 'none', color: idx === 0 ? '#333' : '#8a8680', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 10, lineHeight: 1, padding: '1px 3px' }}>▲</button>
+                  <button onClick={() => move(idx, 1)} disabled={idx === list.length - 1} style={{ background: 'none', border: 'none', color: idx === list.length - 1 ? '#333' : '#8a8680', cursor: idx === list.length - 1 ? 'default' : 'pointer', fontSize: 10, lineHeight: 1, padding: '1px 3px' }}>▼</button>
+                </div>
                 <span style={{ fontSize: 16, width: 22, textAlign: 'center' }}>{FIELD_TYPES.find(t => t.value === f.field_type)?.icon}</span>
                 <div>
                   <span style={{ color: '#c5c1b9', fontWeight: 500, fontSize: 14 }}>{f.label}</span>

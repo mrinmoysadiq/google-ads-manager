@@ -211,6 +211,20 @@ router.patch('/account-fields/:id', (req, res) => {
   }
 });
 
+router.post('/account-fields/reorder', (req, res) => {
+  try {
+    const { order } = req.body; // [{ id, sort_order }, ...]
+    if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
+    const update = db.prepare('UPDATE fb_account_fields SET sort_order = ? WHERE id = ?');
+    const run = db.transaction(() => order.forEach(({ id, sort_order }) => update.run(sort_order, id)));
+    run();
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reorder fields' });
+  }
+});
+
 router.delete('/account-fields/:id', (req, res) => {
   try {
     const { id } = req.params;
