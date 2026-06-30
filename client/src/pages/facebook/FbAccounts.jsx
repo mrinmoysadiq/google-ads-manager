@@ -330,7 +330,7 @@ function PerfEditModal({ sessionId, initialData, onSave, onClose }) {
 }
 
 // ─── Account Drawer ───────────────────────────────────────────────────────────
-function AccountDrawer({ accountId, fields, onClose, onFieldsSaved }) {
+function AccountDrawer({ accountId, fields, onClose, onFieldsSaved, onDelete }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('info');
@@ -360,7 +360,12 @@ function AccountDrawer({ accountId, fields, onClose, onFieldsSaved }) {
               </>
             )}
           </div>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#8a8680', cursor: 'pointer', fontSize: 16, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {data && onDelete && (
+              <button onClick={() => onDelete(data)} style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: '#ef4444', cursor: 'pointer', fontSize: 13, padding: '6px 12px', fontWeight: 500 }}>🗑 Delete</button>
+            )}
+            <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#8a8680', cursor: 'pointer', fontSize: 16, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -1222,11 +1227,8 @@ export default function FbAccounts() {
                           </td>
                         );
                       })}
-                      <td style={{ ...td, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
-                          <button onClick={e => { e.stopPropagation(); if (window.confirm(`Move "${acct.name}" to trash? You can restore it within 7 days.`)) { fb.delete(`/ad-accounts/${acct.id}`).then(() => { setAccounts(prev => prev.filter(a => a.id !== acct.id)); toast.success('Moved to trash'); }).catch(() => toast.error('Failed')); } }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#555', fontSize: 14, padding: 4 }} title="Move to trash" onMouseEnter={e => e.currentTarget.style.color = '#ef4444'} onMouseLeave={e => e.currentTarget.style.color = '#555'}>🗑</button>
-                          <span style={{ color: '#575ECF', fontSize: 16 }}>→</span>
-                        </div>
+                      <td style={{ ...td, textAlign: 'right' }}>
+                        <span style={{ color: '#575ECF', fontSize: 16 }}>→</span>
                       </td>
                     </tr>
                   );
@@ -1244,6 +1246,12 @@ export default function FbAccounts() {
           fields={activeFields}
           onClose={() => setDrawerAccountId(null)}
           onFieldsSaved={fetchAll}
+          onDelete={(acct) => {
+            if (!window.confirm(`Move "${acct.name}" to trash? You can restore it within 7 days.`)) return;
+            fb.delete(`/ad-accounts/${acct.id}`)
+              .then(() => { setAccounts(prev => prev.filter(a => a.id !== acct.id)); setDrawerAccountId(null); toast.success('Moved to trash'); })
+              .catch(() => toast.error('Failed'));
+          }}
         />
       )}
 
