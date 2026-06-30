@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
 import api from '../../utils/api'
-import { fbState, resetFbState } from './fbState'
+import { fbState, resetFbState, mkCampaignPerf } from './fbState'
 import { getUser } from '../../utils/auth'
 
 const selectStyles = {
@@ -69,13 +69,21 @@ export default function FbSessionStart() {
 
   const canStart = buyer && date && account
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!canStart) return
+    // Fetch campaign groups before resetting state
+    let groups = []
+    try {
+      const { data } = await api.get('/facebook/campaign-groups', { params: { account_name: account.value } })
+      groups = data || []
+    } catch { /* no groups is fine */ }
     resetFbState()
     fbState.buyer = buyer.value
     fbState.date = date
     fbState.account = account.value
     fbState.currentQuestion = 0
+    fbState.campaignGroups = groups
+    fbState.campaignPerformance = groups.length > 0 ? mkCampaignPerf(groups) : []
     navigate('/facebook/checklist')
   }
 

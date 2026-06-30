@@ -507,18 +507,43 @@ function SessionModal({ session, onClose, onDelete }) {
           {perf && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8a8680' }}>📊 Performance</p>
-              <div className="grid grid-cols-2 gap-3">
-                {[['Last 7 Days', perf.days7], ['Last 3 Days', perf.days3]].map(([label, d]) => d && (
-                  <div key={label} className="rounded-lg p-3" style={{ backgroundColor: '#2a2a2a' }}>
-                    <p className="text-xs font-semibold mb-2" style={{ color: '#c5c1b9' }}>{label}</p>
-                    {d.from && <p className="text-xs mb-2" style={{ color: '#555' }}>{d.from} → {d.to}</p>}
-                    <div className="flex gap-4">
-                      <div><div className="text-xs" style={{ color: '#8a8680' }}>Leads</div><div className="text-sm font-semibold" style={{ color: '#c5c1b9' }}>{d.leads || '—'}</div></div>
-                      <div><div className="text-xs" style={{ color: '#8a8680' }}>CPL</div><div className="text-sm font-semibold" style={{ color: '#c5c1b9' }}>{d.cpl ? `$${d.cpl}` : '—'}</div></div>
+              {perf.type === 'multi' && perf.campaigns ? (
+                <div className="space-y-3">
+                  {perf.campaigns.map((c, i) => (
+                    <div key={i} className="rounded-lg p-3" style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <p className="text-sm font-semibold" style={{ color: '#c5c1b9' }}>{c.name}</p>
+                        {c.target_cpl != null && <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.05)', color: '#8a8680' }}>Target: {c.target_cpl}</span>}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[['7 Days', c.days7], ['3 Days', c.days3]].map(([label, d]) => d && (
+                          <div key={label} className="rounded p-2" style={{ background: '#1b1b1b' }}>
+                            <p className="text-xs mb-1" style={{ color: '#8a8680' }}>Last {label}</p>
+                            {d.from && <p className="text-xs mb-1" style={{ color: '#444' }}>{d.from} → {d.to}</p>}
+                            <div className="flex gap-3">
+                              <div><div className="text-xs" style={{ color: '#8a8680' }}>Leads</div><div className="text-sm font-semibold" style={{ color: '#c5c1b9' }}>{d.leads || '—'}</div></div>
+                              <div><div className="text-xs" style={{ color: '#8a8680' }}>CPL</div><div className="text-sm font-semibold" style={{ color: d.cpl ? '#22c55e' : '#555' }}>{d.cpl ? `$${d.cpl}` : '—'}</div></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {[['Last 7 Days', perf.days7], ['Last 3 Days', perf.days3]].map(([label, d]) => d && (
+                    <div key={label} className="rounded-lg p-3" style={{ backgroundColor: '#2a2a2a' }}>
+                      <p className="text-xs font-semibold mb-2" style={{ color: '#c5c1b9' }}>{label}</p>
+                      {d.from && <p className="text-xs mb-2" style={{ color: '#555' }}>{d.from} → {d.to}</p>}
+                      <div className="flex gap-4">
+                        <div><div className="text-xs" style={{ color: '#8a8680' }}>Leads</div><div className="text-sm font-semibold" style={{ color: '#c5c1b9' }}>{d.leads || '—'}</div></div>
+                        <div><div className="text-xs" style={{ color: '#8a8680' }}>CPL</div><div className="text-sm font-semibold" style={{ color: '#c5c1b9' }}>{d.cpl ? `$${d.cpl}` : '—'}</div></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

@@ -155,6 +155,56 @@ router.delete('/ad-accounts/:id', (req, res) => {
   }
 });
 
+// ─── CAMPAIGN GROUPS ─────────────────────────────────────────────────────────
+
+router.get('/campaign-groups', (req, res) => {
+  try {
+    const { account_id, account_name } = req.query;
+    let id = account_id;
+    if (!id && account_name) {
+      const acct = db.prepare('SELECT id FROM fb_ad_accounts WHERE name = ?').get(account_name);
+      id = acct?.id;
+    }
+    if (!id) return res.json([]);
+    const groups = db.prepare('SELECT * FROM fb_campaign_groups WHERE account_id = ? AND active = 1 ORDER BY sort_order ASC, id ASC').all(id);
+    res.json(groups);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to fetch campaign groups' }); }
+});
+
+router.get('/ad-accounts/:id/campaign-groups', (req, res) => {
+  try {
+    const groups = db.prepare('SELECT * FROM fb_campaign_groups WHERE account_id = ? ORDER BY sort_order ASC, id ASC').all(req.params.id);
+    res.json(groups);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to fetch campaign groups' }); }
+});
+
+router.post('/ad-accounts/:id/campaign-groups', (req, res) => {
+  try {
+    const { name, target_cpl, sort_order } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
+    const result = db.prepare('INSERT INTO fb_campaign_groups (account_id, name, target_cpl, sort_order) VALUES (?, ?, ?, ?)').run(req.params.id, name.trim(), target_cpl ?? null, sort_order ?? 0);
+    res.status(201).json(db.prepare('SELECT * FROM fb_campaign_groups WHERE id = ?').get(result.lastInsertRowid));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to create campaign group' }); }
+});
+
+router.patch('/campaign-groups/:id', (req, res) => {
+  try {
+    const { name, target_cpl, sort_order, active } = req.body;
+    const existing = db.prepare('SELECT * FROM fb_campaign_groups WHERE id = ?').get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    db.prepare('UPDATE fb_campaign_groups SET name = COALESCE(?, name), target_cpl = COALESCE(?, target_cpl), sort_order = COALESCE(?, sort_order), active = COALESCE(?, active) WHERE id = ?')
+      .run(name ?? null, target_cpl ?? null, sort_order ?? null, active ?? null, req.params.id);
+    res.json(db.prepare('SELECT * FROM fb_campaign_groups WHERE id = ?').get(req.params.id));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to update campaign group' }); }
+});
+
+router.delete('/campaign-groups/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM fb_campaign_groups WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to delete campaign group' }); }
+});
+
 // ─── ACCOUNT CUSTOM FIELDS ────────────────────────────────────────────────────
 
 router.get('/account-fields', (req, res) => {

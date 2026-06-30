@@ -64,6 +64,10 @@ function isChecklistComplete(idx) {
 }
 
 function isPerfComplete() {
+  if (fbState.campaignGroups.length > 0) {
+    return fbState.campaignPerformance.length > 0 &&
+      fbState.campaignPerformance.every(c => c.days7.leads.trim() && c.days7.cpl.trim() && c.days3.leads.trim() && c.days3.cpl.trim())
+  }
   const { days7, days3 } = fbState.performanceData
   return !!(days7.leads.trim() && days7.cpl.trim() && days3.leads.trim() && days3.cpl.trim())
 }
@@ -100,15 +104,72 @@ function readFileAsBase64(file) {
 }
 
 // ─── Performance Card (index 4) ───────────────────────────────────────────────
-function PerformanceCard({ sessionDate, rerender }) {
-  const range7 = dateRange(sessionDate, 7)
-  const range3 = dateRange(sessionDate, 3)
-  const p = fbState.performanceData
+const numInput = "w-full bg-[#1b1b1b] border border-white/[0.1] rounded-lg px-3 py-2.5 text-[#c5c1b9] text-sm placeholder-[#555] outline-none focus:border-[#575ECF] transition-colors"
 
+function PerfInputPair({ label7, label3, val7, val3, onChange7, onChange3, targetCpl }) {
+  const range7 = dateRange(fbState.date, 7)
+  const range3 = dateRange(fbState.date, 3)
+  const cplWarning7 = targetCpl && val7.cpl && parseFloat(val7.cpl) >= targetCpl * 2
+  const cplWarning3 = targetCpl && val3.cpl && parseFloat(val3.cpl) >= targetCpl * 2
+  return (
+    <div className="rounded-xl border border-white/[0.07] bg-[#2a2a2a] p-4 mb-3">
+      {label7 && <p className="text-sm font-semibold text-[#c5c1b9] mb-3">{label7}</p>}
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-medium text-[#8a8680]">Last 7 Days</p>
+          <span className="text-xs text-[#8a8680] bg-[#1b1b1b] rounded px-2 py-0.5">{range7.from} → {range7.to}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-[#8a8680] uppercase tracking-wider mb-1">Leads</label>
+            <input type="number" min="0" value={val7.leads} onChange={e => onChange7('leads', e.target.value)} placeholder="e.g. 24" className={numInput} />
+          </div>
+          <div>
+            <label className="block text-xs text-[#8a8680] uppercase tracking-wider mb-1">
+              CPL {targetCpl && <span className="ml-1 font-normal normal-case" style={{ color: '#555' }}>target: {targetCpl}</span>}
+            </label>
+            <input type="number" min="0" step="0.01" value={val7.cpl} onChange={e => onChange7('cpl', e.target.value)} placeholder="e.g. 85.00"
+              className={numInput + (cplWarning7 ? ' border-[#ef4444]/60' : '')} />
+            {cplWarning7 && <p className="text-xs mt-1" style={{ color: '#ef4444' }}>⚠ CPL ≥ 2× target</p>}
+          </div>
+        </div>
+      </div>
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-medium text-[#8a8680]">Last 3 Days</p>
+          <span className="text-xs text-[#8a8680] bg-[#1b1b1b] rounded px-2 py-0.5">{range3.from} → {range3.to}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-[#8a8680] uppercase tracking-wider mb-1">Leads</label>
+            <input type="number" min="0" value={val3.leads} onChange={e => onChange3('leads', e.target.value)} placeholder="e.g. 8" className={numInput} />
+          </div>
+          <div>
+            <label className="block text-xs text-[#8a8680] uppercase tracking-wider mb-1">
+              CPL {targetCpl && <span className="ml-1 font-normal normal-case" style={{ color: '#555' }}>target: {targetCpl}</span>}
+            </label>
+            <input type="number" min="0" step="0.01" value={val3.cpl} onChange={e => onChange3('cpl', e.target.value)} placeholder="e.g. 80.00"
+              className={numInput + (cplWarning3 ? ' border-[#ef4444]/60' : '')} />
+            {cplWarning3 && <p className="text-xs mt-1" style={{ color: '#ef4444' }}>⚠ CPL ≥ 2× target</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PerformanceCard({ sessionDate, rerender }) {
+  const groups = fbState.campaignGroups
+  const isMulti = groups.length > 0
+  const complete = isPerfComplete()
+
+  // Single-campaign handlers
   const set7 = (field, val) => { fbState.performanceData.days7[field] = val; rerender() }
   const set3 = (field, val) => { fbState.performanceData.days3[field] = val; rerender() }
 
-  const complete = isPerfComplete()
+  // Multi-campaign handlers
+  const setCamp7 = (i, field, val) => { fbState.campaignPerformance[i].days7[field] = val; rerender() }
+  const setCamp3 = (i, field, val) => { fbState.campaignPerformance[i].days3[field] = val; rerender() }
 
   return (
     <div className="bg-[#242424] border border-white/[0.08] rounded-xl p-6 mb-4">
@@ -116,78 +177,39 @@ function PerformanceCard({ sessionDate, rerender }) {
         <span className="text-lg">📊</span>
         <p className="text-lg font-semibold text-[#c5c1b9]">Performance Review</p>
       </div>
-      <p className="text-xs text-[#8a8680] mb-6">Enter the actual results from your ad account for the periods below.</p>
+      <p className="text-xs text-[#8a8680] mb-5">
+        {isMulti
+          ? `Enter results per campaign group. ${groups.length} campaigns configured for this account.`
+          : 'Enter the actual results from your ad account for the periods below.'}
+      </p>
 
-      {/* 7-day section */}
-      <div className="rounded-xl border border-white/[0.07] bg-[#2a2a2a] p-4 mb-4">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold text-[#c5c1b9]">Last 7 Days</p>
-          <span className="text-xs text-[#8a8680] bg-[#1b1b1b] rounded-lg px-2.5 py-1">{range7.from} → {range7.to}</span>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-[#8a8680] uppercase tracking-wider mb-1.5">Total Leads</label>
-            <input
-              type="number"
-              min="0"
-              value={p.days7.leads}
-              onChange={e => set7('leads', e.target.value)}
-              placeholder="e.g. 24"
-              className="w-full bg-[#1b1b1b] border border-white/[0.1] rounded-lg px-3 py-2.5 text-[#c5c1b9] text-sm placeholder-[#555] outline-none focus:border-[#575ECF] transition-colors"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-[#8a8680] uppercase tracking-wider mb-1.5">CPL (Cost Per Lead)</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={p.days7.cpl}
-              onChange={e => set7('cpl', e.target.value)}
-              placeholder="e.g. 12.50"
-              className="w-full bg-[#1b1b1b] border border-white/[0.1] rounded-lg px-3 py-2.5 text-[#c5c1b9] text-sm placeholder-[#555] outline-none focus:border-[#575ECF] transition-colors"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* 3-day section */}
-      <div className="rounded-xl border border-white/[0.07] bg-[#2a2a2a] p-4">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold text-[#c5c1b9]">Last 3 Days</p>
-          <span className="text-xs text-[#8a8680] bg-[#1b1b1b] rounded-lg px-2.5 py-1">{range3.from} → {range3.to}</span>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-[#8a8680] uppercase tracking-wider mb-1.5">Total Leads</label>
-            <input
-              type="number"
-              min="0"
-              value={p.days3.leads}
-              onChange={e => set3('leads', e.target.value)}
-              placeholder="e.g. 8"
-              className="w-full bg-[#1b1b1b] border border-white/[0.1] rounded-lg px-3 py-2.5 text-[#c5c1b9] text-sm placeholder-[#555] outline-none focus:border-[#575ECF] transition-colors"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-[#8a8680] uppercase tracking-wider mb-1.5">CPL (Cost Per Lead)</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={p.days3.cpl}
-              onChange={e => set3('cpl', e.target.value)}
-              placeholder="e.g. 10.00"
-              className="w-full bg-[#1b1b1b] border border-white/[0.1] rounded-lg px-3 py-2.5 text-[#c5c1b9] text-sm placeholder-[#555] outline-none focus:border-[#575ECF] transition-colors"
-            />
-          </div>
-        </div>
-      </div>
+      {isMulti ? (
+        fbState.campaignPerformance.map((c, i) => (
+          <PerfInputPair
+            key={c.id}
+            label7={c.name}
+            val7={c.days7}
+            val3={c.days3}
+            targetCpl={c.target_cpl}
+            onChange7={(f, v) => setCamp7(i, f, v)}
+            onChange3={(f, v) => setCamp3(i, f, v)}
+          />
+        ))
+      ) : (
+        <PerfInputPair
+          val7={fbState.performanceData.days7}
+          val3={fbState.performanceData.days3}
+          onChange7={set7}
+          onChange3={set3}
+        />
+      )}
 
       <div className="mt-3">
         {complete
           ? <span className="text-xs font-medium px-2 py-1 rounded-full bg-[#22c55e]/15 text-[#22c55e]">✓ Complete</span>
-          : <span className="text-xs font-medium px-2 py-1 rounded-full bg-[#f59e0b]/15 text-[#f59e0b]">Fill in all 4 fields to continue</span>
+          : <span className="text-xs font-medium px-2 py-1 rounded-full bg-[#f59e0b]/15 text-[#f59e0b]">
+              {isMulti ? `Fill in all fields for each campaign` : 'Fill in all 4 fields to continue'}
+            </span>
         }
       </div>
     </div>
@@ -436,13 +458,25 @@ export default function FbChecklist() {
       const issueCount = answers.filter(a => a.hasIssue).length
 
       // Build performance_data with date ranges
-      const { days7, days3 } = fbState.performanceData
       const sessionDate = fbState.date
       const range7 = dateRange(sessionDate, 7)
       const range3 = dateRange(sessionDate, 3)
-      const performance_data = {
-        days7: { leads: days7.leads, cpl: days7.cpl, from: range7.from, to: range7.to },
-        days3: { leads: days3.leads, cpl: days3.cpl, from: range3.from, to: range3.to },
+      let performance_data
+      if (fbState.campaignGroups.length > 0) {
+        performance_data = {
+          type: 'multi',
+          campaigns: fbState.campaignPerformance.map(c => ({
+            id: c.id, name: c.name, target_cpl: c.target_cpl,
+            days7: { ...c.days7, from: range7.from, to: range7.to },
+            days3: { ...c.days3, from: range3.from, to: range3.to },
+          })),
+        }
+      } else {
+        const { days7, days3 } = fbState.performanceData
+        performance_data = {
+          days7: { leads: days7.leads, cpl: days7.cpl, from: range7.from, to: range7.to },
+          days3: { leads: days3.leads, cpl: days3.cpl, from: range3.from, to: range3.to },
+        }
       }
 
       const flagged_ads = fbState.flaggedAdsAnswered === 'yes' ? fbState.flaggedAds : []

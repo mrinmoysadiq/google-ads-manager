@@ -376,6 +376,19 @@ function initializeDatabase() {
     'ALTER TABLE fb_ad_accounts ADD COLUMN deleted_at TEXT DEFAULT NULL',
     'ALTER TABLE outreach_leads ADD COLUMN deleted_at TEXT DEFAULT NULL',
   ];
+
+  // Campaign groups table (per-account, optional)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fb_campaign_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL REFERENCES fb_ad_accounts(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      target_cpl REAL,
+      sort_order INTEGER DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
   // Migrate old 'Contacted' status to 'New Lead' (one-time)
   try { db.exec("UPDATE outreach_leads SET status = 'New Lead' WHERE status = 'Contacted'"); } catch (e) { /* ignore */ }
   try { db.exec("UPDATE outreach_status_history SET new_status = 'New Lead' WHERE new_status = 'Contacted'"); } catch (e) { /* ignore */ }

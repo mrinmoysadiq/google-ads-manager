@@ -191,6 +191,61 @@ function FieldInput({ field, value, onChange }) {
   );
 }
 
+// ─── Campaign Breakdown Modal ─────────────────────────────────────────────────
+function CampaignBreakdownModal({ account, data, onClose }) {
+  const campaigns = data?.campaigns || [];
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }} onClick={onClose}>
+      <div style={{ background: '#1e1e1e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, width: '100%', maxWidth: 680, maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <div>
+            <p style={{ color: '#c5c1b9', fontWeight: 700, margin: 0, fontSize: 15 }}>Campaign Performance</p>
+            <p style={{ color: '#8a8680', fontSize: 12, margin: '3px 0 0' }}>{account.name}</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {campaigns.map((c, i) => {
+            const over7 = c.target_cpl && c.days7?.cpl && parseFloat(c.days7.cpl) >= c.target_cpl * 2;
+            const over3 = c.target_cpl && c.days3?.cpl && parseFloat(c.days3.cpl) >= c.target_cpl * 2;
+            return (
+              <div key={i} style={{ background: '#242424', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <p style={{ color: '#c5c1b9', fontWeight: 600, fontSize: 14, margin: 0, flex: 1 }}>{c.name}</p>
+                  {c.target_cpl != null && (
+                    <span style={{ fontSize: 11, color: '#8a8680', background: 'rgba(255,255,255,0.05)', borderRadius: 4, padding: '2px 7px' }}>Target CPL: {c.target_cpl}</span>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[['Last 7 Days', c.days7, over7], ['Last 3 Days', c.days3, over3]].map(([label, d, overTarget]) => (
+                    <div key={label} style={{ background: '#2a2a2a', borderRadius: 8, padding: 12 }}>
+                      <p style={{ color: '#8a8680', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 8px' }}>{label}</p>
+                      {d?.from && <p style={{ color: '#444', fontSize: 10, margin: '0 0 8px' }}>{d.from} → {d.to}</p>}
+                      <div style={{ display: 'flex', gap: 16 }}>
+                        <div>
+                          <p style={{ color: '#8a8680', fontSize: 10, margin: '0 0 2px' }}>Leads</p>
+                          <p style={{ color: '#c5c1b9', fontWeight: 700, fontSize: 16, margin: 0 }}>{d?.leads || '—'}</p>
+                        </div>
+                        <div>
+                          <p style={{ color: '#8a8680', fontSize: 10, margin: '0 0 2px' }}>CPL</p>
+                          <p style={{ color: overTarget ? '#ef4444' : (d?.cpl ? '#22c55e' : '#555'), fontWeight: 700, fontSize: 16, margin: 0 }}>
+                            {d?.cpl ? `$${parseFloat(d.cpl).toFixed(2)}` : '—'}
+                          </p>
+                          {overTarget && <p style={{ color: '#ef4444', fontSize: 10, margin: '2px 0 0' }}>⚠ 2× target</p>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Cell Edit Modal (single custom field) ───────────────────────────────────
 function CellEditModal({ fieldDef, value, onSave, onClose }) {
   const [val, setVal] = useState(value ?? '');
@@ -929,6 +984,7 @@ export default function FbAccounts() {
   const [showSettings, setShowSettings] = useState(false);
   const [cellEdit, setCellEdit] = useState(null); // { accountId, fieldDef, value }
   const [perfEdit, setPerfEdit] = useState(null); // { sessionId, data, accountId }
+  const [campaignBreakdown, setCampaignBreakdown] = useState(null); // { account, data }
 
   const fetchAll = useCallback(async () => {
     try {
@@ -1119,7 +1175,17 @@ export default function FbAccounts() {
                           </td>
                         );
                         if (key === '__7d_cpl__' || key === '__3d_cpl__') {
+                          const isMulti = pd?.type === 'multi' && pd?.campaigns?.length > 0;
                           const period = key === '__7d_cpl__' ? 'days7' : 'days3';
+                          if (isMulti) {
+                            return (
+                              <td key={key} style={{ ...td, cursor: 'pointer' }} onClick={e => { e.stopPropagation(); setCampaignBreakdown({ account: acct, data: pd }); }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(87,94,207,0.12)', border: '1px solid rgba(87,94,207,0.25)', borderRadius: 6, padding: '3px 8px', color: '#a5aaee', fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                  📊 {pd.campaigns.length} campaigns →
+                                </span>
+                              </td>
+                            );
+                          }
                           const d = pd?.[period];
                           return (
                             <td key={key} style={{ ...td, cursor: 'pointer' }} onClick={e => { e.stopPropagation(); if (sessId) setPerfEdit({ sessionId: sessId, data: pd, accountId: acct.id }); else toast('No performance session yet — complete a checklist first.'); }}>
@@ -1209,6 +1275,14 @@ export default function FbAccounts() {
           initialData={perfEdit.data}
           onClose={() => setPerfEdit(null)}
           onSave={() => { setPerfEdit(null); fetchAll(); }}
+        />
+      )}
+
+      {campaignBreakdown && (
+        <CampaignBreakdownModal
+          account={campaignBreakdown.account}
+          data={campaignBreakdown.data}
+          onClose={() => setCampaignBreakdown(null)}
         />
       )}
 

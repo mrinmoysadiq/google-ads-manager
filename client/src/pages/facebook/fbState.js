@@ -12,6 +12,9 @@ const mkPerformance = () => ({
   days3: { leads: '', cpl: '' },
 });
 
+const mkCampaignPerf = (groups) =>
+  groups.map(g => ({ id: g.id, name: g.name, target_cpl: g.target_cpl, days7: { leads: '', cpl: '' }, days3: { leads: '', cpl: '' } }));
+
 export const fbState = {
   buyer: '',
   date: '',
@@ -19,10 +22,12 @@ export const fbState = {
   currentQuestion: 0,
   sessionId: null,
   items: Array.from({ length: 3 }, mk),
+  campaignGroups: [],               // loaded from API on session start
   performanceData: mkPerformance(),
-  flaggedAds: [],                  // array of { ad_name, campaign_name, action_taken, notes }
-  flaggedAdsAnswered: null,        // null | 'yes' | 'no'
-  flaggedAdsNoVerification: '',    // verification text when answered 'no'
+  campaignPerformance: [],          // per-campaign perf when campaignGroups.length > 0
+  flaggedAds: [],
+  flaggedAdsAnswered: null,
+  flaggedAdsNoVerification: '',
 };
 
 export function resetFbState() {
@@ -32,8 +37,12 @@ export function resetFbState() {
   fbState.currentQuestion = 0;
   fbState.sessionId = null;
   fbState.items = Array.from({ length: 3 }, mk);
+  fbState.campaignGroups = [];
   fbState.performanceData = mkPerformance();
+  fbState.campaignPerformance = [];
   fbState.flaggedAds = [];
   fbState.flaggedAdsAnswered = null;
   fbState.flaggedAdsNoVerification = '';
 }
+
+export { mkCampaignPerf };
