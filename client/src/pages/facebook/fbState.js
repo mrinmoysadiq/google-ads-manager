@@ -20,8 +20,9 @@ export const fbState = {
   sessionId: null,
   items: Array.from({ length: 3 }, mk),
   performanceData: mkPerformance(),
-  flaggedAds: [],           // array of { ad_name, campaign_name, action_taken, notes }
-  flaggedAdsAnswered: null, // null | 'yes' | 'no'
+  flaggedAds: [],                  // array of { ad_name, campaign_name, action_taken, notes }
+  flaggedAdsAnswered: null,        // null | 'yes' | 'no'
+  flaggedAdsNoVerification: '',    // verification text when answered 'no'
 };
 
 export function resetFbState() {
@@ -34,4 +35,5 @@ export function resetFbState() {
   fbState.performanceData = mkPerformance();
   fbState.flaggedAds = [];
   fbState.flaggedAdsAnswered = null;
+  fbState.flaggedAdsNoVerification = '';
 }

@@ -70,7 +70,7 @@ function isPerfComplete() {
 
 function isFlagsComplete() {
   if (!fbState.flaggedAdsAnswered) return false
-  if (fbState.flaggedAdsAnswered === 'no') return true
+  if (fbState.flaggedAdsAnswered === 'no') return !!(fbState.flaggedAdsNoVerification || '').trim()
   // yes — must have at least one fully-filled ad
   return fbState.flaggedAds.length > 0 &&
     fbState.flaggedAds.every(a => a.ad_name.trim() && a.campaign_name.trim() && a.action_taken)
@@ -203,8 +203,8 @@ function FlaggedAdsCard({ rerender }) {
 
   function setAnswer(val) {
     fbState.flaggedAdsAnswered = val
-    if (val === 'no') fbState.flaggedAds = []
-    if (val === 'yes' && fbState.flaggedAds.length === 0) fbState.flaggedAds = [mkAd()]
+    if (val === 'no') { fbState.flaggedAds = []; fbState.flaggedAdsNoVerification = '' }
+    if (val === 'yes') { fbState.flaggedAdsNoVerification = ''; if (fbState.flaggedAds.length === 0) fbState.flaggedAds = [mkAd()] }
     rerender()
   }
 
@@ -225,7 +225,7 @@ function FlaggedAdsCard({ rerender }) {
         <p className="text-lg font-semibold text-[#c5c1b9]">Underperforming Ads</p>
       </div>
       <p className="text-sm text-[#8a8680] mb-6">
-        Are there any ads that have spent <strong className="text-[#f59e0b]">2–3× the target CPL</strong> but generated <strong className="text-[#ef4444]">0 leads</strong> in total?
+        Are there any ads with a <strong className="text-[#f59e0b]">CPL of at least 2×</strong> the target and <strong className="text-[#f59e0b]">spending of at least 2×</strong> the target CPL?
       </p>
 
       {/* Yes / No */}
@@ -316,8 +316,14 @@ function FlaggedAdsCard({ rerender }) {
       )}
 
       {answered === 'no' && (
-        <div className="rounded-xl border border-[#22c55e]/20 bg-[#22c55e]/5 p-3 text-center">
-          <p className="text-sm text-[#22c55e]">✓ No underperforming ads — all good!</p>
+        <div className="rounded-xl border border-[#22c55e]/30 bg-[#2a2a2a] p-4">
+          <p className="text-xs font-semibold text-[#22c55e] uppercase tracking-wider mb-3">✓ Verification <span className="text-[#ef4444]">*</span></p>
+          <textarea
+            className="w-full bg-transparent text-[#c5c1b9] text-sm placeholder-[#555] resize-none outline-none min-h-[90px]"
+            placeholder="Confirm you reviewed all active ads and none exceeded 2× target CPL and 2× target spend…"
+            value={fbState.flaggedAdsNoVerification || ''}
+            onChange={e => { fbState.flaggedAdsNoVerification = e.target.value; rerender() }}
+          />
         </div>
       )}
 
