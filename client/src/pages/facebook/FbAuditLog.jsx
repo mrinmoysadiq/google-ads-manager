@@ -199,7 +199,7 @@ export default function FbAuditLog() {
                 : <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>Calendar View</>
               }
             </button>
-            <Link to="/facebook"
+            <Link to="/facebook/start"
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
               style={{ backgroundColor: '#575ECF' }}
               onMouseEnter={e => e.currentTarget.style.backgroundColor = '#6B72D8'}
@@ -363,7 +363,7 @@ function CalendarView({ accounts, days, sessionMap, todayStr, onViewSession, onE
                     }
                     return (
                       <td key={d} className="px-2 py-2 text-center">
-                        <Link to="/facebook"
+                        <Link to="/facebook/start"
                           className="w-8 h-8 mx-auto rounded-lg flex items-center justify-center transition-all"
                           style={{ backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)' }}
                           title={`Missing audit for ${fmtDate(d)} — click to log`}

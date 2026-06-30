@@ -342,7 +342,7 @@ export default function FbChecklist() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (!fbState.buyer) navigate('/facebook', { replace: true })
+    if (!fbState.buyer) navigate('/facebook/start', { replace: true })
   }, [navigate])
 
   const qi = fbState.currentQuestion

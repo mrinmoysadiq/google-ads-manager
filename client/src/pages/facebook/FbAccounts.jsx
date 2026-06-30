@@ -12,7 +12,8 @@ const fb = {
 };
 
 const NAV_LINKS = [
-  { label: 'Daily Checklist', path: '/facebook' },
+  { label: '← Hub', path: '/facebook' },
+  { label: 'Daily Checklist', path: '/facebook/start' },
   { label: 'Accounts', path: '/facebook/accounts' },
   { label: 'Audit Log', path: '/facebook/audit-log' },
   { label: 'Change Log', path: '/facebook/changelog' },
@@ -1002,7 +1003,7 @@ export default function FbAccounts() {
       <div style={{ background: '#1e1e1e', borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '0 28px', display: 'flex', alignItems: 'center', gap: 2 }}>
         {NAV_LINKS.map(link => (
           <button key={link.path} onClick={() => navigate(link.path)}
-            style={{ background: 'none', border: 'none', padding: '16px 14px', cursor: 'pointer', fontSize: 14, fontWeight: 500, borderBottom: link.path === '/facebook/accounts' ? '2px solid #575ECF' : '2px solid transparent', color: link.path === '/facebook/accounts' ? '#575ECF' : '#8a8680', transition: 'color 0.15s' }}>
+            style={{ background: 'none', border: 'none', padding: '16px 14px', cursor: 'pointer', fontSize: 14, fontWeight: 500, borderBottom: link.path === '/facebook/accounts' ? '2px solid #575ECF' : '2px solid transparent', color: link.path === '/facebook/accounts' ? '#575ECF' : link.path === '/facebook' ? '#555' : '#8a8680', transition: 'color 0.15s' }}>
             {link.label}
           </button>
         ))}

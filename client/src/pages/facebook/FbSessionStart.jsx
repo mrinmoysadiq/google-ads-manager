@@ -155,28 +155,8 @@ export default function FbSessionStart() {
             )}
           </div>
 
-          {/* Quick-access cards */}
-          <div className="grid grid-cols-2 gap-3 mt-5">
-            {[
-              { to: '/facebook/accounts', icon: '🗂', label: 'Accounts', desc: 'Master sheet & field overview' },
-              { to: '/facebook/audit-log', icon: '📋', label: 'Audit Log', desc: 'Daily checklist history' },
-              { to: '/facebook/changelog', icon: '📝', label: 'Change Log', desc: 'All account changes' },
-              { to: '/facebook/admin', icon: '⚙️', label: 'Admin Panel', desc: 'Buyers & accounts setup' },
-            ].map(({ to, icon, label, desc }) => (
-              <Link key={to} to={to}
-                className="group flex items-center gap-3 rounded-xl px-4 py-3 transition-all"
-                style={{ background: '#242424', border: '1px solid rgba(255,255,255,0.07)' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(87,94,207,0.5)'; e.currentTarget.style.background = 'rgba(87,94,207,0.06)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.background = '#242424'; }}
-              >
-                <span className="text-xl flex-shrink-0">{icon}</span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[#c5c1b9] group-hover:text-white transition-colors leading-tight">{label}</p>
-                  <p className="text-xs text-[#8a8680] mt-0.5 leading-tight">{desc}</p>
-                </div>
-                <span className="ml-auto text-[#575ECF] text-sm opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">→</span>
-              </Link>
-            ))}
+          <div className="mt-4 text-center">
+            <Link to="/facebook" className="text-xs text-[#8a8680] hover:text-[#c5c1b9] transition-colors">← Back to Facebook & Meta Ads</Link>
           </div>
         </div>
       </div>

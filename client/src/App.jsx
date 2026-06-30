@@ -15,6 +15,7 @@ import LmsAdmin from './pages/lms/LmsAdmin'
 import LmsTopicDetail from './pages/lms/LmsTopicDetail'
 import OutreachHome from './pages/outreach/OutreachHome'
 import OutreachAdmin from './pages/outreach/OutreachAdmin'
+import FbHome from './pages/facebook/FbHome'
 import FbSessionStart from './pages/facebook/FbSessionStart'
 import FbChecklist from './pages/facebook/FbChecklist'
 import FbComplete from './pages/facebook/FbComplete'
@@ -113,7 +114,8 @@ export default function App() {
           <Route path="/outreach/admin" element={<ProtectedRoute><OutreachAdmin /></ProtectedRoute>} />
 
           {/* ── Facebook/Meta Ads module ───────────────────────────────── */}
-          <Route path="/facebook" element={<ProtectedRoute><FbSessionStart /></ProtectedRoute>} />
+          <Route path="/facebook" element={<ProtectedRoute><FbHome /></ProtectedRoute>} />
+          <Route path="/facebook/start" element={<ProtectedRoute><FbSessionStart /></ProtectedRoute>} />
           <Route path="/facebook/checklist" element={<ProtectedRoute><FbChecklist /></ProtectedRoute>} />
           <Route path="/facebook/complete" element={<ProtectedRoute><FbComplete /></ProtectedRoute>} />
           <Route path="/facebook/admin" element={<ProtectedRoute><FbAdmin /></ProtectedRoute>} />
