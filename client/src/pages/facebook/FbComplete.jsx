@@ -6,7 +6,6 @@ const QUESTIONS = [
   'Is the ad account active?',
   'Are there any rejected ads?',
   'Are leads syncing from Facebook to GHL correctly?',
-  'Are Workflows triggering for new leads?',
 ]
 
 function fmtDate(d) {
