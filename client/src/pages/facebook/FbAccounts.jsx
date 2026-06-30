@@ -23,12 +23,36 @@ const FIELD_TYPES = [
   { value: 'text', label: 'Short Text', icon: 'T' },
   { value: 'textarea', label: 'Long Text', icon: '¶' },
   { value: 'number', label: 'Number', icon: '#' },
-  { value: 'currency', label: 'Currency ($)', icon: '$' },
+  { value: 'currency', label: 'Currency', icon: '$' },
   { value: 'url', label: 'URL / Link', icon: '🔗' },
   { value: 'date', label: 'Date', icon: '📅' },
   { value: 'checkbox', label: 'Checkbox (Yes/No)', icon: '✓' },
   { value: 'tags', label: 'Tags (multi-select)', icon: '🏷' },
 ];
+
+const CURRENCIES = [
+  { code: 'USD', symbol: '$',    label: 'USD — US Dollar' },
+  { code: 'EUR', symbol: '€',    label: 'EUR — Euro' },
+  { code: 'GBP', symbol: '£',    label: 'GBP — British Pound' },
+  { code: 'AED', symbol: 'AED ', label: 'AED — UAE Dirham' },
+  { code: 'CAD', symbol: 'CA$',  label: 'CAD — Canadian Dollar' },
+  { code: 'AUD', symbol: 'A$',   label: 'AUD — Australian Dollar' },
+];
+
+function parseCurrency(raw) {
+  if (!raw) return { currency: 'USD', amount: '' };
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') return { currency: parsed.currency || 'USD', amount: parsed.amount ?? '' };
+  } catch { /* legacy plain number */ }
+  return { currency: 'USD', amount: raw };
+}
+
+function formatCurrency(currency, amount) {
+  if (!amount && amount !== 0) return null;
+  const sym = CURRENCIES.find(c => c.code === currency)?.symbol || currency + ' ';
+  return `${sym}${parseFloat(amount).toLocaleString()}`;
+}
 
 // ─── Field value renderer ──────────────────────────────────────────────────────
 function FieldValue({ value, type, options = [], compact = false }) {
@@ -60,7 +84,11 @@ function FieldValue({ value, type, options = [], compact = false }) {
   if (type === 'url') {
     return <a href={value} target="_blank" rel="noopener noreferrer" style={{ color: '#575ECF', textDecoration: 'none', fontSize: 13 }}>{value.replace(/^https?:\/\//, '')}</a>;
   }
-  if (type === 'currency') return <span style={{ color: '#c5c1b9' }}>${parseFloat(value).toLocaleString()}</span>;
+  if (type === 'currency') {
+    const { currency, amount } = parseCurrency(value);
+    const formatted = formatCurrency(currency, amount);
+    return formatted ? <span style={{ color: '#c5c1b9' }}>{formatted}</span> : <span style={{ color: '#3a3835' }}>—</span>;
+  }
   return <span style={{ color: '#c5c1b9' }}>{value}</span>;
 }
 
@@ -100,12 +128,26 @@ function FieldInput({ field, value, onChange }) {
   if (field_type === 'date') {
     return <input type="date" value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
   }
+  if (field_type === 'currency') {
+    const { currency, amount } = parseCurrency(value);
+    const update = (c, a) => onChange(JSON.stringify({ currency: c, amount: a }));
+    return (
+      <div style={{ display: 'flex', gap: 8 }}>
+        <select value={currency} onChange={e => update(e.target.value, amount)}
+          style={{ background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '9px 10px', color: '#c5c1b9', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>
+          {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+        </select>
+        <input type="number" value={amount} onChange={e => update(currency, e.target.value)}
+          placeholder="0.00" style={{ ...inputStyle, flex: 1 }} />
+      </div>
+    );
+  }
   return (
     <input
-      type={field_type === 'number' || field_type === 'currency' ? 'number' : field_type === 'url' ? 'url' : 'text'}
+      type={field_type === 'number' ? 'number' : field_type === 'url' ? 'url' : 'text'}
       value={value || ''}
       onChange={e => onChange(e.target.value)}
-      placeholder={field_type === 'currency' ? '0.00' : field_type === 'url' ? 'https://' : `Enter ${label}…`}
+      placeholder={field_type === 'url' ? 'https://' : `Enter ${label}…`}
       style={inputStyle}
     />
   );
