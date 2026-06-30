@@ -77,11 +77,15 @@ router.get('/ad-accounts', (req, res) => {
     const whereClause = all === '1' ? '' : 'WHERE a.active = 1';
     const accounts = db.prepare(`
       SELECT a.*,
-        (SELECT MAX(s.date) FROM fb_audit_sessions s WHERE s.ad_account = a.name) AS last_audit_date
+        (SELECT MAX(s.date) FROM fb_audit_sessions s WHERE s.ad_account = a.name) AS last_audit_date,
+        (SELECT s.performance_data FROM fb_audit_sessions s WHERE s.ad_account = a.name AND s.performance_data IS NOT NULL ORDER BY s.date DESC, s.created_at DESC LIMIT 1) AS last_performance_data
       FROM fb_ad_accounts a
       ${whereClause}
       ORDER BY a.name ASC
-    `).all().map(enrichAccountWithFieldValues);
+    `).all().map(a => {
+      const enriched = enrichAccountWithFieldValues(a);
+      return { ...enriched, last_performance_data: a.last_performance_data ? JSON.parse(a.last_performance_data) : null };
+    });
 
     // Attach assigned buyers (auto-matched from audit history) — single query for all accounts
     const buyerRows = db.prepare('SELECT DISTINCT ad_account, media_buyer FROM fb_audit_sessions WHERE media_buyer IS NOT NULL').all();
@@ -238,7 +242,12 @@ router.get('/ad-accounts/:id/detail', (req, res) => {
     // Recent audit sessions (last 20)
     const auditSessions = db.prepare(
       'SELECT * FROM fb_audit_sessions WHERE ad_account = ? ORDER BY date DESC, created_at DESC LIMIT 20'
-    ).all(account.name).map(r => ({ ...r, answers: JSON.parse(r.answers) }));
+    ).all(account.name).map(r => ({
+      ...r,
+      answers: JSON.parse(r.answers),
+      performance_data: r.performance_data ? JSON.parse(r.performance_data) : null,
+      flagged_ads: r.flagged_ads ? JSON.parse(r.flagged_ads) : [],
+    }));
 
     // Recent change log entries (last 20)
     const changeLog = db.prepare(
@@ -254,14 +263,39 @@ router.get('/ad-accounts/:id/detail', (req, res) => {
 
 // ─── AUDIT SESSIONS ───────────────────────────────────────────────────────────
 
+function autoLogFlaggedAds(flaggedAds, { date, media_buyer, ad_account }) {
+  if (!Array.isArray(flaggedAds) || !flaggedAds.length) return;
+  const insert = db.prepare(`
+    INSERT INTO fb_change_log (date, change_level, media_buyer, ad_account, campaign_name, ad_name, changes_made_to, what_changed, why_changed)
+    VALUES (?, 'Ad', ?, ?, ?, ?, ?, ?, ?)
+  `);
+  flaggedAds.forEach(ad => {
+    insert.run(
+      date,
+      media_buyer || null,
+      ad_account,
+      ad.campaign_name || null,
+      ad.ad_name || null,
+      ad.action_taken || null,
+      `Ad flagged: spent 2–3× target CPL with 0 leads. Action taken: ${ad.action_taken || 'N/A'}`,
+      ad.notes || 'Zero lead performance — exceeded CPL threshold'
+    );
+  });
+}
+
 router.post('/audit-sessions', (req, res) => {
   try {
-    const { date, media_buyer, ad_account, answers, issue_count } = req.body;
+    const { date, media_buyer, ad_account, answers, issue_count, performance_data, flagged_ads } = req.body;
     if (!date || !ad_account || !answers) return res.status(400).json({ error: 'date, ad_account, and answers are required' });
     const result = db.prepare(`
-      INSERT INTO fb_audit_sessions (date, media_buyer, ad_account, answers, issue_count)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(date, media_buyer || null, ad_account, JSON.stringify(answers), issue_count || 0);
+      INSERT INTO fb_audit_sessions (date, media_buyer, ad_account, answers, issue_count, performance_data, flagged_ads)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      date, media_buyer || null, ad_account, JSON.stringify(answers), issue_count || 0,
+      performance_data ? JSON.stringify(performance_data) : null,
+      flagged_ads ? JSON.stringify(flagged_ads) : null
+    );
+    if (flagged_ads?.length) autoLogFlaggedAds(flagged_ads, { date, media_buyer, ad_account });
     const row = db.prepare('SELECT * FROM fb_audit_sessions WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ ...row, answers: JSON.parse(row.answers) });
   } catch (err) {
@@ -275,13 +309,25 @@ router.patch('/audit-sessions/:id', (req, res) => {
     const { id } = req.params;
     const row = db.prepare('SELECT * FROM fb_audit_sessions WHERE id = ?').get(id);
     if (!row) return res.status(404).json({ error: 'Session not found' });
-    const { date, media_buyer, ad_account, answers, issue_count } = req.body;
+    const { date, media_buyer, ad_account, answers, issue_count, performance_data, flagged_ads } = req.body;
+    const resolvedDate = date || row.date;
+    const resolvedAccount = ad_account || row.ad_account;
+    const resolvedBuyer = media_buyer ?? row.media_buyer;
     db.prepare(`
       UPDATE fb_audit_sessions SET
-        date = COALESCE(?, date), media_buyer = ?, ad_account = COALESCE(?, ad_account),
-        answers = COALESCE(?, answers), issue_count = COALESCE(?, issue_count)
+        date = ?, media_buyer = ?, ad_account = ?,
+        answers = COALESCE(?, answers), issue_count = COALESCE(?, issue_count),
+        performance_data = COALESCE(?, performance_data),
+        flagged_ads = COALESCE(?, flagged_ads)
       WHERE id = ?
-    `).run(date || null, media_buyer ?? row.media_buyer, ad_account || null, answers ? JSON.stringify(answers) : null, issue_count ?? null, id);
+    `).run(
+      resolvedDate, resolvedBuyer, resolvedAccount,
+      answers ? JSON.stringify(answers) : null, issue_count ?? null,
+      performance_data ? JSON.stringify(performance_data) : null,
+      flagged_ads ? JSON.stringify(flagged_ads) : null,
+      id
+    );
+    if (flagged_ads?.length) autoLogFlaggedAds(flagged_ads, { date: resolvedDate, media_buyer: resolvedBuyer, ad_account: resolvedAccount });
     const updated = db.prepare('SELECT * FROM fb_audit_sessions WHERE id = ?').get(id);
     res.json({ ...updated, answers: JSON.parse(updated.answers) });
   } catch (err) {

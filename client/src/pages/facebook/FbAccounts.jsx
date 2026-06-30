@@ -228,6 +228,36 @@ function DrawerInfo({ data, fields }) {
         ) : <p style={{ color: '#8a8680', fontSize: 13, margin: 0 }}>No audit sessions yet — buyers will appear here after they run their first daily checklist for this account.</p>}
       </div>
 
+      {/* Latest performance data */}
+      {(() => {
+        const latest = data.audit_sessions?.find(s => s.performance_data);
+        if (!latest) return null;
+        const pd = latest.performance_data;
+        return (
+          <div>
+            <p style={sectionLabel}>Latest Performance <span style={{ fontWeight: 400, textTransform: 'none', color: '#555', marginLeft: 4 }}>{latest.date}</span></p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {[{ label: 'Last 7 Days', data: pd.days7 }, { label: 'Last 3 Days', data: pd.days3 }].map(({ label, data: d }) => (
+                <div key={label} style={{ background: '#242424', borderRadius: 8, padding: '12px 14px' }}>
+                  <p style={{ color: '#8a8680', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>{label}</p>
+                  {(d.from && d.to) && <p style={{ color: '#555', fontSize: 11, margin: '0 0 8px' }}>{d.from} → {d.to}</p>}
+                  <div style={{ display: 'flex', gap: 16 }}>
+                    <div>
+                      <p style={{ color: '#8a8680', fontSize: 11, margin: '0 0 2px' }}>Leads</p>
+                      <p style={{ color: '#c5c1b9', fontWeight: 600, fontSize: 18, margin: 0 }}>{d.leads || '—'}</p>
+                    </div>
+                    <div>
+                      <p style={{ color: '#8a8680', fontSize: 11, margin: '0 0 2px' }}>CPL</p>
+                      <p style={{ color: '#22c55e', fontWeight: 600, fontSize: 18, margin: 0 }}>{d.cpl ? `$${parseFloat(d.cpl).toFixed(2)}` : '—'}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Built-in fields */}
       {data.notes && (
         <div>
@@ -269,6 +299,17 @@ function DrawerAudit({ sessions }) {
             </span>
           </div>
           {s.media_buyer && <span style={{ color: '#8a8680', fontSize: 12 }}>by {s.media_buyer}</span>}
+          {s.performance_data && (
+            <div style={{ display: 'flex', gap: 16, marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              {[{ label: '7d', d: s.performance_data.days7 }, { label: '3d', d: s.performance_data.days3 }].map(({ label, d }) => d && (
+                <span key={label} style={{ fontSize: 12, color: '#8a8680' }}>
+                  <span style={{ color: '#555' }}>{label}: </span>
+                  <span style={{ color: '#c5c1b9' }}>{d.leads || '0'} leads</span>
+                  {d.cpl && <span style={{ color: '#22c55e' }}> · ${parseFloat(d.cpl).toFixed(2)} CPL</span>}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -739,6 +780,8 @@ export default function FbAccounts() {
                 <tr style={{ background: '#242424', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                   <th style={th}>Account</th>
                   <th style={th}>Last Audit</th>
+                  <th style={th}>7d CPL</th>
+                  <th style={th}>3d CPL</th>
                   {pinnedFields.map(f => <th key={f.id} style={th}>{f.label}</th>)}
                   <th style={th}>Notes</th>
                   <th style={{ ...th, width: 32 }}></th>
@@ -766,6 +809,17 @@ export default function FbAccounts() {
                           {health.label}
                         </span>
                       </td>
+                      {(() => {
+                        const pd = (() => { try { return JSON.parse(acct.last_performance_data || 'null'); } catch { return null; } })();
+                        const sym = CURRENCIES.find(c => c.code === (acct.custom_fields?.target_cpl_currency || 'USD'))?.symbol || '$';
+                        const fmtCpl = v => v ? `${sym}${parseFloat(v).toFixed(2)}` : <span style={{ color: '#3a3835' }}>—</span>;
+                        return (
+                          <>
+                            <td style={td}><span style={{ color: '#c5c1b9', fontSize: 13 }}>{pd?.days7?.cpl ? fmtCpl(pd.days7.cpl) : <span style={{ color: '#3a3835' }}>—</span>}</span></td>
+                            <td style={td}><span style={{ color: '#c5c1b9', fontSize: 13 }}>{pd?.days3?.cpl ? fmtCpl(pd.days3.cpl) : <span style={{ color: '#3a3835' }}>—</span>}</span></td>
+                          </>
+                        );
+                      })()}
                       {pinnedFields.map(f => (
                         <td key={f.id} style={td}>
                           <FieldValue value={acct.custom_fields?.[f.field_key]} type={f.field_type} options={f.options} compact />

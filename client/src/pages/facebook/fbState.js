@@ -7,13 +7,21 @@ const mk = () => ({
   issueImage: null,
 });
 
+const mkPerformance = () => ({
+  days7: { leads: '', cpl: '' },
+  days3: { leads: '', cpl: '' },
+});
+
 export const fbState = {
   buyer: '',
   date: '',
   account: '',
   currentQuestion: 0,
-  sessionId: null,        // set after first save; used to PATCH on edit
+  sessionId: null,
   items: Array.from({ length: 4 }, mk),
+  performanceData: mkPerformance(),
+  flaggedAds: [],           // array of { ad_name, campaign_name, action_taken, notes }
+  flaggedAdsAnswered: null, // null | 'yes' | 'no'
 };
 
 export function resetFbState() {
@@ -23,4 +31,7 @@ export function resetFbState() {
   fbState.currentQuestion = 0;
   fbState.sessionId = null;
   fbState.items = Array.from({ length: 4 }, mk);
+  fbState.performanceData = mkPerformance();
+  fbState.flaggedAds = [];
+  fbState.flaggedAdsAnswered = null;
 }
