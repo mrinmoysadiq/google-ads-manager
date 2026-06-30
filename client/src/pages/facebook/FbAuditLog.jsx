@@ -14,7 +14,10 @@ function fmtDate(d) {
 }
 
 function isoDate(d) {
-  return d.toISOString().slice(0, 10)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 function daysAgo(n) {
@@ -128,11 +131,14 @@ export default function FbAuditLog() {
     ? adAccounts.filter(a => a.name === selectedAccount.value)
     : adAccounts
 
-  // Days in range (for calendar view)
+  // Days in range (for calendar view) — today is always the first column
   const days = (() => {
-    if (!dateFrom && !dateTo) return lastNDays(7)
+    const todayD = today()
     const start = dateFrom ? new Date(dateFrom + 'T00:00:00') : new Date()
-    const end = dateTo ? new Date(dateTo + 'T00:00:00') : new Date()
+    // End is whichever is later: dateTo or today (so today always shows)
+    const endDate = dateTo ? new Date(dateTo + 'T00:00:00') : new Date()
+    const todayDate = new Date(todayD + 'T00:00:00')
+    const end = endDate > todayDate ? endDate : todayDate
     const result = []
     const cur = new Date(end)
     while (cur >= start && result.length < 60) {
@@ -152,7 +158,7 @@ export default function FbAuditLog() {
     fbState.account = session.ad_account
     fbState.sessionId = session.id
     // Map answers back into fbState items
-    const QUESTION_COUNT = 4
+    const QUESTION_COUNT = 3
     session.answers.slice(0, QUESTION_COUNT).forEach((a, i) => {
       fbState.items[i].answer = a.answer
       fbState.items[i].hasIssue = a.hasIssue
@@ -299,46 +305,9 @@ export default function FbAuditLog() {
 // ── Calendar / matrix view ────────────────────────────────────────────────────
 
 function CalendarView({ accounts, days, sessionMap, todayStr, onViewSession, onEditSession }) {
-  // Missing audits summary (only past days, not future)
-  const pastDays = days.filter(d => d <= todayStr)
-  const missing = []
-  accounts.forEach(acct => {
-    pastDays.forEach(day => {
-      if (!sessionMap[day]?.[acct.name]) missing.push({ account: acct.name, date: day })
-    })
-  })
 
   return (
     <>
-      {/* Missing alerts strip */}
-      {missing.length > 0 && (
-        <div className="rounded-xl p-4 mb-5" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
-          <div className="flex items-center gap-2 mb-3">
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="#ef4444">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-            </svg>
-            <span className="text-sm font-semibold" style={{ color: '#ef4444' }}>{missing.length} Missing Audit{missing.length > 1 ? 's' : ''}</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {missing.slice(0, 12).map((m, i) => (
-              <Link key={i} to="/facebook"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium"
-                style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}
-              >
-                <span>{m.account}</span>
-                <span style={{ color: 'rgba(239,68,68,0.6)' }}>·</span>
-                <span>{fmtDate(m.date)}</span>
-              </Link>
-            ))}
-            {missing.length > 12 && (
-              <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs" style={{ color: '#8a8680' }}>
-                +{missing.length - 12} more
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Matrix table */}
       <div className="rounded-xl overflow-hidden" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)' }}>
         <div className="overflow-x-auto">
