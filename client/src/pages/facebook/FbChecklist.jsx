@@ -217,11 +217,33 @@ function PerformanceCard({ sessionDate, rerender }) {
 }
 
 // ─── Flagged Ads Card (index 5) ───────────────────────────────────────────────
-function mkAd() { return { ad_name: '', campaign_name: '', action_taken: '', notes: '' } }
+function mkAd() { return { ad_name: '', campaign_name: '', action_taken: '', notes: '', screenshot: null } }
 
 function FlaggedAdsCard({ rerender }) {
   const answered = fbState.flaggedAdsAnswered
   const ads = fbState.flaggedAds
+  const [focusedAdIdx, setFocusedAdIdx] = useState(0)
+
+  // Paste handler — pastes into the focused ad entry
+  useEffect(() => {
+    if (answered !== 'yes') return
+    const handler = async (e) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault()
+          const blob = item.getAsFile()
+          const b64 = await readFileAsBase64(blob)
+          const idx = Math.min(focusedAdIdx, fbState.flaggedAds.length - 1)
+          if (idx >= 0) { fbState.flaggedAds[idx].screenshot = b64; rerender() }
+          break
+        }
+      }
+    }
+    document.addEventListener('paste', handler)
+    return () => document.removeEventListener('paste', handler)
+  }, [answered, focusedAdIdx, rerender])
 
   function setAnswer(val) {
     fbState.flaggedAdsAnswered = val
@@ -235,7 +257,7 @@ function FlaggedAdsCard({ rerender }) {
     rerender()
   }
 
-  function addAd() { fbState.flaggedAds.push(mkAd()); rerender() }
+  function addAd() { fbState.flaggedAds.push(mkAd()); setFocusedAdIdx(fbState.flaggedAds.length - 1); rerender() }
   function removeAd(idx) { fbState.flaggedAds.splice(idx, 1); rerender() }
 
   const complete = isFlagsComplete()
@@ -278,7 +300,7 @@ function FlaggedAdsCard({ rerender }) {
                 )}
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-3" onClick={() => setFocusedAdIdx(idx)}>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-[#8a8680] uppercase tracking-wider mb-1.5">Ad Name <span className="text-[#ef4444]">*</span></label>
@@ -325,6 +347,33 @@ function FlaggedAdsCard({ rerender }) {
                     rows={2}
                     className="w-full bg-[#1b1b1b] border border-white/[0.1] rounded-lg px-3 py-2.5 text-[#c5c1b9] text-sm placeholder-[#555] outline-none focus:border-[#575ECF] transition-colors resize-none"
                   />
+                </div>
+
+                {/* Screenshot */}
+                <div>
+                  <label className="block text-xs font-medium text-[#8a8680] uppercase tracking-wider mb-1.5">Screenshot</label>
+                  {ad.screenshot ? (
+                    <div className="relative inline-block">
+                      <img src={ad.screenshot} alt="Screenshot" className="max-h-32 rounded-lg border border-white/10" />
+                      <button onClick={e => { e.stopPropagation(); setAdField(idx, 'screenshot', null) }}
+                        className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs"
+                        style={{ background: 'rgba(0,0,0,0.7)', color: '#fff' }}>×</button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => setFocusedAdIdx(idx)}
+                      className="flex flex-col items-center justify-center rounded-lg py-3 cursor-pointer transition-all"
+                      style={{
+                        border: `1px dashed ${focusedAdIdx === idx ? 'rgba(87,94,207,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                        background: focusedAdIdx === idx ? 'rgba(87,94,207,0.05)' : 'transparent',
+                      }}
+                    >
+                      <span className="text-lg mb-0.5">📋</span>
+                      <span className="text-xs" style={{ color: focusedAdIdx === idx ? '#a5aaee' : '#555' }}>
+                        {focusedAdIdx === idx ? 'Ready — ⌘V / Ctrl+V to paste' : 'Click here then ⌘V / Ctrl+V to paste'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
