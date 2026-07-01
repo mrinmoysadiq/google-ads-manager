@@ -3,7 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcryptjs = require('bcryptjs');
 const { db } = require('../db/database');
-const SECRET = process.env.JWT_SECRET || 'infinix_secret_key';
+const SECRET = process.env.JWT_SECRET || 'infinix_secret_key_v2';
 
 function adminOnly(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];

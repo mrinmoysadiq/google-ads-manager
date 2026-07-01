@@ -3,7 +3,7 @@ const router = express.Router();
 const { db } = require('../db/database');
 const { Parser } = require('json2csv');
 const jwt = require('jsonwebtoken');
-const SECRET = process.env.JWT_SECRET || 'infinix_secret_key';
+const SECRET = process.env.JWT_SECRET || 'infinix_secret_key_v2';
 
 // Decode the JWT from Authorization header and return the app_user row
 function getRequestUser(req) {
