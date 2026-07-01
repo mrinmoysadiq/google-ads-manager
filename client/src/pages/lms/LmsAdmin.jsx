@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import api from '../../utils/lmsApi'
+import { fmtDate } from '../../utils/dates'
 import toast from 'react-hot-toast'
 import Select from 'react-select'
 
@@ -516,10 +517,7 @@ const STAGE_COLORS = {
   'Assessed': '#3b82f6', 'Needs Revision': '#ef4444', 'Completed': '#22c55e',
 }
 
-function formatDate(str) {
-  if (!str) return ''
-  return new Date(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
+const formatDate = fmtDate
 
 function isOverdue(topic) {
   if (!topic.due_date || topic.stage === 'Completed') return false

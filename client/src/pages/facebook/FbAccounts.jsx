@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { getUser } from '../../utils/auth';
+import { todayLocal } from '../../utils/dates';
 
 const fb = {
   get: (path, cfg) => api.get(`/facebook${path}`, cfg),
@@ -1035,8 +1036,8 @@ function ManageAccounts({ accounts, fields, onSaved }) {
 // ─── Health status helper ─────────────────────────────────────────────────────
 function getHealth(lastAuditDate) {
   if (!lastAuditDate) return { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', label: 'Never', dot: '#ef4444' };
-  const today = new Date().toISOString().slice(0, 10);
-  const days = Math.floor((new Date(today) - new Date(lastAuditDate)) / 86400000);
+  const today = todayLocal();
+  const days = Math.floor((new Date(today) - new Date(lastAuditDate + 'T00:00:00')) / 86400000);
   if (days === 0) return { color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: 'Today', dot: '#22c55e' };
   if (days === 1) return { color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: 'Yesterday', dot: '#22c55e' };
   if (days <= 7) return { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: `${days}d ago`, dot: '#f59e0b' };
@@ -1072,7 +1073,12 @@ export default function FbAccounts() {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    fetchAll();
+    const onFocus = () => fetchAll();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchAll]);
 
   const activeFields = fields.filter(f => f.active);
   const pinnedFields = activeFields.filter(f => f.pinned);

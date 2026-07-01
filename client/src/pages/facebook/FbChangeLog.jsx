@@ -4,6 +4,7 @@ import Select from 'react-select'
 import toast from 'react-hot-toast'
 import api from '../../utils/api'
 import { getUser } from '../../utils/auth'
+import { fmtDate as formatDate, todayLocal } from '../../utils/dates'
 
 const CHANGE_LEVELS = [
   { value: 'Ad Level', label: 'Ad Level' },
@@ -32,9 +33,9 @@ const LEVEL_COLORS = {
 }
 
 // Quick date preset helpers
-function today() { return new Date().toISOString().slice(0, 10) }
 function daysAgo(n) {
-  const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10)
+  const d = new Date(); d.setDate(d.getDate() - n)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 function startOfMonth() {
   const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
@@ -45,20 +46,20 @@ function startOfLastMonth() {
 }
 function endOfLastMonth() {
   const d = new Date(); d.setDate(0)
-  return d.toISOString().slice(0, 10)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
 const DATE_PRESETS = [
-  { label: 'Today', get: () => ({ date_from: today(), date_to: today() }) },
-  { label: 'Last 7 days', get: () => ({ date_from: daysAgo(6), date_to: today() }) },
-  { label: 'Last 30 days', get: () => ({ date_from: daysAgo(29), date_to: today() }) },
-  { label: 'This month', get: () => ({ date_from: startOfMonth(), date_to: today() }) },
+  { label: 'Today', get: () => ({ date_from: todayLocal(), date_to: todayLocal() }) },
+  { label: 'Last 7 days', get: () => ({ date_from: daysAgo(6), date_to: todayLocal() }) },
+  { label: 'Last 30 days', get: () => ({ date_from: daysAgo(29), date_to: todayLocal() }) },
+  { label: 'This month', get: () => ({ date_from: startOfMonth(), date_to: todayLocal() }) },
   { label: 'Last month', get: () => ({ date_from: startOfLastMonth(), date_to: endOfLastMonth() }) },
   { label: 'All time', get: () => ({ date_from: '', date_to: '' }) },
 ]
 
 const defaultForm = () => ({
-  date: today(),
+  date: todayLocal(),
   change_level: null,
   media_buyer: null,
   ad_account: null,
@@ -127,13 +128,6 @@ const dateInputStyle = {
   outline: 'none',
 }
 
-function formatDate(d) {
-  if (!d) return ''
-  try {
-    const [y, m, day] = d.split('-')
-    return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch { return d }
-}
 
 function countActiveFilters(f) {
   let n = 0

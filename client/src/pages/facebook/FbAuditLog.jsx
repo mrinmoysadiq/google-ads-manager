@@ -3,14 +3,7 @@ import { Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
 import api from '../../utils/api'
-
-function fmtDate(d) {
-  if (!d) return ''
-  try {
-    const [y, m, day] = d.split('-')
-    return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch { return d }
-}
+import { fmtDate, todayLocal, daysAgoLocal } from '../../utils/dates'
 
 function isoDate(d) {
   const y = d.getFullYear()
@@ -23,18 +16,16 @@ function daysAgo(n) {
   const d = new Date(); d.setDate(d.getDate() - n); return isoDate(d)
 }
 
-function today() { return isoDate(new Date()) }
-
 // Last N days as array of date strings (newest first)
 function lastNDays(n) {
   return Array.from({ length: n }, (_, i) => daysAgo(i))
 }
 
 const DATE_PRESETS = [
-  { label: 'Last 7 days', from: () => daysAgo(6), to: () => today() },
-  { label: 'Last 14 days', from: () => daysAgo(13), to: () => today() },
-  { label: 'Last 30 days', from: () => daysAgo(29), to: () => today() },
-  { label: 'This month', from: () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` }, to: () => today() },
+  { label: 'Last 7 days', from: () => daysAgoLocal(6), to: () => todayLocal() },
+  { label: 'Last 14 days', from: () => daysAgoLocal(13), to: () => todayLocal() },
+  { label: 'Last 30 days', from: () => daysAgoLocal(29), to: () => todayLocal() },
+  { label: 'This month', from: () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` }, to: () => todayLocal() },
   { label: 'All time', from: () => '', to: () => '' },
 ]
 
@@ -62,8 +53,8 @@ export default function FbAuditLog() {
   const [selectedAccount, setSelectedAccount] = useState(null)
   const [selectedBuyer, setSelectedBuyer] = useState(null)
   const [preset, setPreset] = useState('Last 7 days')
-  const [dateFrom, setDateFrom] = useState(daysAgo(6))
-  const [dateTo, setDateTo] = useState(today())
+  const [dateFrom, setDateFrom] = useState(daysAgoLocal(6))
+  const [dateTo, setDateTo] = useState(todayLocal())
 
   const [selectedSession, setSelectedSession] = useState(null)
   const [viewMode, setViewMode] = useState('calendar') // 'calendar' | 'table'
@@ -130,7 +121,7 @@ export default function FbAuditLog() {
 
   // Days in range (for calendar view) — today is always the first column
   const days = (() => {
-    const todayD = today()
+    const todayD = todayLocal()
     const start = dateFrom ? new Date(dateFrom + 'T00:00:00') : new Date()
     // End is whichever is later: dateTo or today (so today always shows)
     const endDate = dateTo ? new Date(dateTo + 'T00:00:00') : new Date()
@@ -145,7 +136,7 @@ export default function FbAuditLog() {
     return result
   })()
 
-  const todayStr = today()
+  const todayStr = todayLocal()
 
   const dateInputStyle = {
     backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)',
@@ -302,7 +293,7 @@ function CalendarView({ accounts, days, sessionMap, todayStr, onViewSession }) {
                 </th>
                 {days.map(d => (
                   <th key={d} className="px-2 py-3 text-center text-xs font-medium whitespace-nowrap" style={{ color: d === todayStr ? '#575ECF' : '#8a8680', minWidth: '80px' }}>
-                    <div>{new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                    <div>{fmtDate(d).slice(0, -3)}</div>
                     {d === todayStr && <div className="text-xs" style={{ color: '#575ECF', fontSize: '10px' }}>Today</div>}
                   </th>
                 ))}

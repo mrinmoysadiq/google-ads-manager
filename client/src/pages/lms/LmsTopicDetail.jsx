@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../utils/lmsApi'
+import { fmtDate } from '../../utils/dates'
 import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import RichTextEditor from './components/RichTextEditor'
@@ -45,10 +46,7 @@ function StarRating({ value, onChange, readOnly = false }) {
   )
 }
 
-function formatDate(str) {
-  if (!str) return ''
-  return new Date(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
+const formatDate = fmtDate
 
 function isOverdue(topic) {
   if (!topic.due_date || topic.stage === 'Completed') return false

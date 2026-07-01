@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../../utils/lmsApi'
+import { fmtDate } from '../../utils/dates'
 import toast from 'react-hot-toast'
 
 const DEFAULT_STAGES = ['Assigned', 'In Progress', 'Notes Submitted', 'Assessed', 'Needs Revision', 'Completed']
@@ -29,10 +30,7 @@ function StageBadge({ stage }) {
   )
 }
 
-function formatDate(str) {
-  if (!str) return ''
-  return new Date(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
+const formatDate = fmtDate
 
 function isOverdue(topic) {
   if (!topic.due_date || topic.stage === 'Completed') return false

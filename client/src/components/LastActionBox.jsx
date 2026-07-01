@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getLastAction } from '../utils/api'
+import { fmtDate } from '../utils/dates'
 
 export default function LastActionBox({ account, section }) {
   const [lastAction, setLastAction] = useState(undefined) // undefined = loading, null = no data
@@ -30,20 +31,6 @@ export default function LastActionBox({ account, section }) {
     )
   }
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return ''
-    try {
-      const [year, month, day] = dateStr.split('-')
-      return new Date(year, month - 1, day).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    } catch {
-      return dateStr
-    }
-  }
-
   return (
     <div className="rounded-lg p-4 mb-5" style={{ backgroundColor: '#242424', border: '2px solid rgba(87,94,207,0.3)' }}>
       <div className="flex items-start gap-2">
@@ -58,7 +45,7 @@ export default function LastActionBox({ account, section }) {
           </p>
           {lastAction ? (
             <p className="text-sm leading-relaxed" style={{ color: '#c5c1b9' }}>
-              By <strong>{lastAction.team_member}</strong> on {formatDate(lastAction.date)}
+              By <strong>{lastAction.team_member}</strong> on {fmtDate(lastAction.date)}
               {lastAction.changes_made_note && (
                 <>: {lastAction.changes_made_note.substring(0, 200)}{lastAction.changes_made_note.length > 200 ? '…' : ''}</>
               )}

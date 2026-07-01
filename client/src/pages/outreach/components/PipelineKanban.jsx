@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { fmtDate as formatDate, todayLocal } from '../../../utils/dates'
 
 const DEFAULT_STATUS_COLORS = {
   'New Lead':                        { bg: 'rgba(87,94,207,0.15)',  color: '#575ECF',  dot: '#575ECF'  },
@@ -31,18 +32,13 @@ const NOT_OVERDUE_STATUSES = ['Closed / Booked as Client', 'Disqualified / Dead'
 function isOverdue(lead) {
   if (!lead.next_followup_date) return false
   if (NOT_OVERDUE_STATUSES.includes(lead.status)) return false
-  return lead.next_followup_date < new Date().toISOString().slice(0, 10)
+  return lead.next_followup_date < todayLocal()
 }
 
 function daysOverdue(dateStr) {
   return Math.floor((new Date() - new Date(dateStr)) / 86400000)
 }
 
-function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const [y, m, d] = dateStr.split('-')
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
 
 function ChannelPills({ channels }) {
   if (!channels || channels.length === 0) return null

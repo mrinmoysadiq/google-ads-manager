@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { fbState, resetFbState } from './fbState'
+import { fmtDate } from '../../utils/dates'
 
 const QUESTIONS = [
   'Is the ad account active?',
@@ -8,11 +9,6 @@ const QUESTIONS = [
   'Are leads syncing from Facebook to GHL correctly?',
 ]
 
-function fmtDate(d) {
-  if (!d) return ''
-  const dt = new Date(d + 'T00:00:00')
-  return dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-}
 
 export default function FbComplete() {
   const navigate = useNavigate()

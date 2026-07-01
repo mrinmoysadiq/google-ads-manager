@@ -1,3 +1,4 @@
+import { fmtDate } from '../utils/dates'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { getSession, getSlideResponses } from '../utils/api'
@@ -74,20 +75,7 @@ export default function SessionComplete() {
       })
   }
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return ''
-    try {
-      const [year, month, day] = dateStr.split('-')
-      return new Date(year, month - 1, day).toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
-    } catch {
-      return dateStr
-    }
-  }
+  const formatDate = fmtDate
 
   if (loading) {
     return (

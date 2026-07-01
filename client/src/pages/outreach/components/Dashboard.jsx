@@ -5,6 +5,7 @@ import {
   getDashboardCards, createDashboardCard, updateDashboardCard, deleteDashboardCard,
   getActivity, getActivityLeads,
 } from '../../../utils/outreachApi';
+import { fmtDate, fmtDateTime } from '../../../utils/dates';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -180,14 +181,6 @@ function Spinner() {
   );
 }
 
-function fmtDateTime(dt) {
-  if (!dt) return '—';
-  try {
-    const d = new Date(dt);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' +
-      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  } catch { return dt; }
-}
 
 const STATUS_PILL_COLORS = {
   'New Lead':                    { bg: 'rgba(87,94,207,0.15)',  color: '#575ECF' },

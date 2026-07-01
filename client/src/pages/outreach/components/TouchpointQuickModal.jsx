@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { todayLocal } from '../../../utils/dates'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
 
@@ -37,7 +38,7 @@ const selectStyles = {
 
 // Called with a fresh key each open so form state always resets
 export default function TouchpointQuickModal({ touchpointNumber, initialData, onSave, onClose }) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayLocal()
   const [fields, setFields] = useState({
     date: initialData?.date || today,
     channel: initialData?.channel || '',

@@ -4,6 +4,7 @@ import Select from 'react-select'
 import toast from 'react-hot-toast'
 import { useDebounce } from '../../hooks/useDebounce'
 import { getUser, isAdmin } from '../../utils/auth'
+import { todayLocal } from '../../utils/dates'
 import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, upsertTouchpoint, createLeadResponse } from '../../utils/outreachApi'
 import LeadDrawer from './components/LeadDrawer'
 import PipelineTable from './components/PipelineTable'
@@ -136,7 +137,7 @@ export default function OutreachHome() {
         setLeads(data.data)
         setPagination({ page: data.page, total: data.total, totalPages: data.totalPages })
         // Count overdue in current result set for badge
-        const today = new Date().toISOString().slice(0, 10)
+        const today = todayLocal()
         const overdue = data.data.filter(l => l.next_followup_date && l.next_followup_date < today && !NOT_OVERDUE_STATUSES.includes(l.status)).length
         setOverdueCount(overdue)
       })

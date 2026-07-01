@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../../utils/api'
+import { fmtDate } from '../../utils/dates'
 
 const fb = {
   get: (path, cfg) => api.get(`/facebook${path}`, cfg),
@@ -9,13 +10,6 @@ const fb = {
   delete: (path, data) => api.delete(`/facebook${path}`, { data }),
 }
 
-function fmtDate(d) {
-  if (!d) return '—'
-  try {
-    const [y, m, day] = d.split('T')[0].split('-')
-    return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch { return d }
-}
 
 function daysLeft(deletedAt) {
   const del = new Date(deletedAt)

@@ -14,6 +14,7 @@ import {
 } from '../../../utils/outreachApi'
 import TouchpointQuickModal from './TouchpointQuickModal'
 import ResponseQuickModal from './ResponseQuickModal'
+import { fmtDate, fmtDateTime, todayLocal } from '../../../utils/dates'
 
 function getTouchpointNumber(status) {
   const m = status && status.match(/^Touchpoint (\d+)$/)
@@ -264,29 +265,6 @@ function SavedIndicator({ show }) {
   )
 }
 
-// ─── Helper: format date ────────────────────────────────────────────────────────
-
-function fmtDate(iso) {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch {
-    return iso
-  }
-}
-
-function fmtDateTime(iso) {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleString('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric',
-      hour: 'numeric', minute: '2-digit',
-    })
-  } catch {
-    return iso
-  }
-}
-
 // ─── Sub-component: StatusBadge with dropdown ────────────────────────────────
 
 function StatusBadge({ status, onChange, stages = [] }) {
@@ -370,7 +348,7 @@ function StatusBadge({ status, onChange, stages = [] }) {
 // ─── Sub-component: TouchpointSection ────────────────────────────────────────
 
 function TouchpointSection({ leadId, number, initialData, defaultOpen, onStageChange }) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayLocal()
   const [open, setOpen] = useState(defaultOpen || false)
   const [fields, setFields] = useState({
     date: initialData?.date || today,
@@ -610,7 +588,7 @@ function TouchpointSection({ leadId, number, initialData, defaultOpen, onStageCh
 // ─── Sub-component: ResponsesSection ─────────────────────────────────────────
 
 function ResponsesSection({ leadId, initialResponses = [] }) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayLocal()
   const [responses, setResponses] = useState(initialResponses)
   const [form, setForm] = useState({ date: today, channel: '', message_body: '', notes: '' })
   const [saving, setSaving] = useState(false)

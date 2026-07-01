@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
+import { todayLocal } from '../../../utils/dates'
 
 const CHANNELS = ['LinkedIn', 'Email', 'WhatsApp', 'Facebook', 'Instagram', 'SMS', 'Website Form', 'Other']
 
@@ -37,7 +38,7 @@ const selectStyles = {
 
 // Called with a fresh key each open so form state always resets
 export default function ResponseQuickModal({ newStatus, onSave, onClose }) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayLocal()
   const [fields, setFields] = useState({
     date: today,
     channel: '',

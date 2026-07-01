@@ -1,3 +1,4 @@
+import { fmtDate, todayLocal } from './utils/dates'
 import { useState, useEffect } from 'react'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
@@ -105,7 +106,7 @@ const DETAIL_FIELD_LABELS = {
 const defaultManualForm = () => ({
   account_name: null,
   team_member: null,
-  date: new Date().toISOString().slice(0, 10),
+  date: todayLocal(),
   section: null,
   change_type: null,
   changes_made_note: '',
@@ -275,13 +276,7 @@ export default function ChangeLog() {
     }
   }
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return ''
-    try {
-      const [year, month, day] = dateStr.split('-')
-      return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    } catch { return dateStr }
-  }
+  const formatDate = fmtDate
 
   const selectStyles = {
     control: (base, state) => ({

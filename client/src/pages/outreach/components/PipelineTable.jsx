@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Select from 'react-select';
+import { fmtDate as formatDate } from '../../../utils/dates';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -68,12 +69,6 @@ function getFollowupColor(dateStr, status) {
   return diffDays < 3 ? '#f59e0b' : '#ef4444';
 }
 
-function formatDate(dateStr) {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  if (isNaN(d)) return '—';
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 
 // ─── react-select shared dark theme ──────────────────────────────────────────
 
