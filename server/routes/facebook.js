@@ -73,30 +73,56 @@ function enrichAccountWithFieldValues(account) {
 
 router.get('/ad-accounts', (req, res) => {
   try {
-    const { all } = req.query;
-    const whereClause = all === '1' ? 'WHERE a.deleted_at IS NULL' : 'WHERE a.active = 1 AND a.deleted_at IS NULL';
+    const { all, my_only } = req.query;
+    let conditions = ['a.deleted_at IS NULL'];
+    if (all !== '1') conditions.push('a.active = 1');
+
+    // Non-admin: filter to accounts explicitly assigned to this buyer
+    if (my_only === '1') {
+      const token = (req.headers.authorization || '').replace('Bearer ', '');
+      let buyerId = null;
+      if (token) {
+        try {
+          const jwt = require('jsonwebtoken');
+          const SECRET = process.env.JWT_SECRET || 'infinix_secret_key_v2';
+          const payload = jwt.verify(token, SECRET);
+          const buyer = db.prepare('SELECT id FROM fb_media_buyers WHERE name = ? AND active = 1').get(payload.username || payload.name || '');
+          if (buyer) buyerId = buyer.id;
+        } catch { /* invalid token */ }
+      }
+      if (buyerId) {
+        conditions.push(`a.id IN (SELECT account_id FROM fb_account_buyers WHERE buyer_id = ${buyerId})`);
+      } else {
+        return res.json([]); // no matching buyer → no accounts
+      }
+    }
+
+    const where = 'WHERE ' + conditions.join(' AND ');
     const accounts = db.prepare(`
       SELECT a.*,
         (SELECT MAX(s.date) FROM fb_audit_sessions s WHERE s.ad_account = a.name) AS last_audit_date,
         (SELECT s.performance_data FROM fb_audit_sessions s WHERE s.ad_account = a.name AND s.performance_data IS NOT NULL ORDER BY s.date DESC, s.created_at DESC LIMIT 1) AS last_performance_data,
         (SELECT s.id FROM fb_audit_sessions s WHERE s.ad_account = a.name AND s.performance_data IS NOT NULL ORDER BY s.date DESC, s.created_at DESC LIMIT 1) AS last_performance_session_id
       FROM fb_ad_accounts a
-      ${whereClause}
+      ${where}
       ORDER BY a.name ASC
     `).all().map(a => {
       const enriched = enrichAccountWithFieldValues(a);
       return { ...enriched, last_performance_data: a.last_performance_data ? JSON.parse(a.last_performance_data) : null };
     });
 
-    // Attach assigned buyers (auto-matched from audit history) — single query for all accounts
-    const buyerRows = db.prepare('SELECT DISTINCT ad_account, media_buyer FROM fb_audit_sessions WHERE media_buyer IS NOT NULL').all();
+    // Attach assigned buyers from junction table
+    const buyerRows = db.prepare(`
+      SELECT ab.account_id, b.name FROM fb_account_buyers ab
+      JOIN fb_media_buyers b ON b.id = ab.buyer_id
+    `).all();
     const buyerMap = {};
     buyerRows.forEach(r => {
-      if (!buyerMap[r.ad_account]) buyerMap[r.ad_account] = [];
-      if (!buyerMap[r.ad_account].includes(r.media_buyer)) buyerMap[r.ad_account].push(r.media_buyer);
+      if (!buyerMap[r.account_id]) buyerMap[r.account_id] = [];
+      buyerMap[r.account_id].push(r.name);
     });
 
-    res.json(accounts.map(a => ({ ...a, assigned_buyers: buyerMap[a.name] || [] })));
+    res.json(accounts.map(a => ({ ...a, assigned_buyers: buyerMap[a.id] || [] })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch ad accounts' });
@@ -152,6 +178,38 @@ router.delete('/ad-accounts/:id', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete ad account' });
+  }
+});
+
+// ─── ACCOUNT BUYER ASSIGNMENTS ───────────────────────────────────────────────
+
+router.post('/ad-accounts/:id/buyers', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { buyer_id } = req.body;
+    if (!buyer_id) return res.status(400).json({ error: 'buyer_id required' });
+    db.prepare('INSERT OR IGNORE INTO fb_account_buyers (account_id, buyer_id) VALUES (?, ?)').run(id, buyer_id);
+    const buyers = db.prepare(
+      'SELECT b.id, b.name FROM fb_account_buyers ab JOIN fb_media_buyers b ON b.id = ab.buyer_id WHERE ab.account_id = ? ORDER BY b.name ASC'
+    ).all(id);
+    res.json(buyers);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to assign buyer' });
+  }
+});
+
+router.delete('/ad-accounts/:id/buyers/:buyerId', (req, res) => {
+  try {
+    const { id, buyerId } = req.params;
+    db.prepare('DELETE FROM fb_account_buyers WHERE account_id = ? AND buyer_id = ?').run(id, buyerId);
+    const buyers = db.prepare(
+      'SELECT b.id, b.name FROM fb_account_buyers ab JOIN fb_media_buyers b ON b.id = ab.buyer_id WHERE ab.account_id = ? ORDER BY b.name ASC'
+    ).all(id);
+    res.json(buyers);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to remove buyer' });
   }
 });
 
@@ -299,10 +357,10 @@ router.get('/ad-accounts/:id/detail', (req, res) => {
 
     const enriched = enrichAccountWithFieldValues(account);
 
-    // Auto-match: distinct media buyers who have audited this account
+    // Assigned buyers from junction table
     const buyers = db.prepare(
-      'SELECT DISTINCT media_buyer FROM fb_audit_sessions WHERE ad_account = ? AND media_buyer IS NOT NULL ORDER BY media_buyer ASC'
-    ).all(account.name).map(r => r.media_buyer);
+      'SELECT b.id, b.name FROM fb_account_buyers ab JOIN fb_media_buyers b ON b.id = ab.buyer_id WHERE ab.account_id = ? ORDER BY b.name ASC'
+    ).all(id);
 
     // Recent audit sessions (last 20)
     const auditSessions = db.prepare(
@@ -361,6 +419,14 @@ router.post('/audit-sessions', (req, res) => {
       flagged_ads ? JSON.stringify(flagged_ads) : null
     );
     if (flagged_ads?.length) autoLogFlaggedAds(flagged_ads, { date, media_buyer, ad_account });
+    // Auto-assign buyer to account in junction table
+    if (media_buyer) {
+      try {
+        const acct = db.prepare('SELECT id FROM fb_ad_accounts WHERE name = ?').get(ad_account);
+        const buyer = db.prepare('SELECT id FROM fb_media_buyers WHERE name = ?').get(media_buyer);
+        if (acct && buyer) db.prepare('INSERT OR IGNORE INTO fb_account_buyers (account_id, buyer_id) VALUES (?, ?)').run(acct.id, buyer.id);
+      } catch { /* ignore */ }
+    }
     const row = db.prepare('SELECT * FROM fb_audit_sessions WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ ...row, answers: JSON.parse(row.answers) });
   } catch (err) {

@@ -311,8 +311,17 @@ function CalendarView({ accounts, days, sessionMap, todayStr, onViewSession }) {
             <tbody>
               {accounts.map((acct, ai) => (
                 <tr key={acct.id} style={{ backgroundColor: ai % 2 === 0 ? '#242424' : '#2a2a2a', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <td className="px-4 py-3 font-medium sticky left-0 z-10 text-sm" style={{ color: '#c5c1b9', backgroundColor: ai % 2 === 0 ? '#242424' : '#2a2a2a' }}>
-                    {acct.name}
+                  <td className="px-4 py-3 sticky left-0 z-10 text-sm" style={{ backgroundColor: ai % 2 === 0 ? '#242424' : '#2a2a2a' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <span style={{ color: '#c5c1b9', fontWeight: 600 }}>{acct.name}</span>
+                      {acct.assigned_buyers?.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                          {acct.assigned_buyers.map(name => (
+                            <span key={name} style={{ background: 'rgba(87,94,207,0.1)', color: '#a5aaee', borderRadius: 20, padding: '1px 7px', fontSize: 10, fontWeight: 500 }}>{name}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   {days.map(d => {
                     const session = sessionMap[d]?.[acct.name]
@@ -332,7 +341,7 @@ function CalendarView({ accounts, days, sessionMap, todayStr, onViewSession }) {
                           <button onClick={() => onViewSession(session)}
                             className="w-8 h-8 mx-auto rounded-lg flex items-center justify-center transition-all group relative"
                             style={{ backgroundColor: session.issue_count > 0 ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.15)' }}
-                            title={session.issue_count > 0 ? `${session.issue_count} issue(s) — click to view` : 'All clear — click to view'}
+                            title={`${session.media_buyer ? session.media_buyer + ' · ' : ''}${session.issue_count > 0 ? `${session.issue_count} issue(s)` : 'All clear'} — click to view`}
                             onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
                             onMouseLeave={e => e.currentTarget.style.opacity = '1'}
                           >

@@ -403,6 +403,74 @@ function AccountDrawer({ accountId, fields, onClose, onFieldsSaved, onDelete }) 
   );
 }
 
+function BuyerAssignPanel({ accountId, initialBuyers }) {
+  const [buyers, setBuyers] = useState(initialBuyers || []);
+  const [allBuyers, setAllBuyers] = useState([]);
+  const [adding, setAdding] = useState(false);
+  const [selectedId, setSelectedId] = useState('');
+
+  useEffect(() => {
+    fb.get('/media-buyers').then(r => setAllBuyers(r.data || [])).catch(() => {});
+  }, []);
+
+  const assignedIds = new Set(buyers.map(b => b.id));
+  const available = allBuyers.filter(b => !assignedIds.has(b.id));
+
+  async function assign() {
+    if (!selectedId) return;
+    try {
+      const { data } = await fb.post(`/ad-accounts/${accountId}/buyers`, { buyer_id: selectedId });
+      setBuyers(data);
+      setAdding(false);
+      setSelectedId('');
+    } catch { toast.error('Failed to assign buyer'); }
+  }
+
+  async function remove(buyerId) {
+    try {
+      const { data } = await fb.delete(`/ad-accounts/${accountId}/buyers/${buyerId}`);
+      setBuyers(data);
+    } catch { toast.error('Failed to remove buyer'); }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <p style={{ ...sectionLabel, margin: 0 }}>Assigned Media Buyers</p>
+        {!adding && available.length > 0 && (
+          <button onClick={() => setAdding(true)} style={{ ...smallBtn, fontSize: 12, color: '#575ECF', borderColor: 'rgba(87,94,207,0.3)' }}>+ Assign</button>
+        )}
+      </div>
+
+      {adding && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          <select value={selectedId} onChange={e => setSelectedId(e.target.value)}
+            style={{ flex: 1, background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '7px 10px', color: '#c5c1b9', fontSize: 13 }}>
+            <option value="">Select buyer…</option>
+            {available.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <button onClick={assign} disabled={!selectedId} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '7px 14px', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13, opacity: selectedId ? 1 : 0.4 }}>Add</button>
+          <button onClick={() => { setAdding(false); setSelectedId(''); }} style={{ ...smallBtn, fontSize: 13 }}>Cancel</button>
+        </div>
+      )}
+
+      {buyers.length > 0 ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {buyers.map(b => (
+            <span key={b.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(87,94,207,0.12)', color: '#a5aaee', border: '1px solid rgba(87,94,207,0.25)', borderRadius: 20, padding: '4px 10px 4px 12px', fontSize: 13, fontWeight: 500 }}>
+              {b.name}
+              <button onClick={() => remove(b.id)} title="Remove" style={{ background: 'none', border: 'none', color: '#575ECF', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.6 }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '1'} onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}>×</button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p style={{ color: '#8a8680', fontSize: 13, margin: 0 }}>No buyers assigned — click + Assign to add one.</p>
+      )}
+    </div>
+  );
+}
+
 function DrawerInfo({ data, fields, onFieldsSaved }) {
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState({ notes: data.notes || '', custom_fields: { ...(data.custom_fields || {}) } });
@@ -426,17 +494,8 @@ function DrawerInfo({ data, fields, onFieldsSaved }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Assigned buyers */}
-      <div>
-        <p style={sectionLabel}>Assigned Media Buyers</p>
-        {data.assigned_buyers?.length ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {data.assigned_buyers.map(b => (
-              <span key={b} style={{ background: 'rgba(87,94,207,0.12)', color: '#a5aaee', border: '1px solid rgba(87,94,207,0.25)', borderRadius: 20, padding: '4px 12px', fontSize: 13, fontWeight: 500 }}>{b}</span>
-            ))}
-          </div>
-        ) : <p style={{ color: '#8a8680', fontSize: 13, margin: 0 }}>No audit sessions yet — buyers will appear here after they run their first daily checklist for this account.</p>}
-      </div>
+      {/* Assigned buyers — editable */}
+      <BuyerAssignPanel accountId={data.id} initialBuyers={data.assigned_buyers || []} />
 
       {/* Latest performance data */}
       {(() => {
@@ -1173,9 +1232,16 @@ export default function FbAccounts() {
                       onMouseLeave={e => e.currentTarget.style.background = isMyAccount ? 'rgba(87,94,207,0.04)' : 'transparent'}>
                       {/* Fixed: Account name */}
                       <td style={td}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           <span style={{ color: '#c5c1b9', fontWeight: 600, fontSize: 14 }}>{acct.name}</span>
                           {acct.website && <a href={acct.website} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#575ECF', textDecoration: 'none', fontSize: 12 }}>{acct.website.replace(/^https?:\/\//, '')}</a>}
+                          {acct.assigned_buyers?.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                              {acct.assigned_buyers.map(name => (
+                                <span key={name} style={{ background: 'rgba(87,94,207,0.1)', color: '#a5aaee', borderRadius: 20, padding: '1px 8px', fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap' }}>{name}</span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </td>
                       {/* Dynamic ordered columns */}

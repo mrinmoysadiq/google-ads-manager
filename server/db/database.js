@@ -377,6 +377,29 @@ function initializeDatabase() {
     'ALTER TABLE outreach_leads ADD COLUMN deleted_at TEXT DEFAULT NULL',
   ];
 
+  // Explicit buyer-account assignment table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fb_account_buyers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL REFERENCES fb_ad_accounts(id) ON DELETE CASCADE,
+      buyer_id INTEGER NOT NULL REFERENCES fb_media_buyers(id) ON DELETE CASCADE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(account_id, buyer_id)
+    );
+  `);
+  // Seed fb_account_buyers from audit history (one-time migration)
+  try {
+    const pairs = db.prepare(`
+      SELECT DISTINCT a.id AS account_id, b.id AS buyer_id
+      FROM fb_audit_sessions s
+      JOIN fb_ad_accounts a ON a.name = s.ad_account
+      JOIN fb_media_buyers b ON b.name = s.media_buyer
+      WHERE s.media_buyer IS NOT NULL
+    `).all();
+    const ins = db.prepare('INSERT OR IGNORE INTO fb_account_buyers (account_id, buyer_id) VALUES (?, ?)');
+    for (const p of pairs) ins.run(p.account_id, p.buyer_id);
+  } catch (e) { /* ignore */ }
+
   // Campaign groups table (per-account, optional)
   db.exec(`
     CREATE TABLE IF NOT EXISTS fb_campaign_groups (

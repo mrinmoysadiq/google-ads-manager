@@ -4,7 +4,7 @@ import Select from 'react-select'
 import toast from 'react-hot-toast'
 import api from '../../utils/api'
 import { fbState, resetFbState, mkCampaignPerf } from './fbState'
-import { getUser } from '../../utils/auth'
+import { getUser, isAdmin } from '../../utils/auth'
 
 const selectStyles = {
   control: (base, { isFocused }) => ({
@@ -43,7 +43,7 @@ export default function FbSessionStart() {
     const appUser = getUser()
     Promise.all([
       api.get('/facebook/media-buyers'),
-      api.get('/facebook/ad-accounts'),
+      api.get('/facebook/ad-accounts', { params: isAdmin() ? {} : { my_only: '1' } }),
     ]).then(async ([b, a]) => {
       setBuyers(b.data)
       setAccounts(a.data)
