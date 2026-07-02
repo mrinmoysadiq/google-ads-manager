@@ -224,26 +224,20 @@ function FlaggedAdsCard({ rerender }) {
   const ads = fbState.flaggedAds
   const [focusedAdIdx, setFocusedAdIdx] = useState(0)
 
-  // Paste handler — pastes into the focused ad entry
-  useEffect(() => {
-    if (answered !== 'yes') return
-    const handler = async (e) => {
-      const items = e.clipboardData?.items
-      if (!items) return
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          e.preventDefault()
-          const blob = item.getAsFile()
-          const b64 = await readFileAsBase64(blob)
-          const idx = Math.min(focusedAdIdx, fbState.flaggedAds.length - 1)
-          if (idx >= 0) { fbState.flaggedAds[idx].screenshot = b64; rerender() }
-          break
-        }
+  async function handlePasteForAd(e, idx) {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault()
+        const blob = item.getAsFile()
+        const b64 = await readFileAsBase64(blob)
+        fbState.flaggedAds[idx].screenshot = b64
+        rerender()
+        break
       }
     }
-    document.addEventListener('paste', handler)
-    return () => document.removeEventListener('paste', handler)
-  }, [answered, focusedAdIdx, rerender])
+  }
 
   function setAnswer(val) {
     fbState.flaggedAdsAnswered = val
@@ -361,8 +355,11 @@ function FlaggedAdsCard({ rerender }) {
                     </div>
                   ) : (
                     <div
+                      tabIndex={0}
                       onClick={() => setFocusedAdIdx(idx)}
-                      className="flex flex-col items-center justify-center rounded-lg py-3 cursor-pointer transition-all"
+                      onFocus={() => setFocusedAdIdx(idx)}
+                      onPaste={e => handlePasteForAd(e, idx)}
+                      className="flex flex-col items-center justify-center rounded-lg py-3 cursor-pointer transition-all outline-none"
                       style={{
                         border: `1px dashed ${focusedAdIdx === idx ? 'rgba(87,94,207,0.5)' : 'rgba(255,255,255,0.08)'}`,
                         background: focusedAdIdx === idx ? 'rgba(87,94,207,0.05)' : 'transparent',

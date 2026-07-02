@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { getUser } from '../../utils/auth';
-import { todayLocal } from '../../utils/dates';
+import { todayLocal, fmtDate } from '../../utils/dates';
 
 const fb = {
   get: (path, cfg) => api.get(`/facebook${path}`, cfg),
@@ -221,7 +221,7 @@ function CampaignBreakdownModal({ account, data, onClose }) {
                   {[['Last 7 Days', c.days7, over7], ['Last 3 Days', c.days3, over3]].map(([label, d, overTarget]) => (
                     <div key={label} style={{ background: '#2a2a2a', borderRadius: 8, padding: 12 }}>
                       <p style={{ color: '#8a8680', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 8px' }}>{label}</p>
-                      {d?.from && <p style={{ color: '#444', fontSize: 10, margin: '0 0 8px' }}>{d.from} → {d.to}</p>}
+                      {d?.from && <p style={{ color: '#444', fontSize: 10, margin: '0 0 8px' }}>{fmtDate(d.from)} → {fmtDate(d.to)}</p>}
                       <div style={{ display: 'flex', gap: 16 }}>
                         <div>
                           <p style={{ color: '#8a8680', fontSize: 10, margin: '0 0 2px' }}>Leads</p>
@@ -510,7 +510,7 @@ function DrawerInfo({ data, fields, onFieldsSaved }) {
               {[{ label: 'Last 7 Days', d: pd.days7 }, { label: 'Last 3 Days', d: pd.days3 }].map(({ label, d }) => d && (
                 <div key={label} style={{ background: '#242424', borderRadius: 8, padding: '12px 14px' }}>
                   <p style={{ color: '#8a8680', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>{label}</p>
-                  {(d.from && d.to) && <p style={{ color: '#555', fontSize: 11, margin: '0 0 10px' }}>{d.from} → {d.to}</p>}
+                  {(d.from && d.to) && <p style={{ color: '#555', fontSize: 11, margin: '0 0 10px' }}>{fmtDate(d.from)} → {fmtDate(d.to)}</p>}
                   <div style={{ display: 'flex', gap: 16 }}>
                     <div>
                       <p style={{ color: '#8a8680', fontSize: 11, margin: '0 0 2px' }}>Leads</p>
@@ -1279,7 +1279,7 @@ export default function FbAccounts() {
                                 <span style={{ color: d?.cpl ? '#22c55e' : '#3a3835', fontSize: 13, fontWeight: d?.cpl ? 600 : 400 }}>
                                   {d?.cpl ? `$${parseFloat(d.cpl).toFixed(2)}` : '—'}
                                 </span>
-                                {d?.from && d?.to && <span style={{ color: '#555', fontSize: 10 }}>{d.from} → {d.to}</span>}
+                                {d?.from && d?.to && <span style={{ color: '#555', fontSize: 10 }}>{fmtDate(d.from)} → {fmtDate(d.to)}</span>}
                               </div>
                             </td>
                           );
