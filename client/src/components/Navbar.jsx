@@ -57,7 +57,8 @@ export default function Navbar() {
 
   const isAudit = path === '/audit' || path.startsWith('/checklist') || path.startsWith('/complete') || path === '/changelog' || path === '/admin'
   const isLearning = path.startsWith('/learning')
-  const isOutreach = path.startsWith('/outreach')
+  const isLinkedIn = path.startsWith('/outreach/linkedin')
+  const isOutreach = path.startsWith('/outreach') && !isLinkedIn
   const isFacebook = path.startsWith('/facebook')
   const isTracking = path.startsWith('/tracking')
 
@@ -88,10 +89,11 @@ export default function Navbar() {
             {isAudit && <>{navLink('/changelog', 'Change Log')}{navLink('/admin', 'Admin')}</>}
             {isLearning && navLink('/learning/admin', 'Admin')}
             {isOutreach && navLink('/outreach/admin', 'Admin', '#e05d0a')}
+            {isLinkedIn && navLink('/outreach/linkedin/admin', 'Admin', '#0a66c2')}
             {isFacebook && navLink('/facebook/admin', 'Admin', '#1877f2')}
             {isTracking && navLink('/tracking/admin', 'Admin', '#65db38')}
 
-            {(isAudit || isLearning || isOutreach || isFacebook || isTracking) && (
+            {(isAudit || isLearning || isOutreach || isLinkedIn || isFacebook || isTracking) && (
               <Link
                 to="/"
                 className="ml-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#8a8680] hover:text-[#c5c1b9] transition-colors"

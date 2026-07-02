@@ -13,8 +13,11 @@ import LmsEmployee from './pages/lms/LmsEmployee'
 import LmsManager from './pages/lms/LmsManager'
 import LmsAdmin from './pages/lms/LmsAdmin'
 import LmsTopicDetail from './pages/lms/LmsTopicDetail'
+import OutreachHub from './pages/outreach/OutreachHub'
 import OutreachHome from './pages/outreach/OutreachHome'
 import OutreachAdmin from './pages/outreach/OutreachAdmin'
+import LinkedInHome from './pages/outreach/linkedin/LinkedInHome'
+import LinkedInAdmin from './pages/outreach/linkedin/LinkedInAdmin'
 import FbHome from './pages/facebook/FbHome'
 import FbSessionStart from './pages/facebook/FbSessionStart'
 import FbChecklist from './pages/facebook/FbChecklist'
@@ -111,8 +114,11 @@ export default function App() {
           <Route path="/learning/topic/:topicId" element={<ProtectedRoute><LmsTopicDetail /></ProtectedRoute>} />
 
           {/* ── Outreach CRM module ────────────────────────────────────── */}
-          <Route path="/outreach" element={<ProtectedRoute><OutreachHome /></ProtectedRoute>} />
+          <Route path="/outreach" element={<ProtectedRoute><OutreachHub /></ProtectedRoute>} />
+          <Route path="/outreach/pipeline" element={<ProtectedRoute><OutreachHome /></ProtectedRoute>} />
           <Route path="/outreach/admin" element={<ProtectedRoute><OutreachAdmin /></ProtectedRoute>} />
+          <Route path="/outreach/linkedin" element={<ProtectedRoute><LinkedInHome /></ProtectedRoute>} />
+          <Route path="/outreach/linkedin/admin" element={<ProtectedRoute><LinkedInAdmin /></ProtectedRoute>} />
 
           {/* ── Facebook/Meta Ads module ───────────────────────────────── */}
           <Route path="/facebook" element={<ProtectedRoute><FbHome /></ProtectedRoute>} />

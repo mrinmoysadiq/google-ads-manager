@@ -942,10 +942,10 @@ export default function OutreachAdmin() {
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-[#8a8680] mb-6">
           <Link
-            to="/outreach"
+            to="/outreach/pipeline"
             className="hover:text-[#c5c1b9] transition-colors"
           >
-            Outreach
+            Cold Reach Out
           </Link>
           <span className="text-white/20">/</span>
           <span className="text-[#c5c1b9] font-medium">Admin</span>

@@ -335,6 +335,151 @@ function initializeDatabase() {
 
   console.log('Outreach tables initialized');
 
+  // ── LinkedIn Reach Out Tracker tables ────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS linkedin_leads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      specialist_id INTEGER NOT NULL REFERENCES outreach_specialists(id),
+      lead_name TEXT NOT NULL,
+      linkedin_profile_url TEXT,
+      activity_url TEXT,
+      company_name TEXT,
+      job_title TEXT,
+      industry_id INTEGER REFERENCES outreach_industries(id),
+      location TEXT,
+      follower_count INTEGER,
+      connection_degree TEXT,
+      status TEXT NOT NULL DEFAULT 'Identified',
+      last_connected_date TEXT,
+      next_action_date TEXT,
+      notes TEXT,
+      source_url TEXT,
+      source_image TEXT,
+      status_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TEXT DEFAULT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS linkedin_engagements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL REFERENCES linkedin_leads(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,
+      post_url TEXT,
+      liked INTEGER DEFAULT 0,
+      commented INTEGER DEFAULT 0,
+      comment_text TEXT,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS linkedin_pipeline_stages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      is_default INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS linkedin_status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL REFERENCES linkedin_leads(id) ON DELETE CASCADE,
+      old_status TEXT,
+      new_status TEXT NOT NULL,
+      changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      performed_by TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS linkedin_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS linkedin_dashboard_cards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      card_type TEXT NOT NULL DEFAULT 'count',
+      numerator_statuses TEXT NOT NULL DEFAULT '[]',
+      denominator TEXT NOT NULL DEFAULT 'total',
+      color TEXT DEFAULT '#0a66c2',
+      sort_order INTEGER DEFAULT 0
+    );
+  `);
+
+  // Seed default LinkedIn pipeline stages
+  const liStageCount = db.prepare('SELECT COUNT(*) as cnt FROM linkedin_pipeline_stages').get();
+  if (liStageCount.cnt === 0) {
+    const insertLiStage = db.prepare('INSERT INTO linkedin_pipeline_stages (name, order_index, is_default) VALUES (?, ?, ?)');
+    [
+      'Identified', 'Connection Request Sent', 'Connected', 'Engaging (Warming Up)',
+      'Ready to Message', 'Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4',
+      'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client',
+      'No Response / Dead', 'Disqualified',
+    ].forEach((name, i) => insertLiStage.run(name, i + 1, name === 'Identified' ? 1 : 0));
+    console.log('Seeded LinkedIn pipeline stages');
+  }
+
+  // One-time migration: replace old single 'Message Sent' stage with 4 follow-up stages
+  try {
+    const oldStage = db.prepare("SELECT * FROM linkedin_pipeline_stages WHERE name = 'Message Sent'").get();
+    const alreadyMigrated = db.prepare("SELECT 1 FROM linkedin_pipeline_stages WHERE name = 'Follow-up 1'").get();
+    if (oldStage && !alreadyMigrated) {
+      // Shift every stage after 'Message Sent' down by 3 to make room for 4 stages in its place
+      db.prepare('UPDATE linkedin_pipeline_stages SET order_index = order_index + 3 WHERE order_index > ?').run(oldStage.order_index);
+      db.prepare("UPDATE linkedin_pipeline_stages SET name = 'Follow-up 1' WHERE id = ?").run(oldStage.id);
+      const insertFollowup = db.prepare('INSERT INTO linkedin_pipeline_stages (name, order_index) VALUES (?, ?)');
+      insertFollowup.run('Follow-up 2', oldStage.order_index + 1);
+      insertFollowup.run('Follow-up 3', oldStage.order_index + 2);
+      insertFollowup.run('Follow-up 4', oldStage.order_index + 3);
+      // Move any leads already on the old stage onto Follow-up 1
+      db.exec("UPDATE linkedin_leads SET status = 'Follow-up 1' WHERE status = 'Message Sent'");
+      db.exec("UPDATE linkedin_status_history SET new_status = 'Follow-up 1' WHERE new_status = 'Message Sent'");
+      console.log('Migrated LinkedIn "Message Sent" stage into 4 follow-up stages');
+    }
+    // Fix up any dashboard cards whose formula referenced the old stage name
+    const cards = db.prepare('SELECT * FROM linkedin_dashboard_cards').all();
+    const updateCard = db.prepare('UPDATE linkedin_dashboard_cards SET numerator_statuses = ?, denominator = ? WHERE id = ?');
+    const replaceStage = (arr) => arr.flatMap(s => s === 'Message Sent' ? ['Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4'] : [s]);
+    cards.forEach(c => {
+      let num, den, changed = false;
+      try { num = JSON.parse(c.numerator_statuses || '[]'); } catch { num = []; }
+      if (num.includes('Message Sent')) { num = replaceStage(num); changed = true; }
+      try { den = JSON.parse(c.denominator); } catch { den = c.denominator; }
+      if (Array.isArray(den) && den.includes('Message Sent')) { den = replaceStage(den); changed = true; }
+      if (changed) updateCard.run(JSON.stringify(num), Array.isArray(den) ? JSON.stringify(den) : (den || 'total'), c.id);
+    });
+  } catch (e) { /* ignore */ }
+
+  // Seed default LinkedIn settings
+  db.prepare("INSERT OR IGNORE INTO linkedin_settings (key, value) VALUES ('warmup_threshold', '3')").run();
+  db.prepare("INSERT OR IGNORE INTO linkedin_settings (key, value) VALUES ('engagement_reminder_days', '14')").run();
+
+  // Seed default LinkedIn dashboard cards
+  const liCardCount = db.prepare('SELECT COUNT(*) as cnt FROM linkedin_dashboard_cards').get();
+  if (liCardCount.cnt === 0) {
+    const FOLLOWUP_STAGES = ['Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4'];
+    const CONNECTED_S = JSON.stringify(['Connected', 'Engaging (Warming Up)', 'Ready to Message', ...FOLLOWUP_STAGES, 'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client']);
+    const MESSAGED_S  = JSON.stringify([...FOLLOWUP_STAGES, 'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client']);
+    const REPLIED_S   = JSON.stringify(['Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client']);
+    const BOOKED_S    = JSON.stringify(['Meeting Booked', 'Started Trial', 'Closed / Booked as Client']);
+    const CLOSED_S    = JSON.stringify(['Closed / Booked as Client']);
+    const insertLiCard = db.prepare('INSERT INTO linkedin_dashboard_cards (label, card_type, numerator_statuses, denominator, color, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
+    [
+      ['Total Leads',     'count', '[]',         'total',      '#8a8680', 0],
+      ['Connected',       'count', CONNECTED_S,  'total',      '#0a66c2', 1],
+      ['Connection Rate', 'rate',  CONNECTED_S,  'total',      '#0a66c2', 2],
+      ['Messaged',        'count', MESSAGED_S,   CONNECTED_S,  '#3b82f6', 3],
+      ['Reply Rate',      'rate',  REPLIED_S,    MESSAGED_S,   '#a855f7', 4],
+      ['Meetings Booked', 'count', BOOKED_S,     REPLIED_S,    '#f59e0b', 5],
+      ['Closed',          'count', CLOSED_S,     BOOKED_S,     '#22c55e', 6],
+    ].forEach(([label, card_type, numerator_statuses, denominator, color, sort_order]) => {
+      insertLiCard.run(label, card_type, numerator_statuses, denominator, color, sort_order);
+    });
+    console.log('Seeded LinkedIn dashboard cards');
+  }
+
+  console.log('LinkedIn tracker tables initialized');
+
   // ── Facebook custom fields tables ────────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS fb_account_fields (
@@ -375,6 +520,7 @@ function initializeDatabase() {
     'ALTER TABLE fb_audit_sessions ADD COLUMN deleted_at TEXT DEFAULT NULL',
     'ALTER TABLE fb_ad_accounts ADD COLUMN deleted_at TEXT DEFAULT NULL',
     'ALTER TABLE outreach_leads ADD COLUMN deleted_at TEXT DEFAULT NULL',
+    'ALTER TABLE linkedin_pipeline_stages ADD COLUMN is_default INTEGER DEFAULT 0',
   ];
 
   // Explicit buyer-account assignment table
@@ -418,11 +564,28 @@ function initializeDatabase() {
   columnMigrations.forEach(sql => {
     try { db.exec(sql); } catch (e) { /* column already exists */ }
   });
+  // Ensure exactly one locked, un-deletable default LinkedIn stage exists — new leads
+  // always land here. Re-creates it if it was deleted before this protection existed.
+  try {
+    const hasDefault = db.prepare('SELECT 1 FROM linkedin_pipeline_stages WHERE is_default = 1').get();
+    if (!hasDefault) {
+      const existing = db.prepare("SELECT * FROM linkedin_pipeline_stages WHERE name = 'Identified'").get();
+      if (existing) {
+        db.prepare('UPDATE linkedin_pipeline_stages SET is_default = 1 WHERE id = ?').run(existing.id);
+      } else {
+        const minOrder = db.prepare('SELECT MIN(order_index) as mn FROM linkedin_pipeline_stages').get();
+        db.prepare('INSERT INTO linkedin_pipeline_stages (name, order_index, active, is_default) VALUES (?, ?, 1, 1)')
+          .run('Identified', (minOrder.mn || 1) - 1);
+        console.log('Restored locked default LinkedIn stage "Identified"');
+      }
+    }
+  } catch (e) { /* ignore */ }
   // Auto-purge trash items older than 7 days
   try {
     db.exec(`DELETE FROM fb_audit_sessions WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', '-7 days')`);
     db.exec(`DELETE FROM fb_ad_accounts WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', '-7 days')`);
     db.exec(`DELETE FROM outreach_leads WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', '-7 days')`);
+    db.exec(`DELETE FROM linkedin_leads WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', '-7 days')`);
   } catch (e) { /* ignore */ }
   // Migrate existing specialist_id data into junction table (one-time, safe to re-run)
   try {

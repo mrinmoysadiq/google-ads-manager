@@ -261,7 +261,12 @@ export default function OutreachHome() {
         {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-[#c5c1b9]">Outreach CRM</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-[#c5c1b9]">Cold Reach Out</h1>
+              <Link to="/outreach" className="text-xs font-medium px-2 py-1 rounded-md transition-colors" style={{ color: '#8a8680', backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                ← Outreach CRM
+              </Link>
+            </div>
             <p className="text-[#8a8680] text-sm mt-0.5">Manage your outreach pipeline and track prospects.</p>
           </div>
 
