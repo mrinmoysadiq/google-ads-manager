@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import ConnectionStatusBadge from './ConnectionStatusBadge'
 
 const DEFAULT_STATUS_COLORS = {
   'Identified':                { bg: 'rgba(138,134,128,0.15)', color: '#8a8680', dot: '#8a8680' },
@@ -28,7 +29,7 @@ function ListIcon() {
   )
 }
 
-function KanbanCard({ lead, onLeadClick, onViewLog, showSpecialistColumn, warmupThreshold }) {
+function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, showSpecialistColumn, warmupThreshold }) {
   const dragStarted = useRef(false)
   const isWarmedUp = (lead.engagement_count || 0) >= warmupThreshold
 
@@ -54,6 +55,14 @@ function KanbanCard({ lead, onLeadClick, onViewLog, showSpecialistColumn, warmup
             {[lead.job_title, lead.company_name].filter(Boolean).join(' @ ')}
           </p>
         )}
+
+        <div className="mt-2.5">
+          <ConnectionStatusBadge
+            status={lead.connection_status}
+            onChange={s => onConnectionStatusChange(lead.id, s)}
+            size="sm"
+          />
+        </div>
 
         {isWarmedUp && (
           <div className="mt-2.5">
@@ -100,7 +109,7 @@ const DEFAULT_STAGES = [
   'No Response / Dead', 'Disqualified',
 ]
 
-export default function LinkedInKanban({ leads, loading, onLeadClick, onStatusChange, onViewLog, showSpecialistColumn, stages, warmupThreshold = 3 }) {
+export default function LinkedInKanban({ leads, loading, onLeadClick, onStatusChange, onConnectionStatusChange, onViewLog, showSpecialistColumn, stages, warmupThreshold = 3 }) {
   const [dragOverStatus, setDragOverStatus] = useState(null)
 
   const stageNames = stages && stages.length > 0 ? stages.map(s => s.name) : DEFAULT_STAGES
@@ -174,6 +183,7 @@ export default function LinkedInKanban({ leads, loading, onLeadClick, onStatusCh
                       lead={lead}
                       onLeadClick={onLeadClick}
                       onViewLog={onViewLog}
+                      onConnectionStatusChange={onConnectionStatusChange}
                       showSpecialistColumn={showSpecialistColumn}
                       warmupThreshold={warmupThreshold}
                     />

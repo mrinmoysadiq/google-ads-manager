@@ -11,6 +11,7 @@ import {
   deleteEngagement,
 } from '../../../../utils/linkedinApi'
 import { fmtDateLong, fmtDateTimeLong, todayLocal } from '../../../../utils/dates'
+import ConnectionStatusBadge from './ConnectionStatusBadge'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -234,6 +235,7 @@ export default function LinkedInLeadDrawer({
     job_title: '',
     follower_count: '',
     specialist_id: defaultSpecialistId || '',
+    connection_status: 'Not Connected',
     notes: '',
   })
   const [creating, setCreating] = useState(false)
@@ -293,6 +295,7 @@ export default function LinkedInLeadDrawer({
         job_title: createForm.job_title || undefined,
         follower_count: createForm.follower_count ? parseInt(createForm.follower_count) : undefined,
         specialist_id: createForm.specialist_id,
+        connection_status: createForm.connection_status || undefined,
         notes: createForm.notes || undefined,
         performed_by: getUser()?.name || undefined,
       }
@@ -367,6 +370,11 @@ export default function LinkedInLeadDrawer({
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Follower Count</label>
                   <input type="number" min="0" className={inputClass} value={createForm.follower_count} onChange={e => setCreateForm(v => ({ ...v, follower_count: e.target.value }))} placeholder="1200" />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Connection Status</label>
+                  <ConnectionStatusBadge status={createForm.connection_status} onChange={s => setCreateForm(v => ({ ...v, connection_status: s }))} />
                 </div>
 
                 <div>
@@ -474,6 +482,13 @@ export default function LinkedInLeadDrawer({
                           Follower Count <SavedIndicator show={saved.follower_count} />
                         </label>
                         <input key={lead.follower_count} type="number" min="0" className={inputClass} defaultValue={lead.follower_count ?? ''} onBlur={e => saveField('follower_count', e.target.value ? parseInt(e.target.value) : null)} />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Connection Status <SavedIndicator show={saved.connection_status} />
+                        </label>
+                        <ConnectionStatusBadge status={lead.connection_status} onChange={s => saveField('connection_status', s)} />
                       </div>
 
                       <div>

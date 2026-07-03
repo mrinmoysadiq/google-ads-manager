@@ -22,6 +22,7 @@ function resolveSpecialistForUser(reqUser) {
 }
 
 const TERMINAL_STATUSES = ['Closed / Booked as Client', 'Disqualified', 'No Response / Dead'];
+const CONNECTION_STATUSES = ['Not Connected', 'Request Sent', 'Connected'];
 
 function getSetting(key, fallback) {
   try {
@@ -93,7 +94,7 @@ router.get('/leads', (req, res) => {
       SELECT
         l.id, l.specialist_id, l.lead_name, l.linkedin_profile_url, l.activity_url,
         l.company_name, l.job_title, l.follower_count,
-        l.status, l.created_at, l.status_updated_at,
+        l.status, l.connection_status, l.created_at, l.status_updated_at,
         s.name as specialist_name,
         (SELECT COUNT(*) FROM linkedin_engagements WHERE lead_id = l.id) as engagement_count,
         (SELECT MAX(date) FROM linkedin_engagements WHERE lead_id = l.id) as last_engagement_date
@@ -115,16 +116,18 @@ router.post('/leads', (req, res) => {
   try {
     const {
       specialist_id, lead_name, linkedin_profile_url, activity_url,
-      company_name, job_title, follower_count, notes, performed_by,
+      company_name, job_title, follower_count, notes, connection_status, performed_by,
     } = req.body;
 
     if (!specialist_id) return res.status(400).json({ error: 'A specialist is required' });
     if (!lead_name || !lead_name.trim()) return res.status(400).json({ error: 'lead_name is required' });
 
+    const initialConnectionStatus = CONNECTION_STATUSES.includes(connection_status) ? connection_status : 'Not Connected';
+
     const result = db.prepare(`
       INSERT INTO linkedin_leads
-        (specialist_id, lead_name, linkedin_profile_url, activity_url, company_name, job_title, follower_count, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (specialist_id, lead_name, linkedin_profile_url, activity_url, company_name, job_title, follower_count, notes, connection_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       specialist_id,
       lead_name.trim(),
@@ -134,6 +137,7 @@ router.post('/leads', (req, res) => {
       job_title || null,
       follower_count || null,
       notes || null,
+      initialConnectionStatus,
     );
 
     const leadId = result.lastInsertRowid;
@@ -199,10 +203,13 @@ router.patch('/leads/:id', (req, res) => {
 
     const {
       specialist_id, lead_name, linkedin_profile_url, activity_url,
-      company_name, job_title, follower_count, status, notes, performed_by,
+      company_name, job_title, follower_count, status, notes, connection_status, performed_by,
     } = req.body;
 
     const statusChanged = status && status !== existing.status;
+    const nextConnectionStatus = connection_status !== undefined
+      ? (CONNECTION_STATUSES.includes(connection_status) ? connection_status : existing.connection_status)
+      : existing.connection_status;
 
     db.prepare(`
       UPDATE linkedin_leads SET
@@ -215,6 +222,7 @@ router.patch('/leads/:id', (req, res) => {
         follower_count = ?,
         status = COALESCE(?, status),
         notes = ?,
+        connection_status = ?,
         status_updated_at = CASE WHEN ? IS NOT NULL AND ? != status THEN CURRENT_TIMESTAMP ELSE status_updated_at END
       WHERE id = ?
     `).run(
@@ -227,6 +235,7 @@ router.patch('/leads/:id', (req, res) => {
       follower_count !== undefined ? (follower_count || null) : existing.follower_count,
       status || null,
       notes !== undefined ? (notes || null) : existing.notes,
+      nextConnectionStatus,
       status || null, status || null,
       id,
     );
@@ -463,7 +472,7 @@ router.get('/dashboard', (req, res) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const leads = db.prepare(`
-      SELECT l.id, l.status, l.specialist_id, s.name as specialist_name
+      SELECT l.id, l.status, l.connection_status, l.specialist_id, s.name as specialist_name
       FROM linkedin_leads l
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
       ${whereClause}
@@ -472,12 +481,13 @@ router.get('/dashboard', (req, res) => {
     const total_leads = leads.length;
 
     const FOLLOWUP_STAGES = ['Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4'];
-    const CONNECTED_CURRENT = ['Connected', 'Engaging (Warming Up)', 'Ready to Message', ...FOLLOWUP_STAGES, 'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client'];
     const MESSAGED_CURRENT  = [...FOLLOWUP_STAGES, 'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client'];
     const REPLIED_CURRENT   = ['Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client'];
     const BOOKED_CURRENT    = ['Meeting Booked', 'Started Trial', 'Closed / Booked as Client'];
 
-    const connected       = leads.filter(l => CONNECTED_CURRENT.includes(l.status)).length;
+    // "Connected" is driven by the explicit connection_status field, not the pipeline stage —
+    // the two are tracked independently now.
+    const connected       = leads.filter(l => l.connection_status === 'Connected').length;
     const messaged        = leads.filter(l => MESSAGED_CURRENT.includes(l.status)).length;
     const replied          = leads.filter(l => REPLIED_CURRENT.includes(l.status)).length;
     const meetings_booked = leads.filter(l => BOOKED_CURRENT.includes(l.status)).length;
@@ -487,7 +497,7 @@ router.get('/dashboard', (req, res) => {
     const connection_rate = fmt(connected, total_leads);
     const reply_rate      = fmt(replied, messaged);
 
-    // Stale engagement — connected+ leads with no like/comment logged within engagement_reminder_days
+    // Stale engagement — connected leads with no like/comment logged within engagement_reminder_days
     const reminderDays = parseInt(getSetting('engagement_reminder_days', '14')) || 14;
     const cutoff = new Date(Date.now() - reminderDays * 86400000).toISOString().slice(0, 10);
     const leadIds = leads.map(l => l.id);
@@ -499,9 +509,8 @@ router.get('/dashboard', (req, res) => {
         GROUP BY lead_id
       `).all(...leadIds).forEach(r => { lastEngagementByLead[r.lead_id] = r.last_date; });
     }
-    const firstStageName = getFirstStageName();
     const stale_engagement_count = leads.filter(l => {
-      if (TERMINAL_STATUSES.includes(l.status) || l.status === firstStageName) return false;
+      if (l.connection_status !== 'Connected' || TERMINAL_STATUSES.includes(l.status)) return false;
       const lastDate = lastEngagementByLead[l.id];
       return !lastDate || lastDate < cutoff;
     }).length;
@@ -514,7 +523,7 @@ router.get('/dashboard', (req, res) => {
       const key = l.specialist_id;
       if (!specialistMap[key]) specialistMap[key] = { name: l.specialist_name || 'Unknown', total: 0, connected: 0, closed: 0 };
       specialistMap[key].total++;
-      if (CONNECTED_CURRENT.includes(l.status)) specialistMap[key].connected++;
+      if (l.connection_status === 'Connected') specialistMap[key].connected++;
       if (l.status === 'Closed / Booked as Client') specialistMap[key].closed++;
     });
     const by_specialist = Object.values(specialistMap).sort((a, b) => b.total - a.total);
@@ -543,8 +552,8 @@ router.get('/stale-engagement', (req, res) => {
     const reminderDays = parseInt(getSetting('engagement_reminder_days', '14')) || 14;
     const cutoff = new Date(Date.now() - reminderDays * 86400000).toISOString().slice(0, 10);
 
-    const conditions = ['l.deleted_at IS NULL', `l.status NOT IN (${TERMINAL_STATUSES.map(() => '?').join(',')})`, 'l.status != ?'];
-    const params = [...TERMINAL_STATUSES, getFirstStageName()];
+    const conditions = ['l.deleted_at IS NULL', `l.status NOT IN (${TERMINAL_STATUSES.map(() => '?').join(',')})`, "l.connection_status = 'Connected'"];
+    const params = [...TERMINAL_STATUSES];
     if (specialist_id) { conditions.push('l.specialist_id = ?'); params.push(specialist_id); }
 
     const leads = db.prepare(`

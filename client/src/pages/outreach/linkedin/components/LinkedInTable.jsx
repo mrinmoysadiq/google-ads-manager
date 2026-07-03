@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import Select from 'react-select'
+import ConnectionStatusBadge from './ConnectionStatusBadge'
 
 const STATUS_COLORS = {
   'Identified':                { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' },
@@ -75,7 +76,7 @@ function StatusDropdown({ currentStatus, leadId, stageNames, onStatusChange, onC
 
 export default function LinkedInTable({
   leads, loading, pagination, filters, onFiltersChange, onPageChange,
-  onLeadClick, onStatusChange, onViewLog, stages, showSpecialistColumn,
+  onLeadClick, onStatusChange, onConnectionStatusChange, onViewLog, stages, showSpecialistColumn,
 }) {
   const [openStatusFor, setOpenStatusFor] = useState(null)
 
@@ -122,6 +123,7 @@ export default function LinkedInTable({
               <tr>
                 <th style={thStyle}>Lead</th>
                 <th style={thStyle}>Company</th>
+                <th style={thStyle}>Connection</th>
                 <th style={thStyle}>Stage</th>
                 <th style={thStyle}>Engagement Log</th>
                 {showSpecialistColumn && <th style={thStyle}>Specialist</th>}
@@ -130,10 +132,10 @@ export default function LinkedInTable({
             <tbody>
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}><td colSpan={showSpecialistColumn ? 5 : 4} style={{ ...tdStyle, textAlign: 'center', color: '#555' }}>Loading…</td></tr>
+                  <tr key={i}><td colSpan={showSpecialistColumn ? 6 : 5} style={{ ...tdStyle, textAlign: 'center', color: '#555' }}>Loading…</td></tr>
                 ))
               ) : leads.length === 0 ? (
-                <tr><td colSpan={showSpecialistColumn ? 5 : 4} style={{ ...tdStyle, textAlign: 'center', color: '#555', padding: '32px 12px' }}>No leads found</td></tr>
+                <tr><td colSpan={showSpecialistColumn ? 6 : 5} style={{ ...tdStyle, textAlign: 'center', color: '#555', padding: '32px 12px' }}>No leads found</td></tr>
               ) : (
                 leads.map(lead => {
                   const sc = getStatusColor(lead.status)
@@ -144,6 +146,9 @@ export default function LinkedInTable({
                     >
                       <td style={tdStyle}><span style={{ fontWeight: 600, color: '#fff' }}>{lead.lead_name}</span></td>
                       <td style={tdStyle}>{[lead.job_title, lead.company_name].filter(Boolean).join(' @ ') || '—'}</td>
+                      <td style={tdStyle}>
+                        <ConnectionStatusBadge status={lead.connection_status} onChange={s => onConnectionStatusChange(lead.id, s)} size="sm" />
+                      </td>
                       <td style={{ ...tdStyle, position: 'relative' }} onClick={e => e.stopPropagation()}>
                         <button
                           onClick={() => setOpenStatusFor(openStatusFor === lead.id ? null : lead.id)}

@@ -138,6 +138,17 @@ export default function LinkedInHome() {
     }
   }
 
+  const handleConnectionStatusChange = async (leadId, newConnectionStatus) => {
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, connection_status: newConnectionStatus } : l))
+    try {
+      await updateLinkedInLead(leadId, { connection_status: newConnectionStatus })
+      bumpDashboard()
+    } catch {
+      toast.error('Failed to update connection status')
+      fetchLeads()
+    }
+  }
+
   const openHistoryPopup = (leadId, leadName) => {
     setHistoryPopup({ open: true, leadId, leadName })
   }
@@ -293,6 +304,7 @@ export default function LinkedInHome() {
                 onPageChange={setPage}
                 onLeadClick={openDrawer}
                 onStatusChange={handleStatusChange}
+                onConnectionStatusChange={handleConnectionStatusChange}
                 onViewLog={openHistoryPopup}
                 stages={stages}
                 showSpecialistColumn={showSpecialistColumn}
@@ -303,6 +315,7 @@ export default function LinkedInHome() {
                 loading={loading}
                 onLeadClick={openDrawer}
                 onStatusChange={handleStatusChange}
+                onConnectionStatusChange={handleConnectionStatusChange}
                 onViewLog={openHistoryPopup}
                 showSpecialistColumn={showSpecialistColumn}
                 stages={stages}
