@@ -209,6 +209,7 @@ function EngagementsSection({ leadId, initialEngagements = [], warmupThreshold }
 export default function LinkedInLeadDrawer({
   leadId: initialLeadId,
   defaultSpecialistId,
+  initialTab = 'details',
   onClose,
   onSaved,
   onDeleted,
@@ -222,7 +223,7 @@ export default function LinkedInLeadDrawer({
   const [leadId, setLeadId] = useState(initialLeadId)
   const [lead, setLead] = useState(null)
   const [loading, setLoading] = useState(initialLeadId !== null)
-  const [activeTab, setActiveTab] = useState('details')
+  const [activeTab, setActiveTab] = useState(initialTab)
   const [saved, setSaved] = useState({})
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -348,23 +349,13 @@ export default function LinkedInLeadDrawer({
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>LinkedIn Profile URL</label>
-                  <input type="text" className={inputClass} value={createForm.linkedin_profile_url} onChange={e => setCreateForm(v => ({ ...v, linkedin_profile_url: e.target.value }))} placeholder="https://linkedin.com/in/…" />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Activity URL</label>
-                  <input type="text" className={inputClass} value={createForm.activity_url} onChange={e => setCreateForm(v => ({ ...v, activity_url: e.target.value }))} placeholder="https://linkedin.com/in/…/recent-activity/" />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Company</label>
-                  <input type="text" className={inputClass} value={createForm.company_name} onChange={e => setCreateForm(v => ({ ...v, company_name: e.target.value }))} placeholder="Acme Corp" />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Job Title</label>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Position</label>
                   <input type="text" className={inputClass} value={createForm.job_title} onChange={e => setCreateForm(v => ({ ...v, job_title: e.target.value }))} placeholder="CEO" />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Company Name</label>
+                  <input type="text" className={inputClass} value={createForm.company_name} onChange={e => setCreateForm(v => ({ ...v, company_name: e.target.value }))} placeholder="Acme Corp" />
                 </div>
 
                 <div>
@@ -375,6 +366,16 @@ export default function LinkedInLeadDrawer({
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Connection Status</label>
                   <ConnectionStatusBadge status={createForm.connection_status} onChange={s => setCreateForm(v => ({ ...v, connection_status: s }))} />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Profile URL</label>
+                  <input type="text" className={inputClass} value={createForm.linkedin_profile_url} onChange={e => setCreateForm(v => ({ ...v, linkedin_profile_url: e.target.value }))} placeholder="https://linkedin.com/in/…" />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Activity URL</label>
+                  <input type="text" className={inputClass} value={createForm.activity_url} onChange={e => setCreateForm(v => ({ ...v, activity_url: e.target.value }))} placeholder="https://linkedin.com/in/…/recent-activity/" />
                 </div>
 
                 <div>
@@ -449,32 +450,18 @@ export default function LinkedInLeadDrawer({
                   <div style={{ display: activeTab === 'details' ? 'block' : 'none' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          LinkedIn Profile URL <SavedIndicator show={saved.linkedin_profile_url} />
-                        </label>
-                        <input key={lead.linkedin_profile_url} type="text" className={inputClass} defaultValue={lead.linkedin_profile_url || ''} onBlur={e => saveField('linkedin_profile_url', e.target.value || null)} placeholder="https://linkedin.com/in/…" />
-                      </div>
-
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Activity URL <SavedIndicator show={saved.activity_url} />
-                        </label>
-                        <input key={lead.activity_url} type="text" className={inputClass} defaultValue={lead.activity_url || ''} onBlur={e => saveField('activity_url', e.target.value || null)} placeholder="https://linkedin.com/in/…/recent-activity/" />
-                      </div>
-
                       <div>
                         <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Company <SavedIndicator show={saved.company_name} />
-                        </label>
-                        <input key={lead.company_name} type="text" className={inputClass} defaultValue={lead.company_name || ''} onBlur={e => saveField('company_name', e.target.value || null)} />
-                      </div>
-
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Job Title <SavedIndicator show={saved.job_title} />
+                          Position <SavedIndicator show={saved.job_title} />
                         </label>
                         <input key={lead.job_title} type="text" className={inputClass} defaultValue={lead.job_title || ''} onBlur={e => saveField('job_title', e.target.value || null)} />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Company Name <SavedIndicator show={saved.company_name} />
+                        </label>
+                        <input key={lead.company_name} type="text" className={inputClass} defaultValue={lead.company_name || ''} onBlur={e => saveField('company_name', e.target.value || null)} />
                       </div>
 
                       <div>
@@ -489,6 +476,20 @@ export default function LinkedInLeadDrawer({
                           Connection Status <SavedIndicator show={saved.connection_status} />
                         </label>
                         <ConnectionStatusBadge status={lead.connection_status} onChange={s => saveField('connection_status', s)} />
+                      </div>
+
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Profile URL <SavedIndicator show={saved.linkedin_profile_url} />
+                        </label>
+                        <input key={lead.linkedin_profile_url} type="text" className={inputClass} defaultValue={lead.linkedin_profile_url || ''} onBlur={e => saveField('linkedin_profile_url', e.target.value || null)} placeholder="https://linkedin.com/in/…" />
+                      </div>
+
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Activity URL <SavedIndicator show={saved.activity_url} />
+                        </label>
+                        <input key={lead.activity_url} type="text" className={inputClass} defaultValue={lead.activity_url || ''} onBlur={e => saveField('activity_url', e.target.value || null)} placeholder="https://linkedin.com/in/…/recent-activity/" />
                       </div>
 
                       <div>

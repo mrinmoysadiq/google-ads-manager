@@ -12,7 +12,6 @@ import LinkedInLeadDrawer from './components/LinkedInLeadDrawer'
 import LinkedInTable from './components/LinkedInTable'
 import LinkedInKanban from './components/LinkedInKanban'
 import LinkedInDashboard from './components/LinkedInDashboard'
-import EngagementHistoryPopup from './components/EngagementHistoryPopup'
 
 const LS_SPECIALIST_KEY = 'linkedin_specialist'
 const LS_VIEW_KEY = 'linkedin_view'
@@ -36,9 +35,9 @@ export default function LinkedInHome() {
   const [loading, setLoading] = useState(true)
   const [stages, setStages] = useState([])
   const [warmupThreshold, setWarmupThreshold] = useState(3)
-  const [historyPopup, setHistoryPopup] = useState({ open: false, leadId: null, leadName: null })
 
   const [drawerLeadId, setDrawerLeadId] = useState(undefined)
+  const [drawerInitialTab, setDrawerInitialTab] = useState('details')
   const [drawerKey, setDrawerKey] = useState(0)
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0)
 
@@ -149,10 +148,6 @@ export default function LinkedInHome() {
     }
   }
 
-  const openHistoryPopup = (leadId, leadName) => {
-    setHistoryPopup({ open: true, leadId, leadName })
-  }
-
   const handleLeadUpdated = (updatedLead) => {
     setLeads(prev => prev.map(l => l.id === updatedLead.id ? { ...l, ...updatedLead } : l))
     bumpDashboard()
@@ -168,10 +163,13 @@ export default function LinkedInHome() {
     bumpDashboard()
   }
 
-  const openDrawer = (leadId) => {
+  const openDrawer = (leadId, initialTab = 'details') => {
     setDrawerLeadId(leadId)
+    setDrawerInitialTab(initialTab)
     setDrawerKey(k => k + 1)
   }
+
+  const openEngagementsTab = (leadId) => openDrawer(leadId, 'engagements')
 
   const specialistOptions = [
     { value: null, label: 'All Specialists' },
@@ -305,7 +303,7 @@ export default function LinkedInHome() {
                 onLeadClick={openDrawer}
                 onStatusChange={handleStatusChange}
                 onConnectionStatusChange={handleConnectionStatusChange}
-                onViewLog={openHistoryPopup}
+                onViewLog={openEngagementsTab}
                 stages={stages}
                 showSpecialistColumn={showSpecialistColumn}
               />
@@ -316,7 +314,7 @@ export default function LinkedInHome() {
                 onLeadClick={openDrawer}
                 onStatusChange={handleStatusChange}
                 onConnectionStatusChange={handleConnectionStatusChange}
-                onViewLog={openHistoryPopup}
+                onViewLog={openEngagementsTab}
                 showSpecialistColumn={showSpecialistColumn}
                 stages={stages}
                 warmupThreshold={warmupThreshold}
@@ -338,6 +336,7 @@ export default function LinkedInHome() {
         <LinkedInLeadDrawer
           key={drawerKey}
           leadId={drawerLeadId}
+          initialTab={drawerInitialTab}
           defaultSpecialistId={selectedSpecialist?.id || null}
           onClose={() => setDrawerLeadId(undefined)}
           onSaved={handleLeadSaved}
@@ -346,14 +345,6 @@ export default function LinkedInHome() {
           specialists={specialists}
           stages={stages}
           warmupThreshold={warmupThreshold}
-        />
-      )}
-
-      {historyPopup.open && (
-        <EngagementHistoryPopup
-          leadId={historyPopup.leadId}
-          leadName={historyPopup.leadName}
-          onClose={() => setHistoryPopup({ open: false, leadId: null, leadName: null })}
         />
       )}
     </div>
