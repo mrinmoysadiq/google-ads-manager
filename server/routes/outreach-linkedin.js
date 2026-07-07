@@ -116,7 +116,8 @@ router.post('/leads', (req, res) => {
   try {
     const {
       specialist_id, lead_name, linkedin_profile_url, activity_url,
-      company_name, job_title, follower_count, notes, connection_status, performed_by,
+      company_name, job_title, website, follower_count, notes, connection_status, performed_by,
+      source_image,
     } = req.body;
 
     if (!specialist_id) return res.status(400).json({ error: 'A specialist is required' });
@@ -126,8 +127,8 @@ router.post('/leads', (req, res) => {
 
     const result = db.prepare(`
       INSERT INTO linkedin_leads
-        (specialist_id, lead_name, linkedin_profile_url, activity_url, company_name, job_title, follower_count, notes, connection_status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (specialist_id, lead_name, linkedin_profile_url, activity_url, company_name, job_title, website, follower_count, notes, connection_status, source_image)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       specialist_id,
       lead_name.trim(),
@@ -135,9 +136,11 @@ router.post('/leads', (req, res) => {
       activity_url || null,
       company_name || null,
       job_title || null,
+      website || null,
       follower_count || null,
       notes || null,
       initialConnectionStatus,
+      source_image || null,
     );
 
     const leadId = result.lastInsertRowid;
@@ -203,7 +206,8 @@ router.patch('/leads/:id', (req, res) => {
 
     const {
       specialist_id, lead_name, linkedin_profile_url, activity_url,
-      company_name, job_title, follower_count, status, notes, connection_status, performed_by,
+      company_name, job_title, website, follower_count, status, notes, connection_status, performed_by,
+      source_image,
     } = req.body;
 
     const statusChanged = status && status !== existing.status;
@@ -219,10 +223,12 @@ router.patch('/leads/:id', (req, res) => {
         activity_url = ?,
         company_name = ?,
         job_title = ?,
+        website = ?,
         follower_count = ?,
         status = COALESCE(?, status),
         notes = ?,
         connection_status = ?,
+        source_image = ?,
         status_updated_at = CASE WHEN ? IS NOT NULL AND ? != status THEN CURRENT_TIMESTAMP ELSE status_updated_at END
       WHERE id = ?
     `).run(
@@ -232,10 +238,12 @@ router.patch('/leads/:id', (req, res) => {
       activity_url !== undefined ? (activity_url || null) : existing.activity_url,
       company_name !== undefined ? (company_name || null) : existing.company_name,
       job_title !== undefined ? (job_title || null) : existing.job_title,
+      website !== undefined ? (website || null) : existing.website,
       follower_count !== undefined ? (follower_count || null) : existing.follower_count,
       status || null,
       notes !== undefined ? (notes || null) : existing.notes,
       nextConnectionStatus,
+      source_image !== undefined ? (source_image || null) : existing.source_image,
       status || null, status || null,
       id,
     );

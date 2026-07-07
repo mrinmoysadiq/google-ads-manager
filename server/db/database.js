@@ -522,6 +522,7 @@ function initializeDatabase() {
     'ALTER TABLE outreach_leads ADD COLUMN deleted_at TEXT DEFAULT NULL',
     'ALTER TABLE linkedin_pipeline_stages ADD COLUMN is_default INTEGER DEFAULT 0',
     "ALTER TABLE linkedin_leads ADD COLUMN connection_status TEXT DEFAULT 'Not Connected'",
+    'ALTER TABLE linkedin_leads ADD COLUMN website TEXT',
   ];
 
   // Explicit buyer-account assignment table

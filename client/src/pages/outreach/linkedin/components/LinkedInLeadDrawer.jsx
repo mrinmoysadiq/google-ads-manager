@@ -12,6 +12,7 @@ import {
 } from '../../../../utils/linkedinApi'
 import { fmtDateLong, fmtDateTimeLong, todayLocal } from '../../../../utils/dates'
 import ConnectionStatusBadge from './ConnectionStatusBadge'
+import ImagePasteZone from '../../../../components/ImagePasteZone'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -233,11 +234,13 @@ export default function LinkedInLeadDrawer({
     linkedin_profile_url: '',
     activity_url: '',
     company_name: '',
+    website: '',
     job_title: '',
     follower_count: '',
     specialist_id: defaultSpecialistId || '',
     connection_status: 'Not Connected',
     notes: '',
+    source_image: null,
   })
   const [creating, setCreating] = useState(false)
 
@@ -293,11 +296,13 @@ export default function LinkedInLeadDrawer({
         linkedin_profile_url: createForm.linkedin_profile_url || undefined,
         activity_url: createForm.activity_url || undefined,
         company_name: createForm.company_name || undefined,
+        website: createForm.website || undefined,
         job_title: createForm.job_title || undefined,
         follower_count: createForm.follower_count ? parseInt(createForm.follower_count) : undefined,
         specialist_id: createForm.specialist_id,
         connection_status: createForm.connection_status || undefined,
         notes: createForm.notes || undefined,
+        source_image: createForm.source_image || undefined,
         performed_by: getUser()?.name || undefined,
       }
       const newLead = await createLinkedInLead(payload)
@@ -359,6 +364,11 @@ export default function LinkedInLeadDrawer({
                 </div>
 
                 <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Company Website</label>
+                  <input type="text" className={inputClass} value={createForm.website} onChange={e => setCreateForm(v => ({ ...v, website: e.target.value }))} placeholder="example.com or https://example.com" />
+                </div>
+
+                <div>
                   <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Follower Count</label>
                   <input type="number" min="0" className={inputClass} value={createForm.follower_count} onChange={e => setCreateForm(v => ({ ...v, follower_count: e.target.value }))} placeholder="1200" />
                 </div>
@@ -388,6 +398,17 @@ export default function LinkedInLeadDrawer({
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Notes</label>
                   <textarea className={inputClass} rows={3} value={createForm.notes} onChange={e => setCreateForm(v => ({ ...v, notes: e.target.value }))} style={{ resize: 'vertical' }} placeholder="Any additional notes…" />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>
+                    Source Image <span style={{ color: '#555', fontWeight: 400 }}>(optional)</span>
+                  </label>
+                  <ImagePasteZone
+                    value={createForm.source_image}
+                    onChange={v => setCreateForm(prev => ({ ...prev, source_image: v }))}
+                    accentColor="#0a66c2"
+                  />
                 </div>
               </div>
 
@@ -464,6 +485,27 @@ export default function LinkedInLeadDrawer({
                         <input key={lead.company_name} type="text" className={inputClass} defaultValue={lead.company_name || ''} onBlur={e => saveField('company_name', e.target.value || null)} />
                       </div>
 
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Company Website <SavedIndicator show={saved.website} />
+                        </label>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <input
+                            key={lead.website}
+                            type="text"
+                            className={inputClass}
+                            defaultValue={lead.website || ''}
+                            onBlur={e => saveField('website', e.target.value || null)}
+                            placeholder="example.com or https://example.com"
+                            style={{ flex: 1 }}
+                          />
+                          {lead.website && (
+                            <a href={lead.website} target="_blank" rel="noopener noreferrer" title="Open website"
+                              style={{ color: '#0a66c2', fontSize: '16px', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}>↗</a>
+                          )}
+                        </div>
+                      </div>
+
                       <div>
                         <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           Follower Count <SavedIndicator show={saved.follower_count} />
@@ -502,6 +544,20 @@ export default function LinkedInLeadDrawer({
                           Notes <SavedIndicator show={saved.notes} />
                         </label>
                         <textarea key={lead.notes} className={inputClass} rows={3} defaultValue={lead.notes || ''} onBlur={e => saveField('notes', e.target.value || null)} style={{ resize: 'vertical' }} />
+                      </div>
+
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Source Image <SavedIndicator show={saved.source_image} />
+                        </label>
+                        <ImagePasteZone
+                          value={lead.source_image || null}
+                          onChange={v => {
+                            setLead(prev => ({ ...prev, source_image: v }))
+                            saveField('source_image', v)
+                          }}
+                          accentColor="#0a66c2"
+                        />
                       </div>
                     </div>
 
