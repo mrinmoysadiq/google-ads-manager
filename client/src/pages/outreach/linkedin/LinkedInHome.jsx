@@ -7,11 +7,15 @@ import { getUser, isAdmin } from '../../../utils/auth'
 import { getSpecialists } from '../../../utils/outreachApi'
 import {
   getLinkedInLeads, updateLinkedInLead, getLinkedInPipelineStages, getLinkedInSettings,
+  upsertFollowup, createReply,
 } from '../../../utils/linkedinApi'
 import LinkedInLeadDrawer from './components/LinkedInLeadDrawer'
 import LinkedInTable from './components/LinkedInTable'
 import LinkedInKanban from './components/LinkedInKanban'
 import LinkedInDashboard from './components/LinkedInDashboard'
+import FollowupQuickModal from './components/FollowupQuickModal'
+import ReplyQuickModal from './components/ReplyQuickModal'
+import { FOLLOWUP_STAGE_KEYS, REPLIED_STAGE } from './constants'
 
 const LS_SPECIALIST_KEY = 'linkedin_specialist'
 const LS_VIEW_KEY = 'linkedin_view'
@@ -40,6 +44,9 @@ export default function LinkedInHome() {
   const [drawerInitialTab, setDrawerInitialTab] = useState('details')
   const [drawerKey, setDrawerKey] = useState(0)
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0)
+
+  const [followupModal, setFollowupModal] = useState({ open: false, leadId: null, stageKey: null, modalKey: 0 })
+  const [replyModal, setReplyModal] = useState({ open: false, leadId: null, modalKey: 0 })
 
   const [filters, setFilters] = useState({
     status: '', search: '', date_from: '', date_to: '', sort_by: 'status_updated_at', sort_dir: 'DESC',
@@ -127,6 +134,14 @@ export default function LinkedInHome() {
   }
 
   const handleStatusChange = async (leadId, newStatus) => {
+    if (FOLLOWUP_STAGE_KEYS.includes(newStatus)) {
+      setFollowupModal({ open: true, leadId, stageKey: newStatus, modalKey: Date.now() })
+      return
+    }
+    if (newStatus === REPLIED_STAGE) {
+      setReplyModal({ open: true, leadId, modalKey: Date.now() })
+      return
+    }
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: newStatus } : l))
     try {
       await updateLinkedInLead(leadId, { status: newStatus, performed_by: getUser()?.name || null })
@@ -135,6 +150,28 @@ export default function LinkedInHome() {
       toast.error('Failed to update status')
       fetchLeads()
     }
+  }
+
+  const handleFollowupModalSave = async (fields) => {
+    const { leadId, stageKey } = followupModal
+    await upsertFollowup(leadId, stageKey, fields)
+    await updateLinkedInLead(leadId, { status: stageKey, performed_by: getUser()?.name || null })
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: stageKey } : l))
+    setFollowupModal({ open: false, leadId: null, stageKey: null, modalKey: 0 })
+    toast.success(`${stageKey} logged — lead moved`)
+    bumpDashboard()
+    fetchLeads()
+  }
+
+  const handleReplyModalSave = async (fields) => {
+    const { leadId } = replyModal
+    await createReply(leadId, fields)
+    await updateLinkedInLead(leadId, { status: REPLIED_STAGE, performed_by: getUser()?.name || null })
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: REPLIED_STAGE } : l))
+    setReplyModal({ open: false, leadId: null, modalKey: 0 })
+    toast.success('Reply logged — lead moved to Replied')
+    bumpDashboard()
+    fetchLeads()
   }
 
   const handleConnectionStatusChange = async (leadId, newConnectionStatus) => {
@@ -345,6 +382,23 @@ export default function LinkedInHome() {
           specialists={specialists}
           stages={stages}
           warmupThreshold={warmupThreshold}
+        />
+      )}
+
+      {followupModal.open && (
+        <FollowupQuickModal
+          key={followupModal.modalKey}
+          stageKey={followupModal.stageKey}
+          onSave={handleFollowupModalSave}
+          onClose={() => setFollowupModal({ open: false, leadId: null, stageKey: null, modalKey: 0 })}
+        />
+      )}
+
+      {replyModal.open && (
+        <ReplyQuickModal
+          key={replyModal.modalKey}
+          onSave={handleReplyModalSave}
+          onClose={() => setReplyModal({ open: false, leadId: null, modalKey: 0 })}
         />
       )}
     </div>

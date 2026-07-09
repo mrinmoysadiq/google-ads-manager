@@ -404,6 +404,29 @@ function initializeDatabase() {
       color TEXT DEFAULT '#0a66c2',
       sort_order INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS linkedin_followups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL REFERENCES linkedin_leads(id) ON DELETE CASCADE,
+      stage_key TEXT NOT NULL,
+      date TEXT,
+      message_body TEXT,
+      is_seen INTEGER DEFAULT 0,
+      seen_at DATETIME DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(lead_id, stage_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS linkedin_lead_replies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL REFERENCES linkedin_leads(id) ON DELETE CASCADE,
+      date TEXT,
+      channel TEXT NOT NULL DEFAULT 'LinkedIn',
+      screenshot TEXT,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Seed default LinkedIn pipeline stages
@@ -413,7 +436,7 @@ function initializeDatabase() {
     [
       'Identified', 'Connection Request Sent', 'Connected', 'Engaging (Warming Up)',
       'Ready to Message', 'Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4',
-      'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client',
+      'Emailed', 'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client',
       'No Response / Dead', 'Disqualified',
     ].forEach((name, i) => insertLiStage.run(name, i + 1, name === 'Identified' ? 1 : 0));
     console.log('Seeded LinkedIn pipeline stages');
@@ -448,6 +471,17 @@ function initializeDatabase() {
       if (Array.isArray(den) && den.includes('Message Sent')) { den = replaceStage(den); changed = true; }
       if (changed) updateCard.run(JSON.stringify(num), Array.isArray(den) ? JSON.stringify(den) : (den || 'total'), c.id);
     });
+  } catch (e) { /* ignore */ }
+
+  // One-time migration: insert 'Emailed' stage right before 'Replied' (existing installs only)
+  try {
+    const repliedStage = db.prepare("SELECT * FROM linkedin_pipeline_stages WHERE name = 'Replied'").get();
+    const alreadyHasEmailed = db.prepare("SELECT 1 FROM linkedin_pipeline_stages WHERE name = 'Emailed'").get();
+    if (repliedStage && !alreadyHasEmailed) {
+      db.prepare('UPDATE linkedin_pipeline_stages SET order_index = order_index + 1 WHERE order_index >= ?').run(repliedStage.order_index);
+      db.prepare('INSERT INTO linkedin_pipeline_stages (name, order_index) VALUES (?, ?)').run('Emailed', repliedStage.order_index);
+      console.log('Inserted LinkedIn "Emailed" stage before "Replied"');
+    }
   } catch (e) { /* ignore */ }
 
   // Seed default LinkedIn settings

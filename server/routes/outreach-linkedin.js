@@ -97,13 +97,20 @@ router.get('/leads', (req, res) => {
         l.status, l.connection_status, l.created_at, l.status_updated_at,
         s.name as specialist_name,
         (SELECT COUNT(*) FROM linkedin_engagements WHERE lead_id = l.id) as engagement_count,
-        (SELECT MAX(date) FROM linkedin_engagements WHERE lead_id = l.id) as last_engagement_date
+        (SELECT MAX(date) FROM linkedin_engagements WHERE lead_id = l.id) as last_engagement_date,
+        (SELECT COUNT(*) FROM linkedin_lead_replies WHERE lead_id = l.id) as reply_count,
+        (SELECT json_group_object(stage_key, json_object('is_seen', is_seen))
+           FROM linkedin_followups WHERE lead_id = l.id) as followups_summary
       FROM linkedin_leads l
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
       ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortDir}
       LIMIT ? OFFSET ?
     `).all(...params, parseInt(limit), offset);
+
+    leads.forEach(l => {
+      l.followups_summary = l.followups_summary ? JSON.parse(l.followups_summary) : {};
+    });
 
     res.json({ data: leads, total, page: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) });
   } catch (err) {
@@ -160,6 +167,8 @@ router.post('/leads', (req, res) => {
     `).get(leadId);
     created.engagement_count = 0;
     created.last_engagement_date = null;
+    created.reply_count = 0;
+    created.followups_summary = {};
     res.status(201).json(created);
   } catch (err) {
     console.error(err);
@@ -193,7 +202,15 @@ router.get('/leads/:id', (req, res) => {
       'SELECT * FROM linkedin_status_history WHERE lead_id = ? ORDER BY changed_at DESC'
     ).all(id);
 
-    res.json({ ...lead, engagements, history });
+    const followups = db.prepare(
+      'SELECT * FROM linkedin_followups WHERE lead_id = ?'
+    ).all(id);
+
+    const replies = db.prepare(
+      'SELECT * FROM linkedin_lead_replies WHERE lead_id = ? ORDER BY created_at DESC'
+    ).all(id);
+
+    res.json({ ...lead, engagements, history, followups, replies });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch lead' });
@@ -316,6 +333,8 @@ router.delete('/trash/permanent/:id', (req, res) => {
     const { id } = req.params;
     db.prepare('DELETE FROM linkedin_engagements WHERE lead_id = ?').run(id);
     db.prepare('DELETE FROM linkedin_status_history WHERE lead_id = ?').run(id);
+    db.prepare('DELETE FROM linkedin_followups WHERE lead_id = ?').run(id);
+    db.prepare('DELETE FROM linkedin_lead_replies WHERE lead_id = ?').run(id);
     db.prepare('DELETE FROM linkedin_leads WHERE id = ?').run(id);
     res.json({ success: true });
   } catch (err) {
@@ -370,6 +389,117 @@ router.delete('/leads/:leadId/engagements/:id', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete engagement' });
+  }
+});
+
+// ─── FOLLOW-UPS & REPLIES ─────────────────────────────────────────────────────
+// Follow-up 1-4 and Emailed are hardcoded stage keys (not derived from the
+// DB-driven linkedin_pipeline_stages table) with one upsertable record per lead.
+// Replied is an append-only log (a lead can reply more than once over time).
+
+const FOLLOWUP_STAGE_KEYS = ['Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4', 'Emailed'];
+const REPLY_CHANNELS = ['LinkedIn', 'Email'];
+
+router.get('/leads/:leadId/followups', (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const followups = db.prepare('SELECT * FROM linkedin_followups WHERE lead_id = ?').all(leadId);
+    res.json(followups);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch follow-ups' });
+  }
+});
+
+router.put('/leads/:leadId/followups/:stageKey', (req, res) => {
+  try {
+    const { leadId, stageKey } = req.params;
+    if (!FOLLOWUP_STAGE_KEYS.includes(stageKey)) return res.status(400).json({ error: 'Invalid stage key' });
+    const { date, message_body } = req.body;
+
+    db.prepare(`
+      INSERT INTO linkedin_followups (lead_id, stage_key, date, message_body)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(lead_id, stage_key) DO UPDATE SET
+        date = excluded.date,
+        message_body = excluded.message_body,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(leadId, stageKey, date || null, message_body || null);
+
+    const row = db.prepare('SELECT * FROM linkedin_followups WHERE lead_id = ? AND stage_key = ?').get(leadId, stageKey);
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save follow-up' });
+  }
+});
+
+router.patch('/leads/:leadId/followups/:stageKey/seen', (req, res) => {
+  try {
+    const { leadId, stageKey } = req.params;
+    const { is_seen } = req.body;
+    const existing = db.prepare('SELECT id FROM linkedin_followups WHERE lead_id = ? AND stage_key = ?').get(leadId, stageKey);
+    if (!existing) return res.status(404).json({ error: 'Follow-up record not found' });
+
+    db.prepare(`
+      UPDATE linkedin_followups SET
+        is_seen = ?,
+        seen_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE lead_id = ? AND stage_key = ?
+    `).run(is_seen ? 1 : 0, is_seen ? 1 : 0, leadId, stageKey);
+
+    const row = db.prepare('SELECT * FROM linkedin_followups WHERE lead_id = ? AND stage_key = ?').get(leadId, stageKey);
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update seen status' });
+  }
+});
+
+router.get('/leads/:leadId/replies', (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const replies = db.prepare('SELECT * FROM linkedin_lead_replies WHERE lead_id = ? ORDER BY created_at DESC').all(leadId);
+    res.json(replies);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch replies' });
+  }
+});
+
+router.post('/leads/:leadId/replies', (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const lead = db.prepare('SELECT id FROM linkedin_leads WHERE id = ?').get(leadId);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    const { date, channel, screenshot, notes } = req.body;
+    const finalChannel = REPLY_CHANNELS.includes(channel) ? channel : 'LinkedIn';
+
+    const result = db.prepare(`
+      INSERT INTO linkedin_lead_replies (lead_id, date, channel, screenshot, notes)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(leadId, date || null, finalChannel, screenshot || null, notes || null);
+
+    const created = db.prepare('SELECT * FROM linkedin_lead_replies WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json(created);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save reply' });
+  }
+});
+
+router.delete('/leads/:leadId/replies/:id', (req, res) => {
+  try {
+    const { leadId, id } = req.params;
+    const existing = db.prepare('SELECT id FROM linkedin_lead_replies WHERE id = ? AND lead_id = ?').get(id, leadId);
+    if (!existing) return res.status(404).json({ error: 'Reply not found' });
+    db.prepare('DELETE FROM linkedin_lead_replies WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete reply' });
   }
 });
 

@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import ConnectionStatusBadge from './ConnectionStatusBadge'
+import { FOLLOWUP_STAGE_KEYS } from '../constants'
 
 const DEFAULT_STATUS_COLORS = {
   'Identified':                { bg: 'rgba(138,134,128,0.15)', color: '#8a8680', dot: '#8a8680' },
@@ -11,6 +12,7 @@ const DEFAULT_STATUS_COLORS = {
   'Follow-up 2':                { bg: 'rgba(20,184,166,0.15)',  color: '#14b8a6', dot: '#14b8a6' },
   'Follow-up 3':                { bg: 'rgba(20,184,166,0.15)',  color: '#14b8a6', dot: '#14b8a6' },
   'Follow-up 4':                { bg: 'rgba(20,184,166,0.15)',  color: '#14b8a6', dot: '#14b8a6' },
+  'Emailed':                   { bg: 'rgba(56,189,248,0.15)',  color: '#38bdf8', dot: '#38bdf8' },
   'Replied':                   { bg: 'rgba(34,197,94,0.15)',   color: '#22c55e', dot: '#22c55e' },
   'Meeting Booked':            { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b', dot: '#f59e0b' },
   'Started Trial':             { bg: 'rgba(6,182,212,0.15)',   color: '#06b6d4', dot: '#06b6d4' },
@@ -64,6 +66,35 @@ function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, sh
           />
         </div>
 
+        <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1">
+            {FOLLOWUP_STAGE_KEYS.map(key => {
+              const fu = lead.followups_summary?.[key]
+              const color = !fu ? '#555' : fu.is_seen ? '#22c55e' : '#f59e0b'
+              return (
+                <span
+                  key={key}
+                  title={`${key}${fu ? (fu.is_seen ? ' — sent & seen' : ' — sent, not seen') : ' — not sent'}`}
+                  style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    backgroundColor: fu ? color : 'transparent',
+                    border: `1.5px solid ${color}`,
+                    display: 'inline-block',
+                  }}
+                />
+              )
+            })}
+          </div>
+          {lead.reply_count > 0 && (
+            <span
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+              style={{ backgroundColor: 'rgba(34,197,94,0.15)', color: '#22c55e' }}
+            >
+              ↩ Replied{lead.reply_count > 1 ? ` ×${lead.reply_count}` : ''}
+            </span>
+          )}
+        </div>
+
         {isWarmedUp && (
           <div className="mt-2.5">
             <span className="text-[11px] font-semibold tracking-wide" style={{ color: '#22c55e' }}>
@@ -105,7 +136,7 @@ function SkeletonCard() {
 const DEFAULT_STAGES = [
   'Identified', 'Connection Request Sent', 'Connected', 'Engaging (Warming Up)',
   'Ready to Message', 'Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4',
-  'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client',
+  'Emailed', 'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client',
   'No Response / Dead', 'Disqualified',
 ]
 

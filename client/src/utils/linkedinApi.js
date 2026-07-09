@@ -27,6 +27,16 @@ export const getEngagements = (leadId) => api.get(`/linkedin/leads/${leadId}/eng
 export const createEngagement = (leadId, data) => api.post(`/linkedin/leads/${leadId}/engagements`, data).then(r => r.data)
 export const deleteEngagement = (leadId, id) => api.delete(`/linkedin/leads/${leadId}/engagements/${id}`).then(r => r.data)
 
+// Follow-ups
+export const getFollowups = (leadId) => api.get(`/linkedin/leads/${leadId}/followups`).then(r => r.data)
+export const upsertFollowup = (leadId, stageKey, data) => api.put(`/linkedin/leads/${leadId}/followups/${encodeURIComponent(stageKey)}`, data).then(r => r.data)
+export const toggleFollowupSeen = (leadId, stageKey, isSeen) => api.patch(`/linkedin/leads/${leadId}/followups/${encodeURIComponent(stageKey)}/seen`, { is_seen: isSeen }).then(r => r.data)
+
+// Replies
+export const getReplies = (leadId) => api.get(`/linkedin/leads/${leadId}/replies`).then(r => r.data)
+export const createReply = (leadId, data) => api.post(`/linkedin/leads/${leadId}/replies`, data).then(r => r.data)
+export const deleteReply = (leadId, id) => api.delete(`/linkedin/leads/${leadId}/replies/${id}`).then(r => r.data)
+
 // Dashboard
 export const getLinkedInDashboard = (params) => api.get('/linkedin/dashboard', { params }).then(r => r.data)
 export const getStaleEngagementLeads = (params) => api.get('/linkedin/stale-engagement', { params }).then(r => r.data)

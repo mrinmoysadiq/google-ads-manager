@@ -9,10 +9,17 @@ import {
   createLinkedInLead,
   createEngagement,
   deleteEngagement,
+  upsertFollowup,
+  toggleFollowupSeen,
+  createReply,
+  deleteReply,
 } from '../../../../utils/linkedinApi'
 import { fmtDateLong, fmtDateTimeLong, todayLocal } from '../../../../utils/dates'
 import ConnectionStatusBadge from './ConnectionStatusBadge'
-import ImagePasteZone from '../../../../components/ImagePasteZone'
+import ImagePasteZone, { ImageLightbox } from '../../../../components/ImagePasteZone'
+import FollowupQuickModal from './FollowupQuickModal'
+import ReplyQuickModal from './ReplyQuickModal'
+import { FOLLOWUP_STAGE_KEYS, REPLIED_STAGE } from '../constants'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -26,6 +33,7 @@ const STATUS_COLORS = {
   'Follow-up 2':                { bg: 'rgba(20,184,166,0.15)',  color: '#14b8a6' },
   'Follow-up 3':                { bg: 'rgba(20,184,166,0.15)',  color: '#14b8a6' },
   'Follow-up 4':                { bg: 'rgba(20,184,166,0.15)',  color: '#14b8a6' },
+  'Emailed':                   { bg: 'rgba(56,189,248,0.15)',  color: '#38bdf8' },
   'Replied':                   { bg: 'rgba(34,197,94,0.15)',   color: '#22c55e' },
   'Meeting Booked':            { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b' },
   'Started Trial':             { bg: 'rgba(6,182,212,0.15)',   color: '#06b6d4' },
@@ -205,6 +213,156 @@ function EngagementsSection({ leadId, initialEngagements = [], warmupThreshold }
   )
 }
 
+// ─── Sub-component: FollowupsSection ──────────────────────────────────────────
+
+function FollowupRow({ stageKey, record, onSave, onToggleSeen }) {
+  const [modalOpen, setModalOpen] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div style={{ backgroundColor: '#242424', borderRadius: '8px', padding: '12px 14px', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          <span style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 600 }}>{stageKey}</span>
+          {record?.date && <span style={{ color: '#555', fontSize: '11px' }}>{fmtDateLong(record.date)}</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+          {record && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', color: record.is_seen ? '#22c55e' : '#8a8680', fontSize: '11px', cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={!!record.is_seen}
+                onChange={e => onToggleSeen(stageKey, e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              Seen
+            </label>
+          )}
+          <button
+            onClick={() => setModalOpen(true)}
+            style={{ background: 'none', border: '1px solid rgba(10,102,194,0.35)', color: '#0a66c2', borderRadius: '6px', padding: '3px 10px', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+          >
+            {record ? 'Edit' : 'Log'}
+          </button>
+        </div>
+      </div>
+
+      {record?.message_body ? (
+        <p
+          onClick={() => setExpanded(v => !v)}
+          style={{
+            color: '#8a8680', fontSize: '12px', margin: '8px 0 0', lineHeight: 1.5, cursor: 'pointer',
+            whiteSpace: expanded ? 'pre-wrap' : 'nowrap', overflow: expanded ? 'visible' : 'hidden', textOverflow: expanded ? 'clip' : 'ellipsis',
+          }}
+        >
+          {record.message_body}
+        </p>
+      ) : !record ? (
+        <p style={{ color: '#555', fontSize: '12px', margin: '8px 0 0' }}>Not sent yet</p>
+      ) : null}
+
+      {modalOpen && (
+        <FollowupQuickModal
+          stageKey={stageKey}
+          initialData={record}
+          onSave={async (fields) => { await onSave(stageKey, fields); setModalOpen(false) }}
+          onClose={() => setModalOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ReplyRow({ reply, onDelete }) {
+  const [lightbox, setLightbox] = useState(false)
+
+  return (
+    <div style={{ backgroundColor: '#242424', borderRadius: '8px', padding: '12px 14px', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+            <span style={{
+              backgroundColor: reply.channel === 'Email' ? 'rgba(168,85,247,0.15)' : 'rgba(10,102,194,0.15)',
+              color: reply.channel === 'Email' ? '#a855f7' : '#0a66c2',
+              borderRadius: '12px', padding: '2px 8px', fontSize: '11px', fontWeight: 500,
+            }}>
+              {reply.channel}
+            </span>
+            {reply.date && <span style={{ color: '#555', fontSize: '11px' }}>{fmtDateLong(reply.date)}</span>}
+          </div>
+          {reply.screenshot && (
+            <>
+              {lightbox && <ImageLightbox src={reply.screenshot} onClose={() => setLightbox(false)} />}
+              <img
+                src={reply.screenshot}
+                alt="Reply screenshot"
+                onClick={() => setLightbox(true)}
+                style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', display: 'block', cursor: 'zoom-in', marginBottom: '6px' }}
+              />
+            </>
+          )}
+          {reply.notes && <p style={{ color: '#c5c1b9', fontSize: '13px', lineHeight: 1.5, margin: 0, wordBreak: 'break-word' }}>{reply.notes}</p>}
+        </div>
+        <button onClick={onDelete} style={{ background: 'none', border: 'none', color: '#555', fontSize: '14px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', flexShrink: 0 }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.backgroundColor = 'transparent' }}
+          title="Delete reply"
+        >✕</button>
+      </div>
+    </div>
+  )
+}
+
+function FollowupsSection({ followups = [], replies = [], onSaveFollowup, onToggleSeen, onSaveReply, onDeleteReply }) {
+  const [replyModalOpen, setReplyModalOpen] = useState(false)
+  const byStage = {}
+  followups.forEach(f => { byStage[f.stage_key] = f })
+
+  return (
+    <div>
+      <h4 style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 600, marginBottom: '10px' }}>Follow-ups</h4>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+        {FOLLOWUP_STAGE_KEYS.map(stageKey => (
+          <FollowupRow
+            key={stageKey}
+            stageKey={stageKey}
+            record={byStage[stageKey] || null}
+            onSave={onSaveFollowup}
+            onToggleSeen={onToggleSeen}
+          />
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+        <h4 style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 600, margin: 0 }}>Replies</h4>
+        <button
+          onClick={() => setReplyModalOpen(true)}
+          style={{ background: 'none', border: '1px solid rgba(10,102,194,0.35)', color: '#0a66c2', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+        >
+          + Add Reply
+        </button>
+      </div>
+
+      {replies.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '24px', color: '#555', fontSize: '13px' }}>No replies logged yet</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {replies.map(r => (
+            <ReplyRow key={r.id} reply={r} onDelete={() => onDeleteReply(r.id)} />
+          ))}
+        </div>
+      )}
+
+      {replyModalOpen && (
+        <ReplyQuickModal
+          onSave={async (fields) => { await onSaveReply(fields); setReplyModalOpen(false) }}
+          onClose={() => setReplyModalOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function LinkedInLeadDrawer({
@@ -228,6 +386,9 @@ export default function LinkedInLeadDrawer({
   const [saved, setSaved] = useState({})
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  const [followupModal, setFollowupModal] = useState({ open: false, stageKey: null, initialData: null, modalKey: 0 })
+  const [replyModal, setReplyModal] = useState({ open: false, modalKey: 0 })
 
   const [createForm, setCreateForm] = useState({
     lead_name: '',
@@ -279,12 +440,74 @@ export default function LinkedInLeadDrawer({
   }
 
   const handleStatusChange = async (newStatus) => {
+    if (FOLLOWUP_STAGE_KEYS.includes(newStatus)) {
+      const existing = (lead.followups || []).find(f => f.stage_key === newStatus) || null
+      setFollowupModal({ open: true, stageKey: newStatus, initialData: existing, modalKey: Date.now() })
+      return
+    }
+    if (newStatus === REPLIED_STAGE) {
+      setReplyModal({ open: true, modalKey: Date.now() })
+      return
+    }
     try {
       const updated = await updateLinkedInLead(leadId, { status: newStatus, performed_by: getUser()?.name || null })
       setLead(prev => ({ ...prev, ...updated }))
       markSaved('status')
       if (onLeadUpdated) onLeadUpdated(updated)
     } catch { toast.error('Failed to update status') }
+  }
+
+  const handleFollowupModalSave = async (fields) => {
+    const { stageKey } = followupModal
+    const saved = await upsertFollowup(leadId, stageKey, fields)
+    const updated = await updateLinkedInLead(leadId, { status: stageKey, performed_by: getUser()?.name || null })
+    setLead(prev => ({
+      ...prev,
+      ...updated,
+      followups: [...(prev.followups || []).filter(f => f.stage_key !== stageKey), saved],
+    }))
+    if (onLeadUpdated) onLeadUpdated(updated)
+    setFollowupModal({ open: false, stageKey: null, initialData: null, modalKey: 0 })
+    toast.success(`${stageKey} logged — moved to ${stageKey}`)
+  }
+
+  const handleReplyModalSave = async (fields) => {
+    const created = await createReply(leadId, fields)
+    const updated = await updateLinkedInLead(leadId, { status: REPLIED_STAGE, performed_by: getUser()?.name || null })
+    setLead(prev => ({
+      ...prev,
+      ...updated,
+      replies: [created, ...(prev.replies || [])],
+    }))
+    if (onLeadUpdated) onLeadUpdated(updated)
+    setReplyModal({ open: false, modalKey: 0 })
+    toast.success('Reply logged — moved to Replied')
+  }
+
+  const handleSaveFollowup = async (stageKey, fields) => {
+    const saved = await upsertFollowup(leadId, stageKey, fields)
+    setLead(prev => ({
+      ...prev,
+      followups: [...(prev.followups || []).filter(f => f.stage_key !== stageKey), saved],
+    }))
+  }
+
+  const handleToggleFollowupSeen = async (stageKey, isSeen) => {
+    const updatedRow = await toggleFollowupSeen(leadId, stageKey, isSeen)
+    setLead(prev => ({
+      ...prev,
+      followups: (prev.followups || []).map(f => f.stage_key === stageKey ? updatedRow : f),
+    }))
+  }
+
+  const handleSaveReply = async (fields) => {
+    const created = await createReply(leadId, fields)
+    setLead(prev => ({ ...prev, replies: [created, ...(prev.replies || [])] }))
+  }
+
+  const handleDeleteReply = async (id) => {
+    await deleteReply(leadId, id)
+    setLead(prev => ({ ...prev, replies: (prev.replies || []).filter(r => r.id !== id) }))
   }
 
   const handleCreate = async (e) => {
@@ -471,7 +694,7 @@ export default function LinkedInLeadDrawer({
                   </div>
 
                   <div style={{ display: 'flex', gap: '4px', marginTop: '16px' }}>
-                    {['details', 'engagements', 'history'].map(tab => (
+                    {['details', 'followups', 'engagements', 'history'].map(tab => (
                       <button key={tab} onClick={() => setActiveTab(tab)}
                         style={{ background: activeTab === tab ? 'rgba(10,102,194,0.2)' : 'none', border: activeTab === tab ? '1px solid rgba(10,102,194,0.4)' : '1px solid transparent', borderRadius: '6px', color: activeTab === tab ? '#0a66c2' : '#8a8680', fontSize: '13px', fontWeight: activeTab === tab ? 600 : 400, padding: '5px 14px', cursor: 'pointer', textTransform: 'capitalize' }}
                       >{tab}</button>
@@ -625,6 +848,18 @@ export default function LinkedInLeadDrawer({
                     </div>
                   </div>
 
+                  {/* ── FOLLOW-UPS TAB ──────────────────────────────────────── */}
+                  <div style={{ display: activeTab === 'followups' ? 'block' : 'none' }}>
+                    <FollowupsSection
+                      followups={lead.followups || []}
+                      replies={lead.replies || []}
+                      onSaveFollowup={handleSaveFollowup}
+                      onToggleSeen={handleToggleFollowupSeen}
+                      onSaveReply={handleSaveReply}
+                      onDeleteReply={handleDeleteReply}
+                    />
+                  </div>
+
                   {/* ── ENGAGEMENTS TAB ─────────────────────────────────────── */}
                   <div style={{ display: activeTab === 'engagements' ? 'block' : 'none' }}>
                     <EngagementsSection leadId={leadId} initialEngagements={lead.engagements || []} warmupThreshold={warmupThreshold} />
@@ -672,6 +907,24 @@ export default function LinkedInLeadDrawer({
             </div>
           </div>
         </div>
+      )}
+
+      {followupModal.open && (
+        <FollowupQuickModal
+          key={followupModal.modalKey}
+          stageKey={followupModal.stageKey}
+          initialData={followupModal.initialData}
+          onSave={handleFollowupModalSave}
+          onClose={() => setFollowupModal({ open: false, stageKey: null, initialData: null, modalKey: 0 })}
+        />
+      )}
+
+      {replyModal.open && (
+        <ReplyQuickModal
+          key={replyModal.modalKey}
+          onSave={handleReplyModalSave}
+          onClose={() => setReplyModal({ open: false, modalKey: 0 })}
+        />
       )}
     </>
   )
