@@ -116,7 +116,7 @@ router.post('/leads', (req, res) => {
   try {
     const {
       specialist_id, lead_name, linkedin_profile_url, activity_url,
-      company_name, job_title, website, follower_count, notes, connection_status, performed_by,
+      company_name, job_title, website, email, phone, follower_count, notes, connection_status, performed_by,
       source_image,
     } = req.body;
 
@@ -127,8 +127,8 @@ router.post('/leads', (req, res) => {
 
     const result = db.prepare(`
       INSERT INTO linkedin_leads
-        (specialist_id, lead_name, linkedin_profile_url, activity_url, company_name, job_title, website, follower_count, notes, connection_status, source_image)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (specialist_id, lead_name, linkedin_profile_url, activity_url, company_name, job_title, website, email, phone, follower_count, notes, connection_status, source_image)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       specialist_id,
       lead_name.trim(),
@@ -137,6 +137,8 @@ router.post('/leads', (req, res) => {
       company_name || null,
       job_title || null,
       website || null,
+      email || null,
+      phone || null,
       follower_count || null,
       notes || null,
       initialConnectionStatus,
@@ -206,7 +208,7 @@ router.patch('/leads/:id', (req, res) => {
 
     const {
       specialist_id, lead_name, linkedin_profile_url, activity_url,
-      company_name, job_title, website, follower_count, status, notes, connection_status, performed_by,
+      company_name, job_title, website, email, phone, follower_count, status, notes, connection_status, performed_by,
       source_image,
     } = req.body;
 
@@ -224,6 +226,8 @@ router.patch('/leads/:id', (req, res) => {
         company_name = ?,
         job_title = ?,
         website = ?,
+        email = ?,
+        phone = ?,
         follower_count = ?,
         status = COALESCE(?, status),
         notes = ?,
@@ -239,6 +243,8 @@ router.patch('/leads/:id', (req, res) => {
       company_name !== undefined ? (company_name || null) : existing.company_name,
       job_title !== undefined ? (job_title || null) : existing.job_title,
       website !== undefined ? (website || null) : existing.website,
+      email !== undefined ? (email || null) : existing.email,
+      phone !== undefined ? (phone || null) : existing.phone,
       follower_count !== undefined ? (follower_count || null) : existing.follower_count,
       status || null,
       notes !== undefined ? (notes || null) : existing.notes,

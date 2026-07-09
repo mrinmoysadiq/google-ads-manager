@@ -523,6 +523,8 @@ function initializeDatabase() {
     'ALTER TABLE linkedin_pipeline_stages ADD COLUMN is_default INTEGER DEFAULT 0',
     "ALTER TABLE linkedin_leads ADD COLUMN connection_status TEXT DEFAULT 'Not Connected'",
     'ALTER TABLE linkedin_leads ADD COLUMN website TEXT',
+    'ALTER TABLE linkedin_leads ADD COLUMN email TEXT',
+    'ALTER TABLE linkedin_leads ADD COLUMN phone TEXT',
   ];
 
   // Explicit buyer-account assignment table
