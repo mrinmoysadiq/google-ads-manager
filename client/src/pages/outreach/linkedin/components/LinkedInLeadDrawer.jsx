@@ -401,6 +401,7 @@ export default function LinkedInLeadDrawer({
   const [replyModal, setReplyModal] = useState({ open: false, modalKey: 0 })
 
   const [createDupWarning, setCreateDupWarning] = useState(null)
+  const [dupConfirmedFor, setDupConfirmedFor] = useState(null)
   const [editDupWarning, setEditDupWarning] = useState(null)
 
   const [createForm, setCreateForm] = useState({
@@ -539,6 +540,21 @@ export default function LinkedInLeadDrawer({
     e.preventDefault()
     if (!createForm.lead_name.trim()) { toast.error('Lead name is required'); return }
     if (!createForm.specialist_id) { toast.error('Please assign a specialist'); return }
+
+    // Duplicate check happens here (not just on blur) so a duplicate is never
+    // missed if the user fills the URL and submits before the blur check resolves.
+    const url = createForm.linkedin_profile_url?.trim()
+    if (url && dupConfirmedFor !== url) {
+      const res = await checkLinkedInDuplicate({ specialist_id: createForm.specialist_id, linkedin_profile_url: url }).catch(() => null)
+      const duplicate = res?.duplicate || null
+      setCreateDupWarning(duplicate)
+      if (duplicate) {
+        setDupConfirmedFor(url)
+        toast.error(`"${duplicate.lead_name}" already has this profile URL for this specialist. Click Create Lead again to add anyway.`)
+        return
+      }
+    }
+
     setCreating(true)
     try {
       const payload = {
@@ -693,8 +709,8 @@ export default function LinkedInLeadDrawer({
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '28px' }}>
-                <button type="submit" disabled={creating} style={{ flex: 1, backgroundColor: '#0a66c2', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px', fontSize: '14px', fontWeight: 600, cursor: creating ? 'not-allowed' : 'pointer', opacity: creating ? 0.7 : 1 }}>
-                  {creating ? 'Creating…' : 'Create Lead'}
+                <button type="submit" disabled={creating} style={{ flex: 1, backgroundColor: createDupWarning ? '#f59e0b' : '#0a66c2', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px', fontSize: '14px', fontWeight: 600, cursor: creating ? 'not-allowed' : 'pointer', opacity: creating ? 0.7 : 1 }}>
+                  {creating ? 'Creating…' : createDupWarning ? 'Create Anyway' : 'Create Lead'}
                 </button>
                 <button type="button" onClick={handleClose} style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#8a8680', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', cursor: 'pointer' }}>
                   Cancel
