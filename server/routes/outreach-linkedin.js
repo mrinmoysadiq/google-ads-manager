@@ -176,6 +176,78 @@ router.post('/leads', (req, res) => {
   }
 });
 
+// Normalized-URL comparison (trim, strip trailing slash, case-insensitive) so
+// "https://linkedin.com/in/foo/" and "https://LinkedIn.com/in/foo" match.
+const NORMALIZE_URL_SQL = "LOWER(RTRIM(TRIM(linkedin_profile_url), '/'))";
+
+// Registered before /leads/:id so "duplicate-check"/"duplicates" aren't swallowed by the :id param.
+router.get('/leads/duplicate-check', (req, res) => {
+  try {
+    const { specialist_id, linkedin_profile_url, exclude_lead_id } = req.query;
+    if (!specialist_id || !linkedin_profile_url || !linkedin_profile_url.trim()) {
+      return res.json({ duplicate: null });
+    }
+    const duplicate = db.prepare(`
+      SELECT id, lead_name, status
+      FROM linkedin_leads
+      WHERE specialist_id = ?
+        AND deleted_at IS NULL
+        AND id != ?
+        AND ${NORMALIZE_URL_SQL} = LOWER(RTRIM(TRIM(?), '/'))
+      LIMIT 1
+    `).get(specialist_id, exclude_lead_id || -1, linkedin_profile_url);
+    res.json({ duplicate: duplicate || null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to check for duplicates' });
+  }
+});
+
+router.get('/leads/duplicates', (req, res) => {
+  try {
+    const reqUser = getRequestUser(req);
+    const enforcedSpecId = resolveSpecialistForUser(reqUser);
+    if (enforcedSpecId === -1) return res.json([]);
+
+    const specCond = enforcedSpecId !== null ? 'AND specialist_id = ?' : '';
+    const specParams = enforcedSpecId !== null ? [enforcedSpecId] : [];
+
+    const groups = db.prepare(`
+      SELECT specialist_id, ${NORMALIZE_URL_SQL} as norm_url, COUNT(*) as cnt
+      FROM linkedin_leads
+      WHERE deleted_at IS NULL
+        AND linkedin_profile_url IS NOT NULL
+        AND TRIM(linkedin_profile_url) != ''
+        ${specCond}
+      GROUP BY specialist_id, norm_url
+      HAVING COUNT(*) > 1
+    `).all(...specParams);
+
+    const leadsStmt = db.prepare(`
+      SELECT l.id, l.lead_name, l.status, l.linkedin_profile_url, l.created_at, s.name as specialist_name
+      FROM linkedin_leads l
+      LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+      WHERE l.specialist_id = ? AND ${NORMALIZE_URL_SQL} = ? AND l.deleted_at IS NULL
+      ORDER BY l.created_at ASC
+    `);
+
+    const result = groups.map(g => {
+      const leads = leadsStmt.all(g.specialist_id, g.norm_url);
+      return {
+        specialist_id: g.specialist_id,
+        specialist_name: leads[0]?.specialist_name || 'Unassigned',
+        linkedin_profile_url: leads[0]?.linkedin_profile_url || '',
+        leads: leads.map(({ id, lead_name, status, created_at }) => ({ id, lead_name, status, created_at })),
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch duplicate leads' });
+  }
+});
+
 router.get('/leads/:id', (req, res) => {
   try {
     const { id } = req.params;

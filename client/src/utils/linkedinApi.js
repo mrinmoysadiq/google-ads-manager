@@ -21,6 +21,8 @@ export const deleteLinkedInLead = (id) => api.delete(`/linkedin/leads/${id}`).th
 export const getLinkedInTrash = () => api.get('/linkedin/trash').then(r => r.data)
 export const restoreLinkedInTrashLead = (id) => api.post(`/linkedin/trash/restore/${id}`).then(r => r.data)
 export const permanentDeleteLinkedInLead = (id) => api.delete(`/linkedin/trash/permanent/${id}`).then(r => r.data)
+export const checkLinkedInDuplicate = (params) => api.get('/linkedin/leads/duplicate-check', { params }).then(r => r.data)
+export const getLinkedInDuplicateLeads = () => api.get('/linkedin/leads/duplicates').then(r => r.data)
 
 // Engagements
 export const getEngagements = (leadId) => api.get(`/linkedin/leads/${leadId}/engagements`).then(r => r.data)

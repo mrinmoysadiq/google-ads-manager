@@ -13,6 +13,7 @@ import {
   toggleFollowupSeen,
   createReply,
   deleteReply,
+  checkLinkedInDuplicate,
 } from '../../../../utils/linkedinApi'
 import { fmtDateLong, fmtDateTimeLong, todayLocal } from '../../../../utils/dates'
 import ConnectionStatusBadge from './ConnectionStatusBadge'
@@ -70,6 +71,15 @@ const selectStyles = {
 function SavedIndicator({ show }) {
   if (!show) return null
   return <span style={{ color: '#22c55e', fontSize: '11px', marginLeft: '6px' }}>Saved ✓</span>
+}
+
+function DuplicateWarning({ duplicate }) {
+  if (!duplicate) return null
+  return (
+    <p style={{ color: '#f59e0b', fontSize: '11px', marginTop: '6px', lineHeight: 1.5 }}>
+      ⚠ Already tracked as "{duplicate.lead_name}" ({duplicate.status}) for this specialist.
+    </p>
+  )
 }
 
 // ─── Sub-component: StatusBadge with dropdown ────────────────────────────────
@@ -390,6 +400,9 @@ export default function LinkedInLeadDrawer({
   const [followupModal, setFollowupModal] = useState({ open: false, stageKey: null, initialData: null, modalKey: 0 })
   const [replyModal, setReplyModal] = useState({ open: false, modalKey: 0 })
 
+  const [createDupWarning, setCreateDupWarning] = useState(null)
+  const [editDupWarning, setEditDupWarning] = useState(null)
+
   const [createForm, setCreateForm] = useState({
     lead_name: '',
     linkedin_profile_url: '',
@@ -428,6 +441,18 @@ export default function LinkedInLeadDrawer({
   const handleClose = () => {
     setVisible(false)
     setTimeout(onClose, 280)
+  }
+
+  const checkDuplicate = async (specialistId, url, excludeLeadId, setWarning) => {
+    if (!specialistId || !url || !url.trim()) { setWarning(null); return }
+    try {
+      const res = await checkLinkedInDuplicate({
+        specialist_id: specialistId,
+        linkedin_profile_url: url.trim(),
+        exclude_lead_id: excludeLeadId || undefined,
+      })
+      setWarning(res.duplicate || null)
+    } catch { /* non-blocking — silently skip on check failure */ }
   }
 
   const saveField = async (field, value) => {
@@ -617,7 +642,15 @@ export default function LinkedInLeadDrawer({
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Profile URL</label>
-                  <input type="text" className={inputClass} value={createForm.linkedin_profile_url} onChange={e => setCreateForm(v => ({ ...v, linkedin_profile_url: e.target.value }))} placeholder="https://linkedin.com/in/…" />
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={createForm.linkedin_profile_url}
+                    onChange={e => setCreateForm(v => ({ ...v, linkedin_profile_url: e.target.value }))}
+                    onBlur={e => checkDuplicate(createForm.specialist_id, e.target.value, null, setCreateDupWarning)}
+                    placeholder="https://linkedin.com/in/…"
+                  />
+                  <DuplicateWarning duplicate={createDupWarning} />
                 </div>
 
                 <div>
@@ -629,7 +662,17 @@ export default function LinkedInLeadDrawer({
                   <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>
                     Specialist <span style={{ color: '#ef4444' }}>*</span>
                   </label>
-                  <Select styles={selectStyles} options={specialistOptions} value={specialistOptions.find(o => o.value === createForm.specialist_id) || null} onChange={opt => setCreateForm(v => ({ ...v, specialist_id: opt?.value || '' }))} placeholder="Assign specialist…" />
+                  <Select
+                    styles={selectStyles}
+                    options={specialistOptions}
+                    value={specialistOptions.find(o => o.value === createForm.specialist_id) || null}
+                    onChange={opt => {
+                      const specId = opt?.value || ''
+                      setCreateForm(v => ({ ...v, specialist_id: specId }))
+                      checkDuplicate(specId, createForm.linkedin_profile_url, null, setCreateDupWarning)
+                    }}
+                    placeholder="Assign specialist…"
+                  />
                 </div>
 
                 <div>
@@ -781,7 +824,10 @@ export default function LinkedInLeadDrawer({
                             type="text"
                             className={inputClass}
                             defaultValue={lead.linkedin_profile_url || ''}
-                            onBlur={e => saveField('linkedin_profile_url', e.target.value || null)}
+                            onBlur={e => {
+                              saveField('linkedin_profile_url', e.target.value || null)
+                              checkDuplicate(lead.specialist_id, e.target.value, leadId, setEditDupWarning)
+                            }}
                             placeholder="https://linkedin.com/in/…"
                             style={{ flex: 1 }}
                           />
@@ -790,6 +836,7 @@ export default function LinkedInLeadDrawer({
                               style={{ color: '#0a66c2', fontSize: '16px', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}>↗</a>
                           )}
                         </div>
+                        <DuplicateWarning duplicate={editDupWarning} />
                       </div>
 
                       <div style={{ gridColumn: '1 / -1' }}>
@@ -815,7 +862,17 @@ export default function LinkedInLeadDrawer({
 
                       <div>
                         <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Specialist</label>
-                        <Select styles={selectStyles} options={specialistOptions} value={specialistOptions.find(o => o.value === lead.specialist_id) || null} onChange={opt => opt && saveField('specialist_id', opt.value)} placeholder="Assign specialist…" />
+                        <Select
+                          styles={selectStyles}
+                          options={specialistOptions}
+                          value={specialistOptions.find(o => o.value === lead.specialist_id) || null}
+                          onChange={opt => {
+                            if (!opt) return
+                            saveField('specialist_id', opt.value)
+                            checkDuplicate(opt.value, lead.linkedin_profile_url, leadId, setEditDupWarning)
+                          }}
+                          placeholder="Assign specialist…"
+                        />
                       </div>
 
                       <div style={{ gridColumn: '1 / -1' }}>

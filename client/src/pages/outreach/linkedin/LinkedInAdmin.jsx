@@ -5,7 +5,9 @@ import {
   getLinkedInPipelineStages, createLinkedInPipelineStage, updateLinkedInPipelineStage, deleteLinkedInPipelineStage,
   getLinkedInSettings, updateLinkedInSettings,
   getLinkedInTrash, restoreLinkedInTrashLead, permanentDeleteLinkedInLead,
+  getLinkedInDuplicateLeads,
 } from '../../../utils/linkedinApi'
+import { fmtDateLong } from '../../../utils/dates'
 
 const inputClass =
   'w-full rounded-lg px-3 py-2 text-sm focus:outline-none bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#0a66c2]'
@@ -278,6 +280,59 @@ function LeadsTrashSection() {
   )
 }
 
+// ─── Section: Duplicate Leads ─────────────────────────────────────────────────
+
+function DuplicateLeadsSection() {
+  const [groups, setGroups] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getLinkedInDuplicateLeads().then(setGroups).catch(() => {}).finally(() => setLoading(false))
+  }, [])
+
+  const totalCount = groups.reduce((sum, g) => sum + g.leads.length, 0)
+
+  return (
+    <div className="bg-[#242424] border border-white/[0.08] rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: '#1e1e1e' }}>
+        <div>
+          <h2 className="text-sm font-semibold text-[#c5c1b9]">Duplicate Leads</h2>
+          <p className="text-xs text-[#8a8680] mt-0.5">Leads that share the same LinkedIn profile URL under the same specialist.</p>
+        </div>
+        <span className="text-xs font-medium px-2 py-1 rounded-full" style={{ background: groups.length ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.05)', color: groups.length ? '#f59e0b' : '#555' }}>
+          {groups.length} group{groups.length !== 1 ? 's' : ''} · {totalCount} lead{totalCount !== 1 ? 's' : ''}
+        </span>
+      </div>
+      {loading ? (
+        <div className="px-6 py-6 text-sm text-[#8a8680]">Loading…</div>
+      ) : groups.length === 0 ? (
+        <div className="px-6 py-8 text-sm text-center text-[#555]">No duplicate leads found</div>
+      ) : (
+        <div className="divide-y divide-white/[0.05]">
+          {groups.map((g, i) => (
+            <div key={i} className="px-6 py-4">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <p className="text-xs font-medium text-[#8a8680]">{g.specialist_name}</p>
+                <a href={g.linkedin_profile_url} target="_blank" rel="noopener noreferrer" className="text-xs truncate max-w-[60%]" style={{ color: '#0a66c2' }}>
+                  {g.linkedin_profile_url} ↗
+                </a>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {g.leads.map(lead => (
+                  <div key={lead.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-[#c5c1b9]">{lead.lead_name}</span>
+                    <span className="text-xs text-[#8a8680]">{lead.status} · added {fmtDateLong(lead.created_at)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Page root ────────────────────────────────────────────────────────────────
 
 export default function LinkedInAdmin() {
@@ -332,6 +387,7 @@ export default function LinkedInAdmin() {
           <div className="flex flex-col gap-6">
             <PipelineStagesSection stages={stages} setStages={setStages} />
             <SettingsSection settings={settings} setSettings={setSettings} />
+            <DuplicateLeadsSection />
             <LeadsTrashSection />
           </div>
         )}
