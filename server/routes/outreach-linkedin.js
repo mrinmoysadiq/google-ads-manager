@@ -805,6 +805,7 @@ router.get('/activity', (req, res) => {
       return res.json({
         new_leads_total: 0, new_leads_by_specialist: [],
         stage_moves_by_stage: [], activity_by_specialist: [],
+        engagement_totals: { likes: 0, comments: 0 }, followups_sent_total: 0,
       });
     }
     if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
@@ -865,9 +866,57 @@ router.get('/activity', (req, res) => {
       specMovesMap[r.specialist_name] = { leads_worked: r.leads_worked, stage_moves: r.stage_moves };
     });
 
+    // ── 4. Engagements (likes/comments) from linkedin_engagements ────────────
+    const engCond   = ['date(e.date) >= ?', 'date(e.date) <= ?'];
+    const engParams = [from, to];
+    if (specialist_id) { engCond.push('l.specialist_id = ?'); engParams.push(specialist_id); }
+
+    const engagementsBySpec = db.prepare(`
+      SELECT COALESCE(s.name, 'Unassigned') as specialist_name,
+             SUM(CASE WHEN e.liked = 1 THEN 1 ELSE 0 END) as likes,
+             SUM(CASE WHEN e.commented = 1 THEN 1 ELSE 0 END) as comments
+      FROM linkedin_engagements e
+      JOIN linkedin_leads l ON l.id = e.lead_id
+      LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+      WHERE ${engCond.join(' AND ')}
+      GROUP BY l.specialist_id
+    `).all(...engParams);
+
+    const engagementsMap = {};
+    let likes_total = 0, comments_total = 0;
+    engagementsBySpec.forEach(r => {
+      engagementsMap[r.specialist_name] = { likes: r.likes || 0, comments: r.comments || 0 };
+      likes_total += r.likes || 0;
+      comments_total += r.comments || 0;
+    });
+
+    // ── 5. Follow-ups / DMs sent from linkedin_followups ─────────────────────
+    const fuCond   = ['f.date IS NOT NULL', 'date(f.date) >= ?', 'date(f.date) <= ?'];
+    const fuParams = [from, to];
+    if (specialist_id) { fuCond.push('l.specialist_id = ?'); fuParams.push(specialist_id); }
+
+    const followupsBySpec = db.prepare(`
+      SELECT COALESCE(s.name, 'Unassigned') as specialist_name,
+             COUNT(*) as followups_sent
+      FROM linkedin_followups f
+      JOIN linkedin_leads l ON l.id = f.lead_id
+      LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+      WHERE ${fuCond.join(' AND ')}
+      GROUP BY l.specialist_id
+    `).all(...fuParams);
+
+    const followupsMap = {};
+    let followups_sent_total = 0;
+    followupsBySpec.forEach(r => {
+      followupsMap[r.specialist_name] = r.followups_sent || 0;
+      followups_sent_total += r.followups_sent || 0;
+    });
+
     const allNames = new Set([
       ...newLeadsBySpec.map(r => r.specialist_name),
       ...Object.keys(specMovesMap),
+      ...Object.keys(engagementsMap),
+      ...Object.keys(followupsMap),
     ]);
 
     const activity_by_specialist = [...allNames].map(name => ({
@@ -875,6 +924,9 @@ router.get('/activity', (req, res) => {
       new_leads:    newLeadsBySpec.find(r => r.specialist_name === name)?.count || 0,
       leads_worked: specMovesMap[name]?.leads_worked || 0,
       stage_moves:  specMovesMap[name]?.stage_moves  || 0,
+      likes:        engagementsMap[name]?.likes    || 0,
+      comments:     engagementsMap[name]?.comments || 0,
+      followups_sent: followupsMap[name] || 0,
     })).sort((a, b) => (b.new_leads + b.stage_moves) - (a.new_leads + a.stage_moves));
 
     res.json({
@@ -883,6 +935,8 @@ router.get('/activity', (req, res) => {
       new_leads_by_specialist: newLeadsBySpec,
       stage_moves_by_stage,
       activity_by_specialist,
+      engagement_totals: { likes: likes_total, comments: comments_total },
+      followups_sent_total,
     });
   } catch (err) {
     console.error(err);
@@ -924,6 +978,46 @@ router.get('/activity/leads', (req, res) => {
         ORDER BY l.created_at DESC
       `).all(...params);
       return res.json(leads);
+    }
+
+    // ── Engagements — likes / comments ───────────────────────────────────────
+    if (filter_type === 'engagement_likes' || filter_type === 'engagement_comments') {
+      const col = filter_type === 'engagement_likes' ? 'liked' : 'commented';
+      const cond   = ['date(e.date) >= ?', 'date(e.date) <= ?', `e.${col} = 1`];
+      const params = [from, to];
+      if (specialist_name) { cond.push('s.name = ?'); params.push(specialist_name); }
+      if (enforcedSpecId !== null) { cond.push('l.specialist_id = ?'); params.push(enforcedSpecId); }
+
+      const rows = db.prepare(`
+        SELECT e.id as move_id, l.id, l.lead_name, l.company_name, l.status, e.date as changed_at,
+               COALESCE(s.name, 'Unassigned') as specialist_name
+        FROM linkedin_engagements e
+        JOIN linkedin_leads l ON l.id = e.lead_id
+        LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+        WHERE ${cond.join(' AND ')}
+        ORDER BY e.date DESC, e.id DESC
+      `).all(...params);
+      return res.json(rows);
+    }
+
+    // ── Follow-ups / DMs sent ─────────────────────────────────────────────────
+    if (filter_type === 'followups') {
+      const cond   = ['f.date IS NOT NULL', 'date(f.date) >= ?', 'date(f.date) <= ?'];
+      const params = [from, to];
+      if (specialist_name) { cond.push('s.name = ?'); params.push(specialist_name); }
+      if (enforcedSpecId !== null) { cond.push('l.specialist_id = ?'); params.push(enforcedSpecId); }
+
+      const rows = db.prepare(`
+        SELECT f.id as move_id, l.id, l.lead_name, l.company_name, l.status,
+               f.date as changed_at, f.stage_key as new_status,
+               COALESCE(s.name, 'Unassigned') as specialist_name
+        FROM linkedin_followups f
+        JOIN linkedin_leads l ON l.id = f.lead_id
+        LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+        WHERE ${cond.join(' AND ')}
+        ORDER BY f.date DESC, f.id DESC
+      `).all(...params);
+      return res.json(rows);
     }
 
     // ── Stage moves (default) ────────────────────────────────────────────────

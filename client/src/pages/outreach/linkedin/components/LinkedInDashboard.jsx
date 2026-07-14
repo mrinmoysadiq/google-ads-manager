@@ -543,6 +543,9 @@ export default function LinkedInDashboard({ specialistId, onLeadClick, refreshKe
                     { label: 'Leads Collected',  value: activity.new_leads_total, color: '#22c55e' },
                     { label: 'Stage Movements',  value: activity.stage_moves_by_stage.reduce((s, r) => s + r.moves_count, 0), color: '#0a66c2' },
                     { label: 'Leads Worked On',  value: activity.stage_moves_by_stage.reduce((s, r) => s + r.leads_count, 0), color: '#f59e0b' },
+                    { label: 'Comments',         value: activity.engagement_totals?.comments || 0, color: '#a855f7' },
+                    { label: 'Likes',            value: activity.engagement_totals?.likes || 0, color: '#ec4899' },
+                    { label: 'DMs / Follow-ups', value: activity.followups_sent_total || 0, color: '#14b8a6' },
                   ].map(({ label, value, color }) => (
                     <div key={label} className="rounded-xl p-5" style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.08)', position: 'relative' }}>
                       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, borderRadius: '12px 12px 0 0', backgroundColor: color, opacity: 0.7 }} />
@@ -602,15 +605,19 @@ export default function LinkedInDashboard({ specialistId, onLeadClick, refreshKe
                     {activity.activity_by_specialist.length === 0 ? (
                       <p style={{ ...mutedText, fontSize: '0.85rem', textAlign: 'center', padding: '20px 0' }}>No activity in this period</p>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 70px 70px', gap: 8, padding: '4px 8px', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#8a8680', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 4 }}>
+                      <div style={{ overflowX: 'auto' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 520 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 55px 60px 55px 55px 65px 55px', gap: 8, padding: '4px 8px', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#8a8680', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 4 }}>
                           <span>Specialist</span>
                           <span style={{ textAlign: 'right' }}>New</span>
                           <span style={{ textAlign: 'right' }}>Worked</span>
                           <span style={{ textAlign: 'right' }}>Moves</span>
+                          <span style={{ textAlign: 'right' }}>Likes</span>
+                          <span style={{ textAlign: 'right' }}>Comments</span>
+                          <span style={{ textAlign: 'right' }}>DMs</span>
                         </div>
                         {activity.activity_by_specialist.map(sp => (
-                          <div key={sp.name} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 70px 70px', gap: 8, padding: '6px 8px', borderRadius: 6, fontSize: '0.82rem' }}
+                          <div key={sp.name} style={{ display: 'grid', gridTemplateColumns: '1fr 55px 60px 55px 55px 65px 55px', gap: 8, padding: '6px 8px', borderRadius: 6, fontSize: '0.82rem' }}
                             onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)')}
                             onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                           >
@@ -642,8 +649,36 @@ export default function LinkedInDashboard({ specialistId, onLeadClick, refreshKe
                               style={{ color: '#0a66c2', fontWeight: 600, textAlign: 'right', cursor: sp.stage_moves > 0 ? 'pointer' : 'default', textDecoration: sp.stage_moves > 0 ? 'underline dotted' : 'none', textUnderlineOffset: 3 }}
                               title={sp.stage_moves > 0 ? 'Click to see all move events' : undefined}
                             >{sp.stage_moves || 0}</span>
+                            <span
+                              onClick={() => sp.likes > 0 && openActivityLeads(
+                                `Likes — ${sp.name}`,
+                                `${sp.likes} like${sp.likes !== 1 ? 's' : ''} logged`,
+                                { filter_type: 'engagement_likes', specialist_name: sp.name }
+                              )}
+                              style={{ color: '#ec4899', fontWeight: 500, textAlign: 'right', cursor: sp.likes > 0 ? 'pointer' : 'default', textDecoration: sp.likes > 0 ? 'underline dotted' : 'none', textUnderlineOffset: 3 }}
+                              title={sp.likes > 0 ? 'Click to see likes' : undefined}
+                            >{sp.likes || 0}</span>
+                            <span
+                              onClick={() => sp.comments > 0 && openActivityLeads(
+                                `Comments — ${sp.name}`,
+                                `${sp.comments} comment${sp.comments !== 1 ? 's' : ''} logged`,
+                                { filter_type: 'engagement_comments', specialist_name: sp.name }
+                              )}
+                              style={{ color: '#a855f7', fontWeight: 500, textAlign: 'right', cursor: sp.comments > 0 ? 'pointer' : 'default', textDecoration: sp.comments > 0 ? 'underline dotted' : 'none', textUnderlineOffset: 3 }}
+                              title={sp.comments > 0 ? 'Click to see comments' : undefined}
+                            >{sp.comments || 0}</span>
+                            <span
+                              onClick={() => sp.followups_sent > 0 && openActivityLeads(
+                                `DMs / Follow-ups — ${sp.name}`,
+                                `${sp.followups_sent} message${sp.followups_sent !== 1 ? 's' : ''} sent`,
+                                { filter_type: 'followups', specialist_name: sp.name }
+                              )}
+                              style={{ color: '#14b8a6', fontWeight: 600, textAlign: 'right', cursor: sp.followups_sent > 0 ? 'pointer' : 'default', textDecoration: sp.followups_sent > 0 ? 'underline dotted' : 'none', textUnderlineOffset: 3 }}
+                              title={sp.followups_sent > 0 ? 'Click to see DMs / follow-ups sent' : undefined}
+                            >{sp.followups_sent || 0}</span>
                           </div>
                         ))}
+                      </div>
                       </div>
                     )}
                   </div>
