@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
@@ -19,7 +19,7 @@ const NAV_LINKS = [
   { label: 'Audit Log', path: '/facebook/audit-log' },
   { label: 'Change Log', path: '/facebook/changelog' },
   { label: 'Admin', path: '/facebook/admin' },
-  { label: '🗑 Trash', path: '/facebook/trash' },
+  { label: '🗑 Trash', path: '/facebook/admin?section=trash' },
 ];
 
 const FIELD_TYPES = [
@@ -570,7 +570,7 @@ function DrawerInfo({ data, fields, onFieldsSaved }) {
           ))}
 
           {fields.length === 0 && !editMode && (
-            <p style={{ color: '#8a8680', fontSize: 13, margin: 0 }}>No custom fields yet — add them in Settings.</p>
+            <p style={{ color: '#8a8680', fontSize: 13, margin: 0 }}>No custom fields yet — add them in Admin.</p>
           )}
         </div>
       </div>
@@ -628,411 +628,6 @@ function DrawerChangelog({ entries }) {
   );
 }
 
-// ─── Column Order Tab ─────────────────────────────────────────────────────────
-function ColumnOrderTab({ columnOrder, pinnedFields, onChange }) {
-  const [list, setList] = useState(columnOrder);
-  const dragIdx = useRef(null);
-  const [dragOverIdx, setDragOverIdx] = useState(null);
-
-  useEffect(() => { setList(columnOrder); }, [columnOrder]);
-
-  function getLabel(key) {
-    const b = BUILTIN_COLS.find(c => c.key === key);
-    if (b) return { label: b.label, icon: b.icon, builtin: true };
-    const f = pinnedFields.find(f => f.field_key === key);
-    if (f) return { label: f.label, icon: FIELD_TYPES.find(t => t.value === f.field_type)?.icon || '□', builtin: false };
-    return null;
-  }
-
-  function move(idx, dir) {
-    const next = [...list];
-    const swap = idx + dir;
-    if (swap < 0 || swap >= next.length) return;
-    [next[idx], next[swap]] = [next[swap], next[idx]];
-    setList(next);
-    saveColOrder(next);
-    onChange(next);
-  }
-
-  function onDragStart(idx) { dragIdx.current = idx; }
-  function onDragEnter(idx) { setDragOverIdx(idx); }
-  function onDragEnd() {
-    if (dragIdx.current !== null && dragOverIdx !== null && dragIdx.current !== dragOverIdx) {
-      const next = [...list];
-      const [moved] = next.splice(dragIdx.current, 1);
-      next.splice(dragOverIdx, 0, moved);
-      setList(next);
-      saveColOrder(next);
-      onChange(next);
-    }
-    dragIdx.current = null;
-    setDragOverIdx(null);
-  }
-
-  return (
-    <div>
-      <p style={{ color: '#8a8680', fontSize: 13, marginBottom: 16 }}>Drag or use arrows to reorder columns. The Account column is always first.</p>
-      {/* Fixed first column */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#2a2a2a', borderRadius: 8, marginBottom: 8, opacity: 0.5 }}>
-        <span style={{ color: '#444', fontSize: 14 }}>⠿</span>
-        <span style={{ color: '#c5c1b9', fontSize: 14, fontWeight: 500 }}>Account</span>
-        <span style={{ color: '#8a8680', fontSize: 11, marginLeft: 4 }}>— always first</span>
-      </div>
-      {list.map((key, idx) => {
-        const meta = getLabel(key);
-        if (!meta) return null;
-        return (
-          <div key={key}
-            draggable
-            onDragStart={() => onDragStart(idx)}
-            onDragEnter={() => onDragEnter(idx)}
-            onDragOver={e => e.preventDefault()}
-            onDragEnd={onDragEnd}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: dragOverIdx === idx ? 'rgba(87,94,207,0.12)' : '#2a2a2a', borderRadius: 8, marginBottom: 8, border: `1px solid ${dragOverIdx === idx ? 'rgba(87,94,207,0.4)' : 'transparent'}`, cursor: 'grab', transition: 'background 0.12s' }}>
-            <span style={{ color: '#444', fontSize: 14, userSelect: 'none' }}>⠿</span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <button onClick={() => move(idx, -1)} disabled={idx === 0} style={{ background: 'none', border: 'none', color: idx === 0 ? '#333' : '#8a8680', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 10, lineHeight: 1, padding: '1px 3px' }}>▲</button>
-              <button onClick={() => move(idx, 1)} disabled={idx === list.length - 1} style={{ background: 'none', border: 'none', color: idx === list.length - 1 ? '#333' : '#8a8680', cursor: idx === list.length - 1 ? 'default' : 'pointer', fontSize: 10, lineHeight: 1, padding: '1px 3px' }}>▼</button>
-            </div>
-            <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>{meta.icon}</span>
-            <span style={{ color: '#c5c1b9', fontWeight: 500, fontSize: 14 }}>{meta.label}</span>
-            {meta.builtin && <span style={{ color: '#555', fontSize: 11, marginLeft: 4 }}>built-in</span>}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Settings Modal ───────────────────────────────────────────────────────────
-function SettingsModal({ fields, accounts, pinnedFields, columnOrder, onColumnOrderChange, onClose, onSaved }) {
-  const [tab, setTab] = useState('fields');
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#1e1e1e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, width: 640, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <h2 style={{ color: '#c5c1b9', margin: 0, fontSize: 17, fontWeight: 700 }}>⚙ Settings</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', fontSize: 20 }}>×</button>
-        </div>
-        <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '0 24px' }}>
-          {[['fields', 'Manage Fields'], ['columns', 'Column Order'], ['accounts', 'Manage Accounts']].map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key)} style={{ background: 'none', border: 'none', padding: '12px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: tab === key ? '#575ECF' : '#8a8680', borderBottom: `2px solid ${tab === key ? '#575ECF' : 'transparent'}` }}>{label}</button>
-          ))}
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-          {tab === 'fields' ? (
-            <ManageFields fields={fields} onSaved={onSaved} />
-          ) : tab === 'columns' ? (
-            <ColumnOrderTab columnOrder={columnOrder} pinnedFields={pinnedFields} onChange={onColumnOrderChange} />
-          ) : (
-            <ManageAccounts accounts={accounts} fields={fields} onSaved={onSaved} />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ManageFields({ fields, onSaved }) {
-  const [list, setList] = useState(fields);
-  const [adding, setAdding] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ label: '', field_type: 'text', options: [], pinned: false });
-  const [tagInput, setTagInput] = useState('');
-  const dragIdx = useRef(null);
-  const [dragOverIdx, setDragOverIdx] = useState(null);
-
-  useEffect(() => { setList(fields); }, [fields]);
-
-  function resetForm() { setForm({ label: '', field_type: 'text', options: [], pinned: false }); setTagInput(''); setAdding(false); setEditingId(null); }
-
-  function startEdit(f) {
-    setEditingId(f.id);
-    setForm({ label: f.label, field_type: f.field_type, options: f.options || [], pinned: !!f.pinned });
-    setAdding(true);
-  }
-
-  function addTag() {
-    if (!tagInput.trim()) return;
-    if (!form.options.includes(tagInput.trim())) setForm(p => ({ ...p, options: [...p.options, tagInput.trim()] }));
-    setTagInput('');
-  }
-
-  async function save() {
-    if (!form.label.trim()) return;
-    try {
-      if (editingId) {
-        const res = await fb.patch(`/account-fields/${editingId}`, form);
-        setList(prev => prev.map(f => f.id === editingId ? res.data : f));
-        toast.success('Field updated');
-      } else {
-        const res = await fb.post('/account-fields', form);
-        setList(prev => [...prev, res.data]);
-        toast.success('Field added');
-      }
-      onSaved();
-      resetForm();
-    } catch (err) { toast.error(err.response?.data?.error || 'Failed to save field'); }
-  }
-
-  async function del(f) {
-    if (!confirm(`Delete field "${f.label}"? All stored values will be lost.`)) return;
-    try {
-      await fb.delete(`/account-fields/${f.id}`);
-      setList(prev => prev.filter(x => x.id !== f.id));
-      toast.success('Field deleted');
-      onSaved();
-    } catch { toast.error('Failed to delete field'); }
-  }
-
-  async function togglePinned(f) {
-    try {
-      const res = await fb.patch(`/account-fields/${f.id}`, { pinned: !f.pinned ? 1 : 0 });
-      setList(prev => prev.map(x => x.id === f.id ? res.data : x));
-      onSaved();
-    } catch { toast.error('Failed to update field'); }
-  }
-
-  async function move(idx, dir) {
-    const next = [...list];
-    const swapIdx = idx + dir;
-    if (swapIdx < 0 || swapIdx >= next.length) return;
-    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
-    await persistOrder(next);
-  }
-
-  async function persistOrder(newList) {
-    setList(newList);
-    try {
-      await fb.post('/account-fields/reorder', { order: newList.map((f, i) => ({ id: f.id, sort_order: i + 1 })) });
-      onSaved();
-    } catch { toast.error('Failed to save order'); }
-  }
-
-  function onDragStart(idx) { dragIdx.current = idx; }
-  function onDragEnter(idx) { setDragOverIdx(idx); }
-  function onDragEnd() {
-    if (dragIdx.current !== null && dragOverIdx !== null && dragIdx.current !== dragOverIdx) {
-      const next = [...list];
-      const [moved] = next.splice(dragIdx.current, 1);
-      next.splice(dragOverIdx, 0, moved);
-      persistOrder(next);
-    }
-    dragIdx.current = null;
-    setDragOverIdx(null);
-  }
-
-  return (
-    <div>
-      {/* Existing fields */}
-      {list.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          {list.map((f, idx) => (
-            <div key={f.id}
-              draggable
-              onDragStart={() => onDragStart(idx)}
-              onDragEnter={() => onDragEnter(idx)}
-              onDragOver={e => e.preventDefault()}
-              onDragEnd={onDragEnd}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: dragOverIdx === idx ? 'rgba(87,94,207,0.12)' : '#2a2a2a', borderRadius: 8, marginBottom: 8, border: `1px solid ${dragOverIdx === idx ? 'rgba(87,94,207,0.4)' : 'transparent'}`, transition: 'background 0.12s, border-color 0.12s', cursor: 'grab' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {/* Drag handle */}
-                <span style={{ color: '#444', fontSize: 14, cursor: 'grab', userSelect: 'none', padding: '0 2px' }} title="Drag to reorder">⠿</span>
-                {/* Up/down buttons */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <button onClick={() => move(idx, -1)} disabled={idx === 0} style={{ background: 'none', border: 'none', color: idx === 0 ? '#333' : '#8a8680', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 10, lineHeight: 1, padding: '1px 3px' }}>▲</button>
-                  <button onClick={() => move(idx, 1)} disabled={idx === list.length - 1} style={{ background: 'none', border: 'none', color: idx === list.length - 1 ? '#333' : '#8a8680', cursor: idx === list.length - 1 ? 'default' : 'pointer', fontSize: 10, lineHeight: 1, padding: '1px 3px' }}>▼</button>
-                </div>
-                <span style={{ fontSize: 16, width: 22, textAlign: 'center' }}>{FIELD_TYPES.find(t => t.value === f.field_type)?.icon}</span>
-                <div>
-                  <span style={{ color: '#c5c1b9', fontWeight: 500, fontSize: 14 }}>{f.label}</span>
-                  <span style={{ color: '#8a8680', fontSize: 12, marginLeft: 8 }}>{FIELD_TYPES.find(t => t.value === f.field_type)?.label}</span>
-                  {f.pinned ? <span style={{ color: '#575ECF', fontSize: 11, marginLeft: 8, fontWeight: 600 }}>📌 pinned</span> : null}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => togglePinned(f)} title={f.pinned ? 'Unpin from table' : 'Pin to table'} style={{ ...smallBtn, color: f.pinned ? '#575ECF' : '#8a8680' }}>📌</button>
-                <button onClick={() => startEdit(f)} style={smallBtn}>Edit</button>
-                <button onClick={() => del(f)} style={{ ...smallBtn, color: '#ef4444', borderColor: 'rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)' }}>Delete</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Add/Edit form */}
-      {!adding ? (
-        <button onClick={() => setAdding(true)} style={{ width: '100%', background: 'rgba(87,94,207,0.1)', border: '1px dashed rgba(87,94,207,0.4)', borderRadius: 8, padding: '12px 0', color: '#575ECF', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-          + Add New Field
-        </button>
-      ) : (
-        <div style={{ background: '#242424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 20 }}>
-          <p style={{ color: '#c5c1b9', fontWeight: 600, marginBottom: 16, margin: '0 0 16px' }}>{editingId ? 'Edit Field' : 'New Field'}</p>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-            <div style={{ flex: 1 }}>
-              <label style={labelStyle}>FIELD LABEL</label>
-              <input value={form.label} onChange={e => setForm(p => ({ ...p, label: e.target.value }))} placeholder="e.g. Target CPL" style={inputStyle} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={labelStyle}>FIELD TYPE</label>
-              <select value={form.field_type} onChange={e => setForm(p => ({ ...p, field_type: e.target.value, options: [] }))} style={{ ...inputStyle, cursor: 'pointer' }}>
-                {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.icon} {t.label}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {form.field_type === 'tags' && (
-            <div style={{ marginBottom: 12 }}>
-              <label style={labelStyle}>TAG OPTIONS</label>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="Type a tag and press Enter" style={{ ...inputStyle, flex: 1 }} />
-                <button onClick={addTag} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '0 16px', color: '#fff', cursor: 'pointer' }}>Add</button>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {form.options.map(t => (
-                  <span key={t} style={{ background: 'rgba(87,94,207,0.2)', color: '#a5aaee', borderRadius: 20, padding: '3px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {t}
-                    <button onClick={() => setForm(p => ({ ...p, options: p.options.filter(x => x !== t) }))} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 16 }}>
-            <input type="checkbox" checked={!!form.pinned} onChange={e => setForm(p => ({ ...p, pinned: e.target.checked }))} style={{ accentColor: '#575ECF' }} />
-            <span style={{ color: '#c5c1b9', fontSize: 13 }}>📌 Pin this field as a column in the overview table</span>
-          </label>
-
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button onClick={resetForm} style={{ ...smallBtn, padding: '8px 16px', fontSize: 13 }}>Cancel</button>
-            <button onClick={save} disabled={!form.label.trim()} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '8px 20px', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: !form.label.trim() ? 0.5 : 1, fontSize: 13 }}>
-              {editingId ? 'Save Changes' : 'Add Field'}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ManageAccounts({ accounts, fields, onSaved }) {
-  const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [showInactive, setShowInactive] = useState(false);
-
-  function openAdd() {
-    setEditingId('new');
-    setForm({ name: '', website: '', notes: '', custom_fields: {} });
-  }
-
-  function openEdit(a) {
-    setEditingId(a.id);
-    setForm({ name: a.name, website: a.website || '', notes: a.notes || '', custom_fields: a.custom_fields || {} });
-  }
-
-  function close() { setEditingId(null); setForm(null); }
-
-  async function save() {
-    if (!form?.name?.trim()) { toast.error('Name is required'); return; }
-    setSaving(true);
-    try {
-      if (editingId === 'new') {
-        await fb.post('/ad-accounts', form);
-        toast.success('Account created');
-      } else {
-        await fb.patch(`/ad-accounts/${editingId}`, form);
-        toast.success('Account updated');
-      }
-      onSaved();
-      close();
-    } catch (err) { toast.error(err.response?.data?.error || 'Failed to save'); }
-    finally { setSaving(false); }
-  }
-
-  async function toggleActive(a) {
-    try {
-      await fb.patch(`/ad-accounts/${a.id}`, { active: a.active ? 0 : 1 });
-      toast.success(a.active ? 'Deactivated' : 'Reactivated');
-      onSaved();
-    } catch { toast.error('Failed to update'); }
-  }
-
-  async function del(a) {
-    if (!confirm(`Delete "${a.name}"? This cannot be undone.`)) return;
-    try {
-      await fb.delete(`/ad-accounts/${a.id}`);
-      toast.success('Deleted');
-      onSaved();
-    } catch (err) { toast.error(err.response?.data?.error || 'Failed to delete'); }
-  }
-
-  const visible = accounts.filter(a => showInactive || a.active);
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8a8680', fontSize: 13, cursor: 'pointer' }}>
-          <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} style={{ accentColor: '#575ECF' }} /> Show inactive
-        </label>
-        <button onClick={openAdd} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '8px 16px', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>+ Add Account</button>
-      </div>
-
-      {/* Edit / Add form */}
-      {editingId && form && (
-        <div style={{ background: '#242424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 20, marginBottom: 16 }}>
-          <p style={{ color: '#c5c1b9', fontWeight: 600, margin: '0 0 16px' }}>{editingId === 'new' ? 'New Account' : 'Edit Account'}</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <label style={labelStyle}>ACCOUNT NAME *</label>
-              <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Acme Corp" style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>WEBSITE</label>
-              <input value={form.website} onChange={e => setForm(p => ({ ...p, website: e.target.value }))} placeholder="https://example.com" style={inputStyle} />
-            </div>
-            {fields.map(f => (
-              <div key={f.id}>
-                <label style={labelStyle}>{f.label.toUpperCase()}</label>
-                <FieldInput field={f} value={form.custom_fields[f.field_key] || ''} onChange={val => setForm(p => ({ ...p, custom_fields: { ...p.custom_fields, [f.field_key]: val } }))} />
-              </div>
-            ))}
-            <div>
-              <label style={labelStyle}>NOTES</label>
-              <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Any notes…" style={{ ...inputStyle, resize: 'vertical' }} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-            <button onClick={close} style={{ ...smallBtn, padding: '8px 16px', fontSize: 13 }}>Cancel</button>
-            <button onClick={save} disabled={saving} style={{ background: '#575ECF', border: 'none', borderRadius: 8, padding: '8px 20px', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>
-              {saving ? 'Saving…' : editingId === 'new' ? 'Create' : 'Save'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Account list */}
-      {visible.length === 0 ? (
-        <p style={{ color: '#8a8680', textAlign: 'center', padding: 20 }}>No accounts yet.</p>
-      ) : visible.map(a => (
-        <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#2a2a2a', borderRadius: 8, marginBottom: 8, opacity: a.active ? 1 : 0.5 }}>
-          <div>
-            <span style={{ color: '#c5c1b9', fontWeight: 500 }}>{a.name}</span>
-            {!a.active && <span style={{ color: '#8a8680', fontSize: 11, marginLeft: 8 }}>inactive</span>}
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={() => openEdit(a)} style={smallBtn}>Edit</button>
-            <button onClick={() => toggleActive(a)} style={smallBtn}>{a.active ? 'Deactivate' : 'Activate'}</button>
-            <button onClick={() => del(a)} style={{ ...smallBtn, color: '#ef4444', borderColor: 'rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)' }}>Delete</button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ─── Health status helper ─────────────────────────────────────────────────────
 function getHealth(lastAuditDate) {
   if (!lastAuditDate) return { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', label: 'Never', dot: '#ef4444' };
@@ -1055,7 +650,6 @@ export default function FbAccounts() {
   const [selectedTags, setSelectedTags] = useState([]);
   const [buyerFilter, setBuyerFilter] = useState('');
   const [drawerAccountId, setDrawerAccountId] = useState(null);
-  const [showSettings, setShowSettings] = useState(false);
   const [cellEdit, setCellEdit] = useState(null); // { accountId, fieldDef, value }
   const [perfEdit, setPerfEdit] = useState(null); // { sessionId, data, accountId }
   const [campaignBreakdown, setCampaignBreakdown] = useState(null); // { account, data }
@@ -1154,9 +748,14 @@ export default function FbAccounts() {
             <h1 style={{ color: '#c5c1b9', margin: 0, fontSize: 22, fontWeight: 700 }}>Facebook Ad Accounts</h1>
             <p style={{ color: '#8a8680', margin: '5px 0 0', fontSize: 14 }}>Click any row to view details, audit history, and change log</p>
           </div>
-          <button onClick={() => setShowSettings(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 18px', color: '#c5c1b9', cursor: 'pointer', fontSize: 14 }}>
-            <span>⚙</span> Settings
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => navigate('/facebook/admin?section=column-order')} title="Reorder table columns" style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 16px', color: '#c5c1b9', cursor: 'pointer', fontSize: 14 }}>
+              <span>↕</span> Columns
+            </button>
+            <button onClick={() => navigate('/facebook/admin')} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 18px', color: '#c5c1b9', cursor: 'pointer', fontSize: 14 }}>
+              <span>⚙</span> Admin
+            </button>
+          </div>
         </div>
 
         {/* Filters row */}
@@ -1206,7 +805,7 @@ export default function FbAccounts() {
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 80, color: '#8a8680' }}>
             {accounts.filter(a => a.active).length === 0
-              ? 'No active accounts yet — open Settings → Manage Accounts to add one.'
+              ? 'No active accounts yet — open Admin to add one.'
               : 'No accounts match your filters.'}
           </div>
         ) : (
@@ -1375,18 +974,6 @@ export default function FbAccounts() {
         />
       )}
 
-      {/* Settings modal */}
-      {showSettings && (
-        <SettingsModal
-          fields={fields}
-          accounts={accounts}
-          pinnedFields={pinnedFields}
-          columnOrder={columnOrder}
-          onColumnOrderChange={next => { setColumnOrder(next); saveColOrder(next); }}
-          onClose={() => setShowSettings(false)}
-          onSaved={() => { fetchAll(); }}
-        />
-      )}
     </div>
   );
 }
