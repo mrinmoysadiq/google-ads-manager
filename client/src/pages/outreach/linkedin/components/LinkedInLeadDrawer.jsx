@@ -121,7 +121,7 @@ function StatusBadge({ status, onChange, stages = [] }) {
 
 // ─── Sub-component: EngagementsSection ───────────────────────────────────────
 
-function EngagementsSection({ leadId, initialEngagements = [], warmupThreshold }) {
+function EngagementsSection({ leadId, initialEngagements = [], warmupThreshold, activityUrl, notes }) {
   const today = todayLocal()
   const [engagements, setEngagements] = useState(initialEngagements)
   const [form, setForm] = useState({ date: today, post_url: '', liked: true, commented: false, comment_text: '' })
@@ -152,6 +152,23 @@ function EngagementsSection({ leadId, initialEngagements = [], warmupThreshold }
 
   return (
     <div>
+      {(activityUrl || notes) && (
+        <div style={{ backgroundColor: '#242424', borderRadius: '10px', padding: '14px 16px', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {activityUrl && (
+            <div>
+              <label style={labelStyle}>Activity URL</label>
+              <a href={activityUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0a66c2', fontSize: '13px', wordBreak: 'break-all' }}>{activityUrl}</a>
+            </div>
+          )}
+          {notes && (
+            <div>
+              <label style={labelStyle}>Notes</label>
+              <p style={{ color: '#c5c1b9', fontSize: '13px', lineHeight: 1.5, margin: 0, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{notes}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {isWarmedUp && (
         <div style={{ backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 16, color: '#22c55e', fontSize: 13, fontWeight: 600 }}>
           Warmed up — {engagements.length} engagement{engagements.length !== 1 ? 's' : ''} logged. Consider moving to "Ready to Message".
@@ -386,6 +403,7 @@ export default function LinkedInLeadDrawer({
   specialists = [],
   stages = [],
   warmupThreshold = 3,
+  leadIds = [],
 }) {
   const [visible, setVisible] = useState(false)
   const [mode, setMode] = useState(initialLeadId === null ? 'create' : 'edit')
@@ -442,6 +460,19 @@ export default function LinkedInLeadDrawer({
   const handleClose = () => {
     setVisible(false)
     setTimeout(onClose, 280)
+  }
+
+  const navIndex = leadIds.indexOf(leadId)
+  const hasPrev = navIndex > 0
+  const hasNext = navIndex !== -1 && navIndex < leadIds.length - 1
+  const navigateTo = (offset) => {
+    const nextId = leadIds[navIndex + offset]
+    if (nextId === undefined) return
+    setLeadId(nextId)
+    setLead(null)
+    setLoading(true)
+    setSaved({})
+    setEditDupWarning(null)
   }
 
   const checkDuplicate = async (specialistId, url, excludeLeadId, setWarning) => {
@@ -749,11 +780,19 @@ export default function LinkedInLeadDrawer({
                         </span>
                       </div>
                     </div>
-                    <button onClick={handleClose} style={{ background: 'none', border: 'none', color: '#8a8680', fontSize: '20px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>✕</button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                      <button onClick={() => navigateTo(-1)} disabled={!hasPrev} title="Previous lead"
+                        style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: hasPrev ? '#8a8680' : '#444', fontSize: '14px', cursor: hasPrev ? 'pointer' : 'not-allowed', lineHeight: 1, padding: '5px 9px' }}
+                      >‹</button>
+                      <button onClick={() => navigateTo(1)} disabled={!hasNext} title="Next lead"
+                        style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: hasNext ? '#8a8680' : '#444', fontSize: '14px', cursor: hasNext ? 'pointer' : 'not-allowed', lineHeight: 1, padding: '5px 9px' }}
+                      >›</button>
+                      <button onClick={handleClose} style={{ background: 'none', border: 'none', color: '#8a8680', fontSize: '20px', cursor: 'pointer', lineHeight: 1, marginLeft: '4px' }}>✕</button>
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', gap: '4px', marginTop: '16px' }}>
-                    {['details', 'followups', 'engagements', 'history'].map(tab => (
+                    {['details', 'engagements', 'followups', 'history'].map(tab => (
                       <button key={tab} onClick={() => setActiveTab(tab)}
                         style={{ background: activeTab === tab ? 'rgba(10,102,194,0.2)' : 'none', border: activeTab === tab ? '1px solid rgba(10,102,194,0.4)' : '1px solid transparent', borderRadius: '6px', color: activeTab === tab ? '#0a66c2' : '#8a8680', fontSize: '13px', fontWeight: activeTab === tab ? 600 : 400, padding: '5px 14px', cursor: 'pointer', textTransform: 'capitalize' }}
                       >{tab}</button>
@@ -935,7 +974,7 @@ export default function LinkedInLeadDrawer({
 
                   {/* ── ENGAGEMENTS TAB ─────────────────────────────────────── */}
                   <div style={{ display: activeTab === 'engagements' ? 'block' : 'none' }}>
-                    <EngagementsSection leadId={leadId} initialEngagements={lead.engagements || []} warmupThreshold={warmupThreshold} />
+                    <EngagementsSection leadId={leadId} initialEngagements={lead.engagements || []} warmupThreshold={warmupThreshold} activityUrl={lead.activity_url} notes={lead.notes} />
                   </div>
 
                   {/* ── HISTORY TAB ──────────────────────────────────────────── */}
