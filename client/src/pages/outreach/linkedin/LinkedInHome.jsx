@@ -382,7 +382,7 @@ export default function LinkedInHome() {
           specialists={specialists}
           stages={stages}
           warmupThreshold={warmupThreshold}
-          leadIds={leads.map(l => l.id)}
+          leads={leads}
         />
       )}
 

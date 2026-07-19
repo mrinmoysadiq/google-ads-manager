@@ -403,7 +403,7 @@ export default function LinkedInLeadDrawer({
   specialists = [],
   stages = [],
   warmupThreshold = 3,
-  leadIds = [],
+  leads = [],
 }) {
   const [visible, setVisible] = useState(false)
   const [mode, setMode] = useState(initialLeadId === null ? 'create' : 'edit')
@@ -462,11 +462,12 @@ export default function LinkedInLeadDrawer({
     setTimeout(onClose, 280)
   }
 
-  const navIndex = leadIds.indexOf(leadId)
+  const stageLeadIds = lead ? leads.filter(l => l.status === lead.status).map(l => l.id) : []
+  const navIndex = stageLeadIds.indexOf(leadId)
   const hasPrev = navIndex > 0
-  const hasNext = navIndex !== -1 && navIndex < leadIds.length - 1
+  const hasNext = navIndex !== -1 && navIndex < stageLeadIds.length - 1
   const navigateTo = (offset) => {
-    const nextId = leadIds[navIndex + offset]
+    const nextId = stageLeadIds[navIndex + offset]
     if (nextId === undefined) return
     setLeadId(nextId)
     setLead(null)
@@ -763,6 +764,20 @@ export default function LinkedInLeadDrawer({
             ) : lead ? (
               <>
                 <div style={{ padding: '18px 24px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#1e1e1e' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
+                    <button onClick={() => navigateTo(-1)} disabled={!hasPrev} title="Previous lead"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: hasPrev ? 'rgba(10,102,194,0.15)' : 'rgba(255,255,255,0.03)', border: `1px solid ${hasPrev ? 'rgba(10,102,194,0.4)' : 'rgba(255,255,255,0.06)'}`, borderRadius: '8px', color: hasPrev ? '#0a66c2' : '#444', fontSize: '13px', fontWeight: 600, cursor: hasPrev ? 'pointer' : 'not-allowed', padding: '8px 16px' }}
+                    >‹ Previous</button>
+                    {navIndex !== -1 && stageLeadIds.length > 0 && (
+                      <span style={{ color: '#8a8680', fontSize: '12px', fontWeight: 600, flexShrink: 0 }}>
+                        {navIndex + 1} of {stageLeadIds.length}
+                      </span>
+                    )}
+                    <button onClick={() => navigateTo(1)} disabled={!hasNext} title="Next lead"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: hasNext ? 'rgba(10,102,194,0.15)' : 'rgba(255,255,255,0.03)', border: `1px solid ${hasNext ? 'rgba(10,102,194,0.4)' : 'rgba(255,255,255,0.06)'}`, borderRadius: '8px', color: hasNext ? '#0a66c2' : '#444', fontSize: '13px', fontWeight: 600, cursor: hasNext ? 'pointer' : 'not-allowed', padding: '8px 16px' }}
+                    >Next ›</button>
+                  </div>
+
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <input
@@ -780,15 +795,7 @@ export default function LinkedInLeadDrawer({
                         </span>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-                      <button onClick={() => navigateTo(-1)} disabled={!hasPrev} title="Previous lead"
-                        style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: hasPrev ? '#8a8680' : '#444', fontSize: '14px', cursor: hasPrev ? 'pointer' : 'not-allowed', lineHeight: 1, padding: '5px 9px' }}
-                      >‹</button>
-                      <button onClick={() => navigateTo(1)} disabled={!hasNext} title="Next lead"
-                        style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: hasNext ? '#8a8680' : '#444', fontSize: '14px', cursor: hasNext ? 'pointer' : 'not-allowed', lineHeight: 1, padding: '5px 9px' }}
-                      >›</button>
-                      <button onClick={handleClose} style={{ background: 'none', border: 'none', color: '#8a8680', fontSize: '20px', cursor: 'pointer', lineHeight: 1, marginLeft: '4px' }}>✕</button>
-                    </div>
+                    <button onClick={handleClose} style={{ background: 'none', border: 'none', color: '#8a8680', fontSize: '20px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>✕</button>
                   </div>
 
                   <div style={{ display: 'flex', gap: '4px', marginTop: '16px' }}>
