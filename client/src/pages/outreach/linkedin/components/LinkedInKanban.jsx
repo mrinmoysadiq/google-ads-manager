@@ -150,6 +150,7 @@ export default function LinkedInKanban({ leads, loading, onLeadClick, onStatusCh
   leads.forEach(l => {
     if (leadsByStatus[l.status] !== undefined) leadsByStatus[l.status].push(l)
   })
+  stageNames.forEach(s => { leadsByStatus[s].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)) })
 
   const handleDragOver = (e, status) => {
     e.preventDefault()
