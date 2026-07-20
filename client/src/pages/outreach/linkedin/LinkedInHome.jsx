@@ -365,6 +365,7 @@ export default function LinkedInHome() {
             specialistId={selectedSpecialist ? selectedSpecialist.id : ''}
             onLeadClick={openDrawer}
             refreshKey={dashboardRefreshKey}
+            stages={stages}
           />
         )}
       </div>

@@ -23,13 +23,6 @@ const STATUS_COLORS = {
 const DEFAULT_STATUS_COLOR = { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' }
 function getStatusColor(status) { return STATUS_COLORS[status] || DEFAULT_STATUS_COLOR }
 
-const DEFAULT_STAGES = [
-  'Identified', 'Connection Request Sent', 'Connected', 'Engaging (Warming Up)',
-  'Ready to Message', 'Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4',
-  'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client',
-  'No Response / Dead', 'Disqualified',
-]
-
 const selectStyles = {
   control: (base, state) => ({ ...base, background: '#2a2a2a', borderColor: state.isFocused ? '#0a66c2' : 'rgba(255,255,255,0.08)', boxShadow: 'none', minHeight: 36, fontSize: 13, '&:hover': { borderColor: 'rgba(255,255,255,0.2)' } }),
   menu: (base) => ({ ...base, background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.08)', zIndex: 50 }),
@@ -80,7 +73,9 @@ export default function LinkedInTable({
 }) {
   const [openStatusFor, setOpenStatusFor] = useState(null)
 
-  const stageNames = stages && stages.length > 0 ? stages.map(s => s.name) : DEFAULT_STAGES
+  // Stage list must always come from the DB-driven `stages` prop — never a
+  // hardcoded fallback, or a stale/renamed/deleted stage would show up here.
+  const stageNames = (stages || []).map(s => s.name)
   const statusOptions = stageNames.map(s => ({ value: s, label: s }))
 
   const selectedStatuses = (filters.status || '').split(',').filter(Boolean)

@@ -789,7 +789,7 @@ export default function LinkedInLeadDrawer({
                         onBlurCapture={e => { e.currentTarget.style.borderBottomColor = 'transparent' }}
                       />
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
-                        <StatusBadge status={lead.status} onChange={handleStatusChange} stages={stages.length > 0 ? stages.map(s => s.name) : Object.keys(STATUS_COLORS)} />
+                        <StatusBadge status={lead.status} onChange={handleStatusChange} stages={stages.map(s => s.name)} />
                         <span style={{ color: '#555', fontSize: '11px' }}>
                           Created {fmtDateLong(lead.created_at)}{lead.specialist_name ? ` · ${lead.specialist_name}` : ''}
                         </span>

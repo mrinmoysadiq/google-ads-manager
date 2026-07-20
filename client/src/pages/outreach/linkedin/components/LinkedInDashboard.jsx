@@ -43,13 +43,6 @@ function getActivityDateParams(range, customFrom, customTo) {
   }
 }
 
-const ALL_KNOWN_STATUSES = [
-  'Identified', 'Connection Request Sent', 'Connected', 'Engaging (Warming Up)',
-  'Ready to Message', 'Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4',
-  'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client',
-  'No Response / Dead', 'Disqualified',
-]
-
 const PRESET_COLORS = ['#0a66c2', '#3b82f6', '#a855f7', '#f59e0b', '#22c55e', '#ef4444', '#06b6d4', '#8a8680', '#ec4899', '#f97316']
 
 function daysAgo(dateStr) {
@@ -322,7 +315,7 @@ function ActivityLeadsDrawer({ title, subtitle, leads, loading, onClose, onLeadC
   )
 }
 
-export default function LinkedInDashboard({ specialistId, onLeadClick, refreshKey }) {
+export default function LinkedInDashboard({ specialistId, onLeadClick, refreshKey, stages = [] }) {
   const [metrics, setMetrics] = useState(null)
   const [cards, setCards] = useState([])
   const [staleLeads, setStaleLeads] = useState([])
@@ -342,7 +335,10 @@ export default function LinkedInDashboard({ specialistId, onLeadClick, refreshKe
   const [actLeads, setActLeads] = useState([])
   const [actLeadsLoading, setActLeadsLoading] = useState(false)
 
-  const allStatuses = metrics?.by_status ? [...new Set([...ALL_KNOWN_STATUSES, ...Object.keys(metrics.by_status)])] : ALL_KNOWN_STATUSES
+  // Stage names must always come from the DB-driven `stages` prop — never a
+  // hardcoded list, or a stale/renamed/deleted stage would show up here.
+  const dbStageNames = stages.map(s => s.name)
+  const allStatuses = metrics?.by_status ? [...new Set([...dbStageNames, ...Object.keys(metrics.by_status)])] : dbStageNames
 
   const fetchCards = useCallback(async () => {
     try { setCards(await getLinkedInDashboardCards()) } catch (err) { console.error('Failed to load dashboard cards', err) }
@@ -459,7 +455,7 @@ export default function LinkedInDashboard({ specialistId, onLeadClick, refreshKe
           <div className="rounded-xl p-6" style={{ ...cardStyle, marginBottom: 24 }}>
             <h3 style={{ ...primaryText, fontWeight: 600, fontSize: '0.9rem', marginBottom: 20, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pipeline by Stage</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {ALL_KNOWN_STATUSES.map(stage => {
+              {allStatuses.map(stage => {
                 const count = byStatus[stage] || 0
                 const barWidth = totalLeads > 0 ? Math.max((count / totalLeads) * 100, 2) : 2
                 return (

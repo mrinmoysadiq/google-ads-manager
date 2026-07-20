@@ -133,17 +133,13 @@ function SkeletonCard() {
   )
 }
 
-const DEFAULT_STAGES = [
-  'Identified', 'Connection Request Sent', 'Connected', 'Engaging (Warming Up)',
-  'Ready to Message', 'Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4',
-  'Emailed', 'Replied', 'Meeting Booked', 'Started Trial', 'Closed / Booked as Client',
-  'No Response / Dead', 'Disqualified',
-]
-
 export default function LinkedInKanban({ leads, loading, onLeadClick, onStatusChange, onConnectionStatusChange, onViewLog, showSpecialistColumn, stages, warmupThreshold = 3 }) {
   const [dragOverStatus, setDragOverStatus] = useState(null)
 
-  const stageNames = stages && stages.length > 0 ? stages.map(s => s.name) : DEFAULT_STAGES
+  // Stage columns must always come from the DB-driven `stages` prop — never
+  // fall back to a hardcoded list, or a stale/renamed/deleted stage would
+  // flash on screen before the real stages finish loading.
+  const stageNames = (stages || []).map(s => s.name)
 
   const leadsByStatus = {}
   stageNames.forEach(s => { leadsByStatus[s] = [] })
@@ -168,6 +164,14 @@ export default function LinkedInKanban({ leads, loading, onLeadClick, onStatusCh
     const lead = leads.find(l => l.id === leadId)
     if (!lead || lead.status === targetStatus) return
     onStatusChange(leadId, targetStatus)
+  }
+
+  if (stageNames.length === 0) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: 400 }}>
+        <span className="text-sm" style={{ color: '#8a8680' }}>Loading pipeline stages…</span>
+      </div>
+    )
   }
 
   return (
