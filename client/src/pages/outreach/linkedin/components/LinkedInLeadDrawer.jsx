@@ -119,28 +119,9 @@ function StatusBadge({ status, onChange, stages = [] }) {
   )
 }
 
-// ─── Sub-component: StageSelect — full-width dedicated stage dropdown ───────
-
-function StageSelect({ status, stages, onChange }) {
-  const options = stages.map(s => ({ value: s, label: s }))
-  return (
-    <div style={{ marginBottom: '20px' }}>
-      <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stage</label>
-      <Select
-        styles={selectStyles}
-        options={options}
-        value={options.find(o => o.value === status) || null}
-        onChange={opt => opt && onChange(opt.value)}
-        placeholder="Set stage…"
-        isSearchable={false}
-      />
-    </div>
-  )
-}
-
 // ─── Sub-component: EngagementsSection ───────────────────────────────────────
 
-function EngagementsSection({ leadId, initialEngagements = [], warmupThreshold, activityUrl, notes, status, stages, onStatusChange }) {
+function EngagementsSection({ leadId, initialEngagements = [], warmupThreshold, activityUrl, notes }) {
   const today = todayLocal()
   const [engagements, setEngagements] = useState(initialEngagements)
   const [form, setForm] = useState({ date: today, post_url: '', liked: true, commented: false, comment_text: '' })
@@ -171,8 +152,6 @@ function EngagementsSection({ leadId, initialEngagements = [], warmupThreshold, 
 
   return (
     <div>
-      <StageSelect status={status} stages={stages} onChange={onStatusChange} />
-
       {(activityUrl || notes) && (
         <div style={{ backgroundColor: '#242424', borderRadius: '10px', padding: '14px 16px', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {activityUrl && (
@@ -843,8 +822,6 @@ export default function LinkedInLeadDrawer({
 
                   {/* ── DETAILS TAB ─────────────────────────────────────────── */}
                   <div style={{ display: activeTab === 'details' ? 'block' : 'none' }}>
-                    <StageSelect status={lead.status} stages={stages.map(s => s.name)} onChange={handleStatusChange} />
-
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
                       <div>
@@ -1015,7 +992,7 @@ export default function LinkedInLeadDrawer({
 
                   {/* ── ENGAGEMENTS TAB ─────────────────────────────────────── */}
                   <div style={{ display: activeTab === 'engagements' ? 'block' : 'none' }}>
-                    <EngagementsSection leadId={leadId} initialEngagements={lead.engagements || []} warmupThreshold={warmupThreshold} activityUrl={lead.activity_url} notes={lead.notes} status={lead.status} stages={stages.map(s => s.name)} onStatusChange={handleStatusChange} />
+                    <EngagementsSection leadId={leadId} initialEngagements={lead.engagements || []} warmupThreshold={warmupThreshold} activityUrl={lead.activity_url} notes={lead.notes} />
                   </div>
 
                   {/* ── HISTORY TAB ──────────────────────────────────────────── */}
