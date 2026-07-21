@@ -430,6 +430,10 @@ export default function LinkedInLeadDrawer({
   const [mode, setMode] = useState(initialLeadId === null ? 'create' : 'edit')
   const [leadId, setLeadId] = useState(initialLeadId)
   const [lead, setLead] = useState(null)
+  // Anchored once to whichever stage this lead was in when the drawer opened, so
+  // prev/next keep walking the stage the user is actively working through even
+  // after they move the current lead somewhere else.
+  const [workingStage, setWorkingStage] = useState(null)
   const [loading, setLoading] = useState(initialLeadId !== null)
   const [activeTab, setActiveTab] = useState(initialTab)
   const [saved, setSaved] = useState({})
@@ -473,6 +477,10 @@ export default function LinkedInLeadDrawer({
       .catch(() => { toast.error('Failed to load lead'); setLoading(false) })
   }, [leadId, mode])
 
+  useEffect(() => {
+    if (lead && workingStage === null) setWorkingStage(lead.status)
+  }, [lead]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const markSaved = (field) => {
     setSaved(v => ({ ...v, [field]: true }))
     setTimeout(() => setSaved(v => ({ ...v, [field]: false })), 1500)
@@ -483,7 +491,7 @@ export default function LinkedInLeadDrawer({
     setTimeout(onClose, 280)
   }
 
-  const stageLeadIds = lead ? leads.filter(l => l.status === lead.status).map(l => l.id) : []
+  const stageLeadIds = workingStage ? leads.filter(l => l.status === workingStage).map(l => l.id) : []
   const navIndex = stageLeadIds.indexOf(leadId)
   const hasPrev = navIndex > 0
   const hasNext = navIndex !== -1 && navIndex < stageLeadIds.length - 1
@@ -533,6 +541,7 @@ export default function LinkedInLeadDrawer({
       setLead(prev => ({ ...prev, ...updated }))
       markSaved('status')
       if (onLeadUpdated) onLeadUpdated(updated)
+      if (workingStage && newStatus !== workingStage) navigateTo(1)
     } catch { toast.error('Failed to update status') }
   }
 
@@ -548,6 +557,7 @@ export default function LinkedInLeadDrawer({
     if (onLeadUpdated) onLeadUpdated(updated)
     setFollowupModal({ open: false, stageKey: null, initialData: null, modalKey: 0 })
     toast.success(`${stageKey} logged — moved to ${stageKey}`)
+    if (workingStage && stageKey !== workingStage) navigateTo(1)
   }
 
   const handleReplyModalSave = async (fields) => {
@@ -561,6 +571,7 @@ export default function LinkedInLeadDrawer({
     if (onLeadUpdated) onLeadUpdated(updated)
     setReplyModal({ open: false, modalKey: 0 })
     toast.success('Reply logged — moved to Replied')
+    if (workingStage && REPLIED_STAGE !== workingStage) navigateTo(1)
   }
 
   const handleSaveFollowup = async (stageKey, fields) => {
