@@ -470,7 +470,14 @@ export default function LinkedInLeadDrawer({
     setTimeout(onClose, 280)
   }
 
-  const stageLeadIds = workingStage ? leads.filter(l => l.status === workingStage).map(l => l.id) : []
+  // Match the Kanban board's canonical oldest-first ordering so the "N of M"
+  // position always lines up with where the lead actually sits in its column.
+  const stageLeadIds = workingStage
+    ? leads
+        .filter(l => l.status === workingStage)
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        .map(l => l.id)
+    : []
   const navIndex = stageLeadIds.indexOf(leadId)
   const hasPrev = navIndex > 0
   const hasNext = navIndex !== -1 && navIndex < stageLeadIds.length - 1

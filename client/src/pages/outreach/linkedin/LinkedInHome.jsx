@@ -40,6 +40,11 @@ export default function LinkedInHome() {
   const [stages, setStages] = useState([])
   const [warmupThreshold, setWarmupThreshold] = useState(3)
 
+  // Gates the first lead fetch until specialist restoration (from the logged-in
+  // user's identity or localStorage) has resolved, so leads are never fetched
+  // unfiltered first and then re-fetched filtered a moment later.
+  const [metaReady, setMetaReady] = useState(false)
+
   const [drawerLeadId, setDrawerLeadId] = useState(undefined)
   const [drawerInitialTab, setDrawerInitialTab] = useState('details')
   const [drawerKey, setDrawerKey] = useState(0)
@@ -93,9 +98,11 @@ export default function LinkedInHome() {
         }
       })
       .catch(() => toast.error('Failed to load LinkedIn tracker data'))
+      .finally(() => setMetaReady(true))
   }, [])
 
   const fetchLeads = useCallback(() => {
+    if (!metaReady) return
     setLoading(true)
     const isKanban = viewMode === 'kanban'
     const params = {
@@ -117,7 +124,7 @@ export default function LinkedInHome() {
       })
       .catch(() => toast.error('Failed to load leads'))
       .finally(() => setLoading(false))
-  }, [selectedSpecialist, filters, page, viewMode])
+  }, [selectedSpecialist, filters, page, viewMode, metaReady])
 
   useEffect(() => { fetchLeads() }, [fetchLeads])
 
