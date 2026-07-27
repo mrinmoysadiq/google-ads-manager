@@ -561,11 +561,26 @@ export default function LinkedInLeadDrawer({
   }
 
   const handleSaveFollowup = async (stageKey, fields) => {
+    // Only the first-time log for this stage should advance the lead — re-editing an
+    // already-logged entry (e.g. fixing a typo) must not silently move the lead backward
+    // if it has since progressed further along the pipeline.
+    const isNewLog = !(lead.followups || []).some(f => f.stage_key === stageKey)
     const saved = await upsertFollowup(leadId, stageKey, fields)
+    const updated = isNewLog
+      ? await updateLinkedInLead(leadId, { status: stageKey, performed_by: getUser()?.name || null })
+      : null
     setLead(prev => ({
       ...prev,
+      ...(updated || {}),
       followups: [...(prev.followups || []).filter(f => f.stage_key !== stageKey), saved],
     }))
+    if (updated) {
+      if (onLeadUpdated) onLeadUpdated(updated)
+      toast.success(`${stageKey} logged — moved to ${stageKey}`)
+      if (workingStage && stageKey !== workingStage) navigateTo(1)
+    } else {
+      toast.success(`${stageKey} updated`)
+    }
   }
 
   const handleToggleFollowupSeen = async (stageKey, isSeen) => {
