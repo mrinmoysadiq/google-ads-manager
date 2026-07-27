@@ -808,6 +808,7 @@ export default function LinkedInLeadDrawer({
                       />
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
                         <StatusBadge status={lead.status} onChange={handleStatusChange} stages={stages.map(s => s.name)} />
+                        <ConnectionStatusBadge status={lead.connection_status} onChange={s => saveField('connection_status', s)} />
                         <span style={{ color: '#555', fontSize: '11px' }}>
                           Created {fmtDateLong(lead.created_at)}{lead.specialist_name ? ` · ${lead.specialist_name}` : ''}
                         </span>
