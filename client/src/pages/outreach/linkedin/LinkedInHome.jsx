@@ -54,7 +54,7 @@ export default function LinkedInHome() {
   const [replyModal, setReplyModal] = useState({ open: false, leadId: null, modalKey: 0 })
 
   const [filters, setFilters] = useState({
-    status: '', search: '', date_from: '', date_to: '', sort_by: 'status_updated_at', sort_dir: 'DESC',
+    status: '', search: '', date_from: '', date_to: '', sort_by: 'status_updated_at', sort_dir: 'DESC', hot: false,
   })
   const [page, setPage] = useState(1)
   const [searchInput, setSearchInput] = useState('')
@@ -116,6 +116,7 @@ export default function LinkedInHome() {
     if (filters.search) params.search = filters.search
     if (filters.date_from) params.date_from = filters.date_from
     if (filters.date_to) params.date_to = filters.date_to
+    if (filters.hot) params.hot = '1'
 
     getLinkedInLeads(params)
       .then(data => {
@@ -188,6 +189,17 @@ export default function LinkedInHome() {
       bumpDashboard()
     } catch {
       toast.error('Failed to update connection status')
+      fetchLeads()
+    }
+  }
+
+  const handleToggleHotLead = async (leadId, nextIsHot) => {
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, is_hot_lead: nextIsHot } : l))
+    try {
+      await updateLinkedInLead(leadId, { is_hot_lead: nextIsHot })
+      if (filters.hot && !nextIsHot) fetchLeads() // unmarking while the hot-only filter is on removes it from the list
+    } catch {
+      toast.error('Failed to update hot lead status')
       fetchLeads()
     }
   }
@@ -310,24 +322,40 @@ export default function LinkedInHome() {
         {tab === 'pipeline' && (
           <>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ position: 'relative', maxWidth: 560 }}>
-                <svg style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: searchInput ? '#0a66c2' : '#8a8680', transition: 'color 0.15s' }} width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-                </svg>
-                <input
-                  ref={searchRef}
-                  type="text"
-                  value={searchInput}
-                  onChange={e => setSearchInput(e.target.value)}
-                  placeholder="Search by lead name, company, job title…"
-                  style={{ width: '100%', boxSizing: 'border-box', paddingLeft: 38, paddingRight: searchInput ? 36 : 14, paddingTop: 9, paddingBottom: 9, backgroundColor: '#242424', border: `1px solid ${searchInput ? '#0a66c2' : 'rgba(255,255,255,0.1)'}`, borderRadius: 10, color: '#c5c1b9', fontSize: '0.875rem', outline: 'none', transition: 'border-color 0.15s' }}
-                  onFocus={e => { e.target.style.borderColor = '#0a66c2'; e.target.previousSibling && (e.target.previousSibling.style.color = '#0a66c2') }}
-                  onBlur={e => { if (!searchInput) e.target.style.borderColor = 'rgba(255,255,255,0.1)' }}
-                  onKeyDown={e => e.key === 'Escape' && (setSearchInput(''), e.target.blur())}
-                />
-                {searchInput && (
-                  <button onClick={() => { setSearchInput(''); searchRef.current?.focus() }} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', color: '#8a8680', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', lineHeight: 1 }} title="Clear search">✕</button>
-                )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', maxWidth: 560, flex: '1 1 320px' }}>
+                  <svg style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: searchInput ? '#0a66c2' : '#8a8680', transition: 'color 0.15s' }} width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                  </svg>
+                  <input
+                    ref={searchRef}
+                    type="text"
+                    value={searchInput}
+                    onChange={e => setSearchInput(e.target.value)}
+                    placeholder="Search by lead name, company, job title…"
+                    style={{ width: '100%', boxSizing: 'border-box', paddingLeft: 38, paddingRight: searchInput ? 36 : 14, paddingTop: 9, paddingBottom: 9, backgroundColor: '#242424', border: `1px solid ${searchInput ? '#0a66c2' : 'rgba(255,255,255,0.1)'}`, borderRadius: 10, color: '#c5c1b9', fontSize: '0.875rem', outline: 'none', transition: 'border-color 0.15s' }}
+                    onFocus={e => { e.target.style.borderColor = '#0a66c2'; e.target.previousSibling && (e.target.previousSibling.style.color = '#0a66c2') }}
+                    onBlur={e => { if (!searchInput) e.target.style.borderColor = 'rgba(255,255,255,0.1)' }}
+                    onKeyDown={e => e.key === 'Escape' && (setSearchInput(''), e.target.blur())}
+                  />
+                  {searchInput && (
+                    <button onClick={() => { setSearchInput(''); searchRef.current?.focus() }} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', color: '#8a8680', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', lineHeight: 1 }} title="Clear search">✕</button>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => { setFilters(f => ({ ...f, hot: !f.hot })); setPage(1) }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10,
+                    border: `1px solid ${filters.hot ? 'rgba(245,158,11,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                    backgroundColor: filters.hot ? 'rgba(245,158,11,0.15)' : '#242424',
+                    color: filters.hot ? '#f59e0b' : '#8a8680', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                  }}
+                  title={filters.hot ? 'Showing hot leads only — click to show all' : 'Show only hot leads'}
+                >
+                  <span style={{ filter: filters.hot ? 'none' : 'grayscale(1)', opacity: filters.hot ? 1 : 0.6 }}>🔥</span>
+                  Hot Leads
+                </button>
               </div>
               {filters.search && (
                 <p style={{ color: '#8a8680', fontSize: '0.75rem', marginTop: 6, marginLeft: 2 }}>
@@ -347,6 +375,7 @@ export default function LinkedInHome() {
                 onLeadClick={openDrawer}
                 onStatusChange={handleStatusChange}
                 onConnectionStatusChange={handleConnectionStatusChange}
+                onToggleHotLead={handleToggleHotLead}
                 onViewLog={openEngagementsTab}
                 stages={stages}
                 showSpecialistColumn={showSpecialistColumn}
@@ -358,6 +387,7 @@ export default function LinkedInHome() {
                 onLeadClick={openDrawer}
                 onStatusChange={handleStatusChange}
                 onConnectionStatusChange={handleConnectionStatusChange}
+                onToggleHotLead={handleToggleHotLead}
                 onViewLog={openEngagementsTab}
                 showSpecialistColumn={showSpecialistColumn}
                 stages={stages}

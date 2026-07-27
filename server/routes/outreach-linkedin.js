@@ -46,7 +46,7 @@ router.get('/leads', (req, res) => {
   try {
     let {
       specialist_id, status, search,
-      date_from, date_to,
+      date_from, date_to, hot,
       page = 1, limit = 25,
       sort_by = 'created_at', sort_dir = 'DESC',
     } = req.query;
@@ -80,6 +80,7 @@ router.get('/leads', (req, res) => {
     }
     if (date_from) { conditions.push("date(l.created_at) >= ?"); params.push(date_from); }
     if (date_to) { conditions.push("date(l.created_at) <= ?"); params.push(date_to); }
+    if (hot === '1' || hot === 'true') { conditions.push('l.is_hot_lead = 1'); }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -95,6 +96,7 @@ router.get('/leads', (req, res) => {
         l.id, l.specialist_id, l.lead_name, l.linkedin_profile_url, l.activity_url,
         l.company_name, l.job_title, l.follower_count,
         l.status, l.connection_status, l.created_at, l.status_updated_at,
+        l.is_hot_lead,
         s.name as specialist_name,
         (SELECT COUNT(*) FROM linkedin_engagements WHERE lead_id = l.id) as engagement_count,
         (SELECT MAX(date) FROM linkedin_engagements WHERE lead_id = l.id) as last_engagement_date,
@@ -298,7 +300,7 @@ router.patch('/leads/:id', (req, res) => {
     const {
       specialist_id, lead_name, linkedin_profile_url, activity_url,
       company_name, job_title, website, email, phone, follower_count, status, notes, connection_status, performed_by,
-      source_image,
+      source_image, is_hot_lead, conversation_summary,
     } = req.body;
 
     const statusChanged = status && status !== existing.status;
@@ -322,6 +324,8 @@ router.patch('/leads/:id', (req, res) => {
         notes = ?,
         connection_status = ?,
         source_image = ?,
+        is_hot_lead = ?,
+        conversation_summary = ?,
         status_updated_at = CASE WHEN ? IS NOT NULL AND ? != status THEN CURRENT_TIMESTAMP ELSE status_updated_at END
       WHERE id = ?
     `).run(
@@ -339,6 +343,8 @@ router.patch('/leads/:id', (req, res) => {
       notes !== undefined ? (notes || null) : existing.notes,
       nextConnectionStatus,
       source_image !== undefined ? (source_image || null) : existing.source_image,
+      is_hot_lead !== undefined ? (is_hot_lead ? 1 : 0) : existing.is_hot_lead,
+      conversation_summary !== undefined ? (conversation_summary || null) : existing.conversation_summary,
       status || null, status || null,
       id,
     );

@@ -31,7 +31,7 @@ function ListIcon() {
   )
 }
 
-function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, showSpecialistColumn, warmupThreshold }) {
+function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, onToggleHotLead, showSpecialistColumn, warmupThreshold }) {
   const dragStarted = useRef(false)
   const isWarmedUp = (lead.engagement_count || 0) >= warmupThreshold
 
@@ -46,12 +46,21 @@ function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, sh
       onDragEnd={() => { setTimeout(() => { dragStarted.current = false }, 100) }}
       onClick={() => { if (!dragStarted.current) onLeadClick(lead.id) }}
       className="rounded-xl cursor-pointer select-none overflow-hidden"
-      style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.07)', transition: 'border-color 0.15s, background-color 0.15s' }}
+      style={{ position: 'relative', backgroundColor: '#242424', border: `1px solid ${lead.is_hot_lead ? 'rgba(245,158,11,0.35)' : 'rgba(255,255,255,0.07)'}`, transition: 'border-color 0.15s, background-color 0.15s' }}
       onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(10,102,194,0.35)'; e.currentTarget.style.backgroundColor = '#272727' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.backgroundColor = '#242424' }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = lead.is_hot_lead ? 'rgba(245,158,11,0.35)' : 'rgba(255,255,255,0.07)'; e.currentTarget.style.backgroundColor = '#242424' }}
     >
+      <button
+        onClick={e => { e.stopPropagation(); onToggleHotLead(lead.id, !lead.is_hot_lead) }}
+        title={lead.is_hot_lead ? 'Unmark as hot lead' : 'Mark as hot lead'}
+        style={{
+          position: 'absolute', top: 8, right: 8, zIndex: 1, background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 14, lineHeight: 1, padding: 2,
+          filter: lead.is_hot_lead ? 'none' : 'grayscale(1)', opacity: lead.is_hot_lead ? 1 : 0.35,
+        }}
+      >🔥</button>
       <div className="p-3.5">
-        <p className="text-sm font-semibold text-white leading-snug truncate">{lead.lead_name}</p>
+        <p className="text-sm font-semibold text-white leading-snug truncate" style={{ paddingRight: 18 }}>{lead.lead_name}</p>
         {(lead.company_name || lead.job_title) && (
           <p className="text-xs mt-1 truncate" style={{ color: '#8a8680' }}>
             {[lead.job_title, lead.company_name].filter(Boolean).join(' @ ')}
@@ -133,7 +142,7 @@ function SkeletonCard() {
   )
 }
 
-export default function LinkedInKanban({ leads, loading, onLeadClick, onStatusChange, onConnectionStatusChange, onViewLog, showSpecialistColumn, stages, warmupThreshold = 3 }) {
+export default function LinkedInKanban({ leads, loading, onLeadClick, onStatusChange, onConnectionStatusChange, onToggleHotLead, onViewLog, showSpecialistColumn, stages, warmupThreshold = 3 }) {
   const [dragOverStatus, setDragOverStatus] = useState(null)
 
   // Stage columns must always come from the DB-driven `stages` prop — never
@@ -220,6 +229,7 @@ export default function LinkedInKanban({ leads, loading, onLeadClick, onStatusCh
                       onLeadClick={onLeadClick}
                       onViewLog={onViewLog}
                       onConnectionStatusChange={onConnectionStatusChange}
+                      onToggleHotLead={onToggleHotLead}
                       showSpecialistColumn={showSpecialistColumn}
                       warmupThreshold={warmupThreshold}
                     />

@@ -559,6 +559,8 @@ function initializeDatabase() {
     'ALTER TABLE linkedin_leads ADD COLUMN website TEXT',
     'ALTER TABLE linkedin_leads ADD COLUMN email TEXT',
     'ALTER TABLE linkedin_leads ADD COLUMN phone TEXT',
+    'ALTER TABLE linkedin_leads ADD COLUMN is_hot_lead INTEGER DEFAULT 0',
+    'ALTER TABLE linkedin_leads ADD COLUMN conversation_summary TEXT',
   ];
 
   // Explicit buyer-account assignment table

@@ -69,7 +69,7 @@ function StatusDropdown({ currentStatus, leadId, stageNames, onStatusChange, onC
 
 export default function LinkedInTable({
   leads, loading, pagination, filters, onFiltersChange, onPageChange,
-  onLeadClick, onStatusChange, onConnectionStatusChange, onViewLog, stages, showSpecialistColumn,
+  onLeadClick, onStatusChange, onConnectionStatusChange, onToggleHotLead, onViewLog, stages, showSpecialistColumn,
 }) {
   const [openStatusFor, setOpenStatusFor] = useState(null)
 
@@ -139,7 +139,16 @@ export default function LinkedInTable({
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.02)'}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                     >
-                      <td style={tdStyle}><span style={{ fontWeight: 600, color: '#fff' }}>{lead.lead_name}</span></td>
+                      <td style={tdStyle}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <button
+                            onClick={e => { e.stopPropagation(); onToggleHotLead(lead.id, !lead.is_hot_lead) }}
+                            title={lead.is_hot_lead ? 'Unmark as hot lead' : 'Mark as hot lead'}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0, flexShrink: 0, filter: lead.is_hot_lead ? 'none' : 'grayscale(1)', opacity: lead.is_hot_lead ? 1 : 0.3 }}
+                          >🔥</button>
+                          <span style={{ fontWeight: 600, color: '#fff' }}>{lead.lead_name}</span>
+                        </div>
+                      </td>
                       <td style={tdStyle}>{[lead.job_title, lead.company_name].filter(Boolean).join(' @ ') || '—'}</td>
                       <td style={tdStyle}>
                         <ConnectionStatusBadge status={lead.connection_status} onChange={s => onConnectionStatusChange(lead.id, s)} size="sm" />

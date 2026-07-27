@@ -73,6 +73,25 @@ function SavedIndicator({ show }) {
   return <span style={{ color: '#22c55e', fontSize: '11px', marginLeft: '6px' }}>Saved ✓</span>
 }
 
+function HotLeadToggle({ isHot, onChange }) {
+  return (
+    <button
+      onClick={onChange}
+      title={isHot ? 'Unmark as hot lead' : 'Mark as hot lead'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        backgroundColor: isHot ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.05)',
+        border: `1px solid ${isHot ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.1)'}`,
+        borderRadius: '20px', padding: '3px 10px', fontSize: '12px', fontWeight: 600,
+        cursor: 'pointer', whiteSpace: 'nowrap', color: isHot ? '#f59e0b' : '#8a8680',
+      }}
+    >
+      <span style={{ filter: isHot ? 'none' : 'grayscale(1)', opacity: isHot ? 1 : 0.6 }}>🔥</span>
+      {isHot ? 'Hot Lead' : 'Mark Hot'}
+    </button>
+  )
+}
+
 function DuplicateWarning({ duplicate }) {
   if (!duplicate) return null
   return (
@@ -340,13 +359,32 @@ function ReplyRow({ reply, onDelete }) {
   )
 }
 
-function FollowupsSection({ followups = [], replies = [], onSaveFollowup, onToggleSeen, onSaveReply, onDeleteReply }) {
+function FollowupsSection({
+  followups = [], replies = [], onSaveFollowup, onToggleSeen, onSaveReply, onDeleteReply,
+  conversationSummary, onSaveConversationSummary, conversationSummarySaved,
+}) {
   const [replyModalOpen, setReplyModalOpen] = useState(false)
   const byStage = {}
   followups.forEach(f => { byStage[f.stage_key] = f })
 
   return (
     <div>
+      <div style={{ marginBottom: '24px' }}>
+        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Conversation Summary <span style={{ color: '#555', textTransform: 'none', letterSpacing: 'normal' }}>(optional)</span>
+          <SavedIndicator show={conversationSummarySaved} />
+        </label>
+        <textarea
+          key={conversationSummary}
+          className={inputClass}
+          rows={3}
+          defaultValue={conversationSummary || ''}
+          onBlur={e => onSaveConversationSummary(e.target.value || null)}
+          placeholder="Summarize how the conversation has gone so far…"
+          style={{ resize: 'vertical' }}
+        />
+      </div>
+
       <h4 style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 600, marginBottom: '10px' }}>Follow-ups</h4>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
         {FOLLOWUP_STAGE_KEYS.map(stageKey => (
@@ -824,6 +862,7 @@ export default function LinkedInLeadDrawer({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
                         <StatusBadge status={lead.status} onChange={handleStatusChange} stages={stages.map(s => s.name)} />
                         <ConnectionStatusBadge status={lead.connection_status} onChange={s => saveField('connection_status', s)} />
+                        <HotLeadToggle isHot={!!lead.is_hot_lead} onChange={() => saveField('is_hot_lead', !lead.is_hot_lead)} />
                         <span style={{ color: '#555', fontSize: '11px' }}>
                           Created {fmtDateLong(lead.created_at)}{lead.specialist_name ? ` · ${lead.specialist_name}` : ''}
                         </span>
@@ -1010,6 +1049,9 @@ export default function LinkedInLeadDrawer({
                       onToggleSeen={handleToggleFollowupSeen}
                       onSaveReply={handleSaveReply}
                       onDeleteReply={handleDeleteReply}
+                      conversationSummary={lead.conversation_summary}
+                      onSaveConversationSummary={v => saveField('conversation_summary', v)}
+                      conversationSummarySaved={saved.conversation_summary}
                     />
                   </div>
 
