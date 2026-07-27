@@ -469,7 +469,7 @@ router.delete('/leads/:leadId/engagements/:id', (req, res) => {
 // DB-driven linkedin_pipeline_stages table) with one upsertable record per lead.
 // Replied is an append-only log (a lead can reply more than once over time).
 
-const FOLLOWUP_STAGE_KEYS = ['Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4', 'Emailed'];
+const FOLLOWUP_STAGE_KEYS = ['Messaged', 'Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Follow-up 4', 'Emailed'];
 const REPLY_CHANNELS = ['LinkedIn', 'Email'];
 
 router.get('/leads/:leadId/followups', (req, res) => {
