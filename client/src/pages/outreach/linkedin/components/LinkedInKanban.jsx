@@ -59,8 +59,17 @@ function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, on
           filter: lead.is_hot_lead ? 'none' : 'grayscale(1)', opacity: lead.is_hot_lead ? 1 : 0.35,
         }}
       >🔥</button>
+      {lead.unread_comment_count > 0 && (
+        <span
+          title={`${lead.unread_comment_count} unread comment${lead.unread_comment_count !== 1 ? 's' : ''}`}
+          className="flex items-center gap-1"
+          style={{ position: 'absolute', top: 8, left: 8, zIndex: 1, backgroundColor: '#f59e0b', color: '#1b1b1b', borderRadius: 999, fontSize: 10, fontWeight: 700, padding: '2px 7px' }}
+        >
+          💬 {lead.unread_comment_count}
+        </span>
+      )}
       <div className="p-3.5">
-        <p className="text-sm font-semibold text-white leading-snug truncate" style={{ paddingRight: 18 }}>{lead.lead_name}</p>
+        <p className="text-sm font-semibold text-white leading-snug truncate" style={{ paddingRight: 18, paddingLeft: lead.unread_comment_count > 0 ? 30 : 0 }}>{lead.lead_name}</p>
         {(lead.company_name || lead.job_title) && (
           <p className="text-xs mt-1 truncate" style={{ color: '#8a8680' }}>
             {[lead.job_title, lead.company_name].filter(Boolean).join(' @ ')}
@@ -100,6 +109,15 @@ function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, on
               style={{ backgroundColor: 'rgba(34,197,94,0.15)', color: '#22c55e' }}
             >
               ↩ Replied{lead.reply_count > 1 ? ` ×${lead.reply_count}` : ''}
+            </span>
+          )}
+          {!lead.unread_comment_count && lead.comment_count > 0 && (
+            <span
+              title={`${lead.comment_count} comment${lead.comment_count !== 1 ? 's' : ''} — all read`}
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+              style={{ backgroundColor: 'rgba(138,134,128,0.15)', color: '#8a8680' }}
+            >
+              💬 {lead.comment_count}
             </span>
           )}
         </div>

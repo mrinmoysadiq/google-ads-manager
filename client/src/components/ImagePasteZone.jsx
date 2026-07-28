@@ -1,6 +1,47 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 
+// Pasted screenshots (often full desktop-resolution PNGs) get downscaled and
+// re-encoded as JPEG before being stored — otherwise every paste bloats the
+// sqlite file with multi-megabyte base64 blobs. 1600px keeps on-screen text
+// legible; 0.82 quality is visually lossless for screenshot content.
+function compressImage(blob, { maxDimension = 1600, quality = 0.82 } = {}) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      let { width, height } = img
+      if (width > maxDimension || height > maxDimension) {
+        if (width >= height) {
+          height = Math.round((height / width) * maxDimension)
+          width = maxDimension
+        } else {
+          width = Math.round((width / height) * maxDimension)
+          height = maxDimension
+        }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+      resolve(canvas.toDataURL('image/jpeg', quality))
+    }
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Failed to load pasted image')) }
+    img.src = objectUrl
+  })
+}
+
+// Fallback for when canvas compression fails — reads the raw blob as-is.
+function readAsDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (ev) => resolve(ev.target.result)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
 // ─── Helper: ImageLightbox ─────────────────────────────────────────────────────
 
 export function ImageLightbox({ src, onClose }) {
@@ -91,9 +132,7 @@ export default function ImagePasteZone({ value, onChange, accentColor = '#575ECF
       if (item.type.startsWith('image/')) {
         e.preventDefault()
         const blob = item.getAsFile()
-        const reader = new FileReader()
-        reader.onload = (ev) => onChange(ev.target.result)
-        reader.readAsDataURL(blob)
+        compressImage(blob).then(onChange).catch(() => readAsDataURL(blob).then(onChange))
         break
       }
     }

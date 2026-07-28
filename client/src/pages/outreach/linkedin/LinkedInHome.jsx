@@ -54,7 +54,7 @@ export default function LinkedInHome() {
   const [replyModal, setReplyModal] = useState({ open: false, leadId: null, modalKey: 0 })
 
   const [filters, setFilters] = useState({
-    status: '', search: '', date_from: '', date_to: '', sort_by: 'status_updated_at', sort_dir: 'DESC', hot: false,
+    status: '', search: '', date_from: '', date_to: '', sort_by: 'status_updated_at', sort_dir: 'DESC', hot: false, unread: false,
   })
   const [page, setPage] = useState(1)
   const [searchInput, setSearchInput] = useState('')
@@ -117,6 +117,7 @@ export default function LinkedInHome() {
     if (filters.date_from) params.date_from = filters.date_from
     if (filters.date_to) params.date_to = filters.date_to
     if (filters.hot) params.hot = '1'
+    if (filters.unread) params.unread = '1'
 
     getLinkedInLeads(params)
       .then(data => {
@@ -355,6 +356,19 @@ export default function LinkedInHome() {
                 >
                   <span style={{ filter: filters.hot ? 'none' : 'grayscale(1)', opacity: filters.hot ? 1 : 0.6 }}>🔥</span>
                   Hot Leads
+                </button>
+
+                <button
+                  onClick={() => { setFilters(f => ({ ...f, unread: !f.unread })); setPage(1) }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10,
+                    border: `1px solid ${filters.unread ? 'rgba(245,158,11,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                    backgroundColor: filters.unread ? 'rgba(245,158,11,0.15)' : '#242424',
+                    color: filters.unread ? '#f59e0b' : '#8a8680', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                  }}
+                  title={filters.unread ? 'Showing leads with unread comments only — click to show all' : 'Show only leads with unread comments'}
+                >
+                  💬 Unread Comments
                 </button>
               </div>
               {filters.search && (

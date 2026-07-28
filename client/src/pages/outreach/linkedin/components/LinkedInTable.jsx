@@ -147,6 +147,14 @@ export default function LinkedInTable({
                             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0, flexShrink: 0, filter: lead.is_hot_lead ? 'none' : 'grayscale(1)', opacity: lead.is_hot_lead ? 1 : 0.3 }}
                           >🔥</button>
                           <span style={{ fontWeight: 600, color: '#fff' }}>{lead.lead_name}</span>
+                          {lead.unread_comment_count > 0 && (
+                            <span
+                              title={`${lead.unread_comment_count} unread comment${lead.unread_comment_count !== 1 ? 's' : ''}`}
+                              style={{ backgroundColor: '#f59e0b', color: '#1b1b1b', borderRadius: 999, fontSize: 10, fontWeight: 700, padding: '2px 6px', flexShrink: 0 }}
+                            >
+                              💬 {lead.unread_comment_count}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td style={tdStyle}>{[lead.job_title, lead.company_name].filter(Boolean).join(' @ ') || '—'}</td>

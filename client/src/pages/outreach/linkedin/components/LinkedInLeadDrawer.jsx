@@ -13,6 +13,9 @@ import {
   toggleFollowupSeen,
   createReply,
   deleteReply,
+  createComment,
+  markCommentsRead,
+  deleteComment,
   checkLinkedInDuplicate,
 } from '../../../../utils/linkedinApi'
 import { fmtDateLong, fmtDateTimeLong, todayLocal } from '../../../../utils/dates'
@@ -428,6 +431,114 @@ function FollowupsSection({
   )
 }
 
+// ─── Sub-component: CommentsSection ──────────────────────────────────────────
+// A lightweight team discussion thread per lead — status questions, updates,
+// "did we hear back yet" etc. Unread comments are flagged until someone posts
+// a reply (which clears the thread) or explicitly marks it read.
+
+function CommentRow({ comment, onDelete }) {
+  const [lightbox, setLightbox] = useState(false)
+  return (
+    <div style={{ backgroundColor: '#242424', borderRadius: '8px', padding: '12px 14px', border: `1px solid ${comment.is_read ? 'rgba(255,255,255,0.06)' : 'rgba(245,158,11,0.35)'}` }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
+          <span style={{ color: '#c5c1b9', fontSize: '12px', fontWeight: 600 }}>{comment.author_name || 'Unknown'}</span>
+          {!comment.is_read && (
+            <span style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: 999, letterSpacing: '0.05em' }}>NEW</span>
+          )}
+          <span style={{ color: '#555', fontSize: '11px' }}>{fmtDateTimeLong(comment.created_at)}</span>
+        </div>
+        <button onClick={onDelete} style={{ background: 'none', border: 'none', color: '#555', fontSize: '14px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', flexShrink: 0 }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.backgroundColor = 'transparent' }}
+          title="Delete comment"
+        >✕</button>
+      </div>
+      {comment.message && (
+        <p style={{ color: '#c5c1b9', fontSize: '13px', lineHeight: 1.5, margin: '8px 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{comment.message}</p>
+      )}
+      {comment.screenshot && (
+        <>
+          {lightbox && <ImageLightbox src={comment.screenshot} onClose={() => setLightbox(false)} />}
+          <img
+            src={comment.screenshot}
+            alt="Comment screenshot"
+            onClick={() => setLightbox(true)}
+            style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', display: 'block', cursor: 'zoom-in', marginTop: '8px' }}
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+function CommentsSection({ comments = [], onPost, onMarkRead, onDelete }) {
+  const [message, setMessage] = useState('')
+  const [screenshot, setScreenshot] = useState(null)
+  const [posting, setPosting] = useState(false)
+  const unreadCount = comments.filter(c => !c.is_read).length
+
+  const handlePost = async () => {
+    if (!message.trim() && !screenshot) { toast.error('Write a message or attach a screenshot'); return }
+    setPosting(true)
+    try {
+      await onPost({ message: message.trim(), screenshot })
+      setMessage('')
+      setScreenshot(null)
+    } catch { toast.error('Failed to post comment') } finally { setPosting(false) }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+        <h4 style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          Comments
+          {unreadCount > 0 && (
+            <span style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontSize: '11px', fontWeight: 700, padding: '1px 7px', borderRadius: 999 }}>{unreadCount} new</span>
+          )}
+        </h4>
+        {unreadCount > 0 && (
+          <button
+            onClick={onMarkRead}
+            style={{ background: 'none', border: '1px solid rgba(255,255,255,0.12)', color: '#8a8680', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+          >
+            Mark all read
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+        {comments.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '24px', color: '#555', fontSize: '13px' }}>No comments yet — ask a question or leave an update below</div>
+        ) : comments.map(c => (
+          <CommentRow key={c.id} comment={c} onDelete={() => onDelete(c.id)} />
+        ))}
+      </div>
+
+      <div style={{ backgroundColor: '#242424', borderRadius: '10px', padding: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <textarea
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          rows={2}
+          placeholder="Ask a question or leave an update…"
+          className={inputClass}
+          style={{ resize: 'vertical', marginBottom: '8px' }}
+        />
+        <ImagePasteZone value={screenshot} onChange={setScreenshot} accentColor="#0a66c2" />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+          <button
+            onClick={handlePost}
+            disabled={posting}
+            style={{ backgroundColor: '#0a66c2', color: '#fff', border: 'none', borderRadius: '7px', padding: '8px 18px', fontSize: '13px', fontWeight: 600, cursor: posting ? 'not-allowed' : 'pointer', opacity: posting ? 0.7 : 1 }}
+          >
+            {posting ? 'Posting…' : 'Post Comment'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function LinkedInLeadDrawer({
@@ -637,6 +748,27 @@ export default function LinkedInLeadDrawer({
   const handleDeleteReply = async (id) => {
     await deleteReply(leadId, id)
     setLead(prev => ({ ...prev, replies: (prev.replies || []).filter(r => r.id !== id) }))
+  }
+
+  const handlePostComment = async (fields) => {
+    const created = await createComment(leadId, fields)
+    const updatedComments = [...(lead.comments || []).map(c => ({ ...c, is_read: 1 })), created]
+    setLead(prev => ({ ...prev, comments: updatedComments }))
+    if (onLeadUpdated) onLeadUpdated({ id: leadId, comment_count: updatedComments.length, unread_comment_count: 1 })
+  }
+
+  const handleMarkCommentsRead = async () => {
+    await markCommentsRead(leadId)
+    setLead(prev => ({ ...prev, comments: (prev.comments || []).map(c => ({ ...c, is_read: 1 })) }))
+    if (onLeadUpdated) onLeadUpdated({ id: leadId, unread_comment_count: 0 })
+  }
+
+  const handleDeleteComment = async (id) => {
+    await deleteComment(leadId, id)
+    const updatedComments = (lead.comments || []).filter(c => c.id !== id)
+    setLead(prev => ({ ...prev, comments: updatedComments }))
+    const unread_comment_count = updatedComments.filter(c => !c.is_read).length
+    if (onLeadUpdated) onLeadUpdated({ id: leadId, comment_count: updatedComments.length, unread_comment_count })
   }
 
   const handleCreate = async (e) => {
@@ -872,11 +1004,19 @@ export default function LinkedInLeadDrawer({
                   </div>
 
                   <div style={{ display: 'flex', gap: '4px', marginTop: '16px' }}>
-                    {['details', 'engagements', 'followups', 'history'].map(tab => (
-                      <button key={tab} onClick={() => setActiveTab(tab)}
-                        style={{ background: activeTab === tab ? 'rgba(10,102,194,0.2)' : 'none', border: activeTab === tab ? '1px solid rgba(10,102,194,0.4)' : '1px solid transparent', borderRadius: '6px', color: activeTab === tab ? '#0a66c2' : '#8a8680', fontSize: '13px', fontWeight: activeTab === tab ? 600 : 400, padding: '5px 14px', cursor: 'pointer', textTransform: 'capitalize' }}
-                      >{tab}</button>
-                    ))}
+                    {['details', 'engagements', 'followups', 'comments', 'history'].map(tab => {
+                      const unreadComments = tab === 'comments' ? (lead.comments || []).filter(c => !c.is_read).length : 0
+                      return (
+                        <button key={tab} onClick={() => setActiveTab(tab)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', background: activeTab === tab ? 'rgba(10,102,194,0.2)' : 'none', border: activeTab === tab ? '1px solid rgba(10,102,194,0.4)' : '1px solid transparent', borderRadius: '6px', color: activeTab === tab ? '#0a66c2' : '#8a8680', fontSize: '13px', fontWeight: activeTab === tab ? 600 : 400, padding: '5px 14px', cursor: 'pointer', textTransform: 'capitalize' }}
+                        >
+                          {tab}
+                          {unreadComments > 0 && (
+                            <span style={{ backgroundColor: '#f59e0b', color: '#1b1b1b', borderRadius: 999, fontSize: '10px', fontWeight: 700, padding: '1px 6px', lineHeight: 1.4 }}>{unreadComments}</span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
 
@@ -1058,6 +1198,16 @@ export default function LinkedInLeadDrawer({
                   {/* ── ENGAGEMENTS TAB ─────────────────────────────────────── */}
                   <div style={{ display: activeTab === 'engagements' ? 'block' : 'none' }}>
                     <EngagementsSection leadId={leadId} initialEngagements={lead.engagements || []} warmupThreshold={warmupThreshold} activityUrl={lead.activity_url} notes={lead.notes} />
+                  </div>
+
+                  {/* ── COMMENTS TAB ─────────────────────────────────────────── */}
+                  <div style={{ display: activeTab === 'comments' ? 'block' : 'none' }}>
+                    <CommentsSection
+                      comments={lead.comments || []}
+                      onPost={handlePostComment}
+                      onMarkRead={handleMarkCommentsRead}
+                      onDelete={handleDeleteComment}
+                    />
                   </div>
 
                   {/* ── HISTORY TAB ──────────────────────────────────────────── */}

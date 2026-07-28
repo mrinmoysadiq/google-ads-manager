@@ -46,7 +46,7 @@ router.get('/leads', (req, res) => {
   try {
     let {
       specialist_id, status, search,
-      date_from, date_to, hot,
+      date_from, date_to, hot, unread,
       page = 1, limit = 25,
       sort_by = 'created_at', sort_dir = 'DESC',
     } = req.query;
@@ -81,6 +81,9 @@ router.get('/leads', (req, res) => {
     if (date_from) { conditions.push("date(l.created_at) >= ?"); params.push(date_from); }
     if (date_to) { conditions.push("date(l.created_at) <= ?"); params.push(date_to); }
     if (hot === '1' || hot === 'true') { conditions.push('l.is_hot_lead = 1'); }
+    if (unread === '1' || unread === 'true') {
+      conditions.push('EXISTS (SELECT 1 FROM linkedin_lead_comments c WHERE c.lead_id = l.id AND c.is_read = 0)');
+    }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -101,6 +104,8 @@ router.get('/leads', (req, res) => {
         (SELECT COUNT(*) FROM linkedin_engagements WHERE lead_id = l.id) as engagement_count,
         (SELECT MAX(date) FROM linkedin_engagements WHERE lead_id = l.id) as last_engagement_date,
         (SELECT COUNT(*) FROM linkedin_lead_replies WHERE lead_id = l.id) as reply_count,
+        (SELECT COUNT(*) FROM linkedin_lead_comments WHERE lead_id = l.id) as comment_count,
+        (SELECT COUNT(*) FROM linkedin_lead_comments WHERE lead_id = l.id AND is_read = 0) as unread_comment_count,
         (SELECT json_group_object(stage_key, json_object('is_seen', is_seen))
            FROM linkedin_followups WHERE lead_id = l.id) as followups_summary
       FROM linkedin_leads l
@@ -284,7 +289,11 @@ router.get('/leads/:id', (req, res) => {
       'SELECT * FROM linkedin_lead_replies WHERE lead_id = ? ORDER BY created_at DESC'
     ).all(id);
 
-    res.json({ ...lead, engagements, history, followups, replies });
+    const comments = db.prepare(
+      'SELECT * FROM linkedin_lead_comments WHERE lead_id = ? ORDER BY created_at ASC'
+    ).all(id);
+
+    res.json({ ...lead, engagements, history, followups, replies, comments });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch lead' });
@@ -413,6 +422,7 @@ router.delete('/trash/permanent/:id', (req, res) => {
     db.prepare('DELETE FROM linkedin_status_history WHERE lead_id = ?').run(id);
     db.prepare('DELETE FROM linkedin_followups WHERE lead_id = ?').run(id);
     db.prepare('DELETE FROM linkedin_lead_replies WHERE lead_id = ?').run(id);
+    db.prepare('DELETE FROM linkedin_lead_comments WHERE lead_id = ?').run(id);
     db.prepare('DELETE FROM linkedin_leads WHERE id = ?').run(id);
     res.json({ success: true });
   } catch (err) {
@@ -578,6 +588,75 @@ router.delete('/leads/:leadId/replies/:id', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete reply' });
+  }
+});
+
+// ─── COMMENTS ─────────────────────────────────────────────────────────────────
+// A lightweight team discussion thread per lead (status questions, updates,
+// "did we hear back yet" etc). Posting a comment marks the thread's prior
+// comments as read (you've just engaged with it); the new comment itself
+// starts unread so it flags as needing attention until someone replies again
+// or explicitly marks the thread read.
+
+router.get('/leads/:leadId/comments', (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const comments = db.prepare('SELECT * FROM linkedin_lead_comments WHERE lead_id = ? ORDER BY created_at ASC').all(leadId);
+    res.json(comments);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch comments' });
+  }
+});
+
+router.post('/leads/:leadId/comments', (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const { message, screenshot } = req.body;
+    if (!(message && message.trim()) && !screenshot) {
+      return res.status(400).json({ error: 'Comment message or screenshot required' });
+    }
+    const lead = db.prepare('SELECT id FROM linkedin_leads WHERE id = ?').get(leadId);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    const reqUser = getRequestUser(req);
+
+    db.prepare('UPDATE linkedin_lead_comments SET is_read = 1 WHERE lead_id = ?').run(leadId);
+
+    const result = db.prepare(`
+      INSERT INTO linkedin_lead_comments (lead_id, author_name, message, screenshot, is_read)
+      VALUES (?, ?, ?, ?, 0)
+    `).run(leadId, reqUser?.name || null, message ? message.trim() : null, screenshot || null);
+
+    const created = db.prepare('SELECT * FROM linkedin_lead_comments WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json(created);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to post comment' });
+  }
+});
+
+router.patch('/leads/:leadId/comments/mark-read', (req, res) => {
+  try {
+    const { leadId } = req.params;
+    db.prepare('UPDATE linkedin_lead_comments SET is_read = 1 WHERE lead_id = ?').run(leadId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to mark comments read' });
+  }
+});
+
+router.delete('/leads/:leadId/comments/:id', (req, res) => {
+  try {
+    const { leadId, id } = req.params;
+    const existing = db.prepare('SELECT id FROM linkedin_lead_comments WHERE id = ? AND lead_id = ?').get(id, leadId);
+    if (!existing) return res.status(404).json({ error: 'Comment not found' });
+    db.prepare('DELETE FROM linkedin_lead_comments WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete comment' });
   }
 });
 
