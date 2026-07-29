@@ -31,9 +31,30 @@ function ListIcon() {
   )
 }
 
+function ChatIcon({ size = 11 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+    </svg>
+  )
+}
+
+// Small "live" notification dot — a solid center with a soft expanding ring,
+// the same visual language as a system tray unread indicator.
+function PulseDot({ color = '#3b82f6' }) {
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', width: 6, height: 6, flexShrink: 0 }}>
+      <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', backgroundColor: color, animation: 'commentPulseRing 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
+      <span style={{ position: 'relative', display: 'block', width: 6, height: 6, borderRadius: '50%', backgroundColor: color }} />
+    </span>
+  )
+}
+
 function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, onToggleHotLead, showSpecialistColumn, warmupThreshold }) {
   const dragStarted = useRef(false)
   const isWarmedUp = (lead.engagement_count || 0) >= warmupThreshold
+  const hasUnreadComments = lead.unread_comment_count > 0
+  const baseBorderColor = lead.is_hot_lead ? 'rgba(245,158,11,0.35)' : 'rgba(255,255,255,0.07)'
 
   return (
     <div
@@ -46,13 +67,15 @@ function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, on
       onDragEnd={() => { setTimeout(() => { dragStarted.current = false }, 100) }}
       onClick={() => { if (!dragStarted.current) onLeadClick(lead.id) }}
       className="rounded-xl cursor-pointer select-none overflow-hidden"
-      style={{ position: 'relative', backgroundColor: '#242424', border: `1px solid ${lead.is_hot_lead ? 'rgba(245,158,11,0.35)' : 'rgba(255,255,255,0.07)'}`, transition: 'border-color 0.15s, background-color 0.15s' }}
+      style={{
+        position: 'relative', backgroundColor: '#242424',
+        border: `1px solid ${hasUnreadComments ? 'rgba(59,130,246,0.4)' : baseBorderColor}`,
+        boxShadow: hasUnreadComments ? '0 2px 16px -2px rgba(59,130,246,0.28)' : 'none',
+        transition: 'border-color 0.15s, background-color 0.15s, box-shadow 0.15s',
+      }}
       onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(10,102,194,0.35)'; e.currentTarget.style.backgroundColor = '#272727' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = lead.is_hot_lead ? 'rgba(245,158,11,0.35)' : 'rgba(255,255,255,0.07)'; e.currentTarget.style.backgroundColor = '#242424' }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = hasUnreadComments ? 'rgba(59,130,246,0.4)' : baseBorderColor; e.currentTarget.style.backgroundColor = '#242424' }}
     >
-      {lead.unread_comment_count > 0 && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #0a66c2, #3b82f6)' }} />
-      )}
       <button
         onClick={e => { e.stopPropagation(); onToggleHotLead(lead.id, !lead.is_hot_lead) }}
         title={lead.is_hot_lead ? 'Unmark as hot lead' : 'Mark as hot lead'}
@@ -108,18 +131,21 @@ function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, on
           {lead.unread_comment_count > 0 ? (
             <span
               title={`${lead.unread_comment_count} unread comment${lead.unread_comment_count !== 1 ? 's' : ''}`}
-              className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-              style={{ backgroundColor: 'rgba(10,102,194,0.15)', color: '#3b82f6' }}
+              className="flex items-center gap-1.5 text-[10px] font-semibold pl-1.5 pr-2 py-1 rounded-full"
+              style={{ backgroundColor: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa', letterSpacing: '0.01em' }}
             >
-              💬 {lead.unread_comment_count} new
+              <PulseDot />
+              <ChatIcon />
+              {lead.unread_comment_count} new
             </span>
           ) : lead.comment_count > 0 && (
             <span
               title={`${lead.comment_count} comment${lead.comment_count !== 1 ? 's' : ''} — all read`}
-              className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-              style={{ backgroundColor: 'rgba(138,134,128,0.15)', color: '#8a8680' }}
+              className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+              style={{ backgroundColor: 'rgba(255,255,255,0.04)', color: '#6b7280' }}
             >
-              💬 {lead.comment_count}
+              <ChatIcon size={10} />
+              {lead.comment_count}
             </span>
           )}
         </div>
@@ -205,6 +231,7 @@ export default function LinkedInKanban({ leads, loading, onLeadClick, onStatusCh
 
   return (
     <div className="overflow-x-auto pb-4" style={{ minHeight: 400 }}>
+      <style>{`@keyframes commentPulseRing { 0% { transform: scale(1); opacity: 0.7; } 75%, 100% { transform: scale(2.4); opacity: 0; } }`}</style>
       <div className="flex gap-3" style={{ minWidth: stageNames.length * 236 + 'px' }}>
         {stageNames.map(status => {
           const sc = DEFAULT_STATUS_COLORS[status] || FALLBACK_COLOR

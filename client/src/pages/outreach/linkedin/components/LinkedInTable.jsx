@@ -23,6 +23,14 @@ const STATUS_COLORS = {
 const DEFAULT_STATUS_COLOR = { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' }
 function getStatusColor(status) { return STATUS_COLORS[status] || DEFAULT_STATUS_COLOR }
 
+function ChatIcon({ size = 10 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+    </svg>
+  )
+}
+
 const selectStyles = {
   control: (base, state) => ({ ...base, background: '#2a2a2a', borderColor: state.isFocused ? '#0a66c2' : 'rgba(255,255,255,0.08)', boxShadow: 'none', minHeight: 36, fontSize: 13, '&:hover': { borderColor: 'rgba(255,255,255,0.2)' } }),
   menu: (base) => ({ ...base, background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.08)', zIndex: 50 }),
@@ -150,9 +158,10 @@ export default function LinkedInTable({
                           {lead.unread_comment_count > 0 && (
                             <span
                               title={`${lead.unread_comment_count} unread comment${lead.unread_comment_count !== 1 ? 's' : ''}`}
-                              style={{ backgroundColor: 'rgba(10,102,194,0.15)', color: '#3b82f6', borderRadius: 999, fontSize: 10, fontWeight: 700, padding: '2px 7px', flexShrink: 0 }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, backgroundColor: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa', borderRadius: 999, fontSize: 10, fontWeight: 700, padding: '2px 7px', flexShrink: 0 }}
                             >
-                              💬 {lead.unread_comment_count}
+                              <ChatIcon />
+                              {lead.unread_comment_count}
                             </span>
                           )}
                         </div>
