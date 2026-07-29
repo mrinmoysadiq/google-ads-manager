@@ -150,7 +150,7 @@ export default function LinkedInTable({
                           {lead.unread_comment_count > 0 && (
                             <span
                               title={`${lead.unread_comment_count} unread comment${lead.unread_comment_count !== 1 ? 's' : ''}`}
-                              style={{ backgroundColor: '#f59e0b', color: '#1b1b1b', borderRadius: 999, fontSize: 10, fontWeight: 700, padding: '2px 6px', flexShrink: 0 }}
+                              style={{ backgroundColor: 'rgba(10,102,194,0.15)', color: '#3b82f6', borderRadius: 999, fontSize: 10, fontWeight: 700, padding: '2px 7px', flexShrink: 0 }}
                             >
                               💬 {lead.unread_comment_count}
                             </span>

@@ -647,6 +647,21 @@ router.patch('/leads/:leadId/comments/mark-read', (req, res) => {
   }
 });
 
+router.patch('/leads/:leadId/comments/:id/read', (req, res) => {
+  try {
+    const { leadId, id } = req.params;
+    const { is_read } = req.body;
+    const existing = db.prepare('SELECT id FROM linkedin_lead_comments WHERE id = ? AND lead_id = ?').get(id, leadId);
+    if (!existing) return res.status(404).json({ error: 'Comment not found' });
+    db.prepare('UPDATE linkedin_lead_comments SET is_read = ? WHERE id = ?').run(is_read ? 1 : 0, id);
+    const row = db.prepare('SELECT * FROM linkedin_lead_comments WHERE id = ?').get(id);
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update comment read status' });
+  }
+});
+
 router.delete('/leads/:leadId/comments/:id', (req, res) => {
   try {
     const { leadId, id } = req.params;

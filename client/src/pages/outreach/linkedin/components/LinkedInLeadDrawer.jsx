@@ -15,6 +15,7 @@ import {
   deleteReply,
   createComment,
   markCommentsRead,
+  toggleCommentRead,
   deleteComment,
   checkLinkedInDuplicate,
 } from '../../../../utils/linkedinApi'
@@ -436,23 +437,40 @@ function FollowupsSection({
 // "did we hear back yet" etc. Unread comments are flagged until someone posts
 // a reply (which clears the thread) or explicitly marks it read.
 
-function CommentRow({ comment, onDelete }) {
+function CommentRow({ comment, onToggleRead, onDelete }) {
   const [lightbox, setLightbox] = useState(false)
   return (
-    <div style={{ backgroundColor: '#242424', borderRadius: '8px', padding: '12px 14px', border: `1px solid ${comment.is_read ? 'rgba(255,255,255,0.06)' : 'rgba(245,158,11,0.35)'}` }}>
+    <div style={{
+      backgroundColor: comment.is_read ? '#242424' : 'rgba(10,102,194,0.06)',
+      borderRadius: '8px', padding: '12px 14px',
+      border: '1px solid rgba(255,255,255,0.06)',
+      borderLeftWidth: '3px',
+      borderLeftColor: comment.is_read ? 'rgba(255,255,255,0.08)' : '#0a66c2',
+    }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
           <span style={{ color: '#c5c1b9', fontSize: '12px', fontWeight: 600 }}>{comment.author_name || 'Unknown'}</span>
           {!comment.is_read && (
-            <span style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: 999, letterSpacing: '0.05em' }}>NEW</span>
+            <span style={{ backgroundColor: 'rgba(10,102,194,0.15)', color: '#0a66c2', fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: 999, letterSpacing: '0.05em' }}>NEW</span>
           )}
           <span style={{ color: '#555', fontSize: '11px' }}>{fmtDateTimeLong(comment.created_at)}</span>
         </div>
-        <button onClick={onDelete} style={{ background: 'none', border: 'none', color: '#555', fontSize: '14px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', flexShrink: 0 }}
-          onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)' }}
-          onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.backgroundColor = 'transparent' }}
-          title="Delete comment"
-        >✕</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', color: comment.is_read ? '#22c55e' : '#8a8680', fontSize: '11px', cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={!!comment.is_read}
+              onChange={e => onToggleRead(comment.id, e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            Read
+          </label>
+          <button onClick={onDelete} style={{ background: 'none', border: 'none', color: '#555', fontSize: '14px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px' }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)' }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.backgroundColor = 'transparent' }}
+            title="Delete comment"
+          >✕</button>
+        </div>
       </div>
       {comment.message && (
         <p style={{ color: '#c5c1b9', fontSize: '13px', lineHeight: 1.5, margin: '8px 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{comment.message}</p>
@@ -472,7 +490,7 @@ function CommentRow({ comment, onDelete }) {
   )
 }
 
-function CommentsSection({ comments = [], onPost, onMarkRead, onDelete }) {
+function CommentsSection({ comments = [], onPost, onMarkRead, onToggleRead, onDelete }) {
   const [message, setMessage] = useState('')
   const [screenshot, setScreenshot] = useState(null)
   const [posting, setPosting] = useState(false)
@@ -494,7 +512,7 @@ function CommentsSection({ comments = [], onPost, onMarkRead, onDelete }) {
         <h4 style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
           Comments
           {unreadCount > 0 && (
-            <span style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontSize: '11px', fontWeight: 700, padding: '1px 7px', borderRadius: 999 }}>{unreadCount} new</span>
+            <span style={{ backgroundColor: 'rgba(10,102,194,0.15)', color: '#0a66c2', fontSize: '11px', fontWeight: 700, padding: '1px 7px', borderRadius: 999 }}>{unreadCount} new</span>
           )}
         </h4>
         {unreadCount > 0 && (
@@ -511,7 +529,7 @@ function CommentsSection({ comments = [], onPost, onMarkRead, onDelete }) {
         {comments.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '24px', color: '#555', fontSize: '13px' }}>No comments yet — ask a question or leave an update below</div>
         ) : comments.map(c => (
-          <CommentRow key={c.id} comment={c} onDelete={() => onDelete(c.id)} />
+          <CommentRow key={c.id} comment={c} onToggleRead={onToggleRead} onDelete={() => onDelete(c.id)} />
         ))}
       </div>
 
@@ -761,6 +779,14 @@ export default function LinkedInLeadDrawer({
     await markCommentsRead(leadId)
     setLead(prev => ({ ...prev, comments: (prev.comments || []).map(c => ({ ...c, is_read: 1 })) }))
     if (onLeadUpdated) onLeadUpdated({ id: leadId, unread_comment_count: 0 })
+  }
+
+  const handleToggleCommentRead = async (id, isRead) => {
+    const updatedRow = await toggleCommentRead(leadId, id, isRead)
+    const updatedComments = (lead.comments || []).map(c => c.id === id ? updatedRow : c)
+    setLead(prev => ({ ...prev, comments: updatedComments }))
+    const unread_comment_count = updatedComments.filter(c => !c.is_read).length
+    if (onLeadUpdated) onLeadUpdated({ id: leadId, unread_comment_count })
   }
 
   const handleDeleteComment = async (id) => {
@@ -1206,6 +1232,7 @@ export default function LinkedInLeadDrawer({
                       comments={lead.comments || []}
                       onPost={handlePostComment}
                       onMarkRead={handleMarkCommentsRead}
+                      onToggleRead={handleToggleCommentRead}
                       onDelete={handleDeleteComment}
                     />
                   </div>

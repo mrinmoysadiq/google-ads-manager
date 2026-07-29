@@ -43,6 +43,7 @@ export const deleteReply = (leadId, id) => api.delete(`/linkedin/leads/${leadId}
 export const getComments = (leadId) => api.get(`/linkedin/leads/${leadId}/comments`).then(r => r.data)
 export const createComment = (leadId, data) => api.post(`/linkedin/leads/${leadId}/comments`, data).then(r => r.data)
 export const markCommentsRead = (leadId) => api.patch(`/linkedin/leads/${leadId}/comments/mark-read`).then(r => r.data)
+export const toggleCommentRead = (leadId, id, isRead) => api.patch(`/linkedin/leads/${leadId}/comments/${id}/read`, { is_read: isRead }).then(r => r.data)
 export const deleteComment = (leadId, id) => api.delete(`/linkedin/leads/${leadId}/comments/${id}`).then(r => r.data)
 
 // Dashboard
