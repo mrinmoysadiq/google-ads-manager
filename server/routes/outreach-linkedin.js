@@ -21,6 +21,16 @@ function resolveSpecialistForUser(reqUser) {
   return spec ? spec.id : -1; // -1 = no specialist found → return no leads
 }
 
+// Unlike resolveSpecialistForUser, this checks the name match regardless of
+// role — used to tell whether *this* logged-in person is the specialist a
+// given lead is assigned to, for comment-notification "which side are you on"
+// logic. Returns null if their name doesn't match any specialist record.
+function matchSpecialistIdForUser(reqUser) {
+  if (!reqUser) return null;
+  const spec = db.prepare('SELECT id FROM outreach_specialists WHERE LOWER(name) = LOWER(?)').get(reqUser.name);
+  return spec ? spec.id : null;
+}
+
 const TERMINAL_STATUSES = ['Closed / Booked as Client', 'Disqualified', 'No Response / Dead'];
 const CONNECTION_STATUSES = ['Not Connected', 'Request Sent', 'Connected'];
 
@@ -62,6 +72,12 @@ router.get('/leads', (req, res) => {
     }
     // ────────────────────────────────────────────────────────────────────────
 
+    // Comment notifications are one-sided per lead: the specialist gets
+    // notified about comments from anyone else, and everyone else gets
+    // notified about comments from the specialist. This is the viewer's own
+    // identity, used below to pick the right side of that for every lead row.
+    const viewerSpecId = matchSpecialistIdForUser(reqUser);
+
     const conditions = ['l.deleted_at IS NULL'];
     const params = [];
 
@@ -82,7 +98,11 @@ router.get('/leads', (req, res) => {
     if (date_to) { conditions.push("date(l.created_at) <= ?"); params.push(date_to); }
     if (hot === '1' || hot === 'true') { conditions.push('l.is_hot_lead = 1'); }
     if (unread === '1' || unread === 'true') {
-      conditions.push('EXISTS (SELECT 1 FROM linkedin_lead_comments c WHERE c.lead_id = l.id AND c.is_read = 0)');
+      conditions.push(`EXISTS (
+        SELECT 1 FROM linkedin_lead_comments c WHERE c.lead_id = l.id AND c.is_read = 0
+        AND c.author_is_specialist = (CASE WHEN l.specialist_id = ? THEN 0 ELSE 1 END)
+      )`);
+      params.push(viewerSpecId);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -105,7 +125,9 @@ router.get('/leads', (req, res) => {
         (SELECT MAX(date) FROM linkedin_engagements WHERE lead_id = l.id) as last_engagement_date,
         (SELECT COUNT(*) FROM linkedin_lead_replies WHERE lead_id = l.id) as reply_count,
         (SELECT COUNT(*) FROM linkedin_lead_comments WHERE lead_id = l.id) as comment_count,
-        (SELECT COUNT(*) FROM linkedin_lead_comments WHERE lead_id = l.id AND is_read = 0) as unread_comment_count,
+        (SELECT COUNT(*) FROM linkedin_lead_comments WHERE lead_id = l.id AND is_read = 0
+           AND author_is_specialist = (CASE WHEN l.specialist_id = ? THEN 0 ELSE 1 END)
+        ) as unread_comment_count,
         (SELECT json_group_object(stage_key, json_object('is_seen', is_seen))
            FROM linkedin_followups WHERE lead_id = l.id) as followups_summary
       FROM linkedin_leads l
@@ -113,7 +135,7 @@ router.get('/leads', (req, res) => {
       ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortDir}
       LIMIT ? OFFSET ?
-    `).all(...params, parseInt(limit), offset);
+    `).all(viewerSpecId, ...params, parseInt(limit), offset);
 
     leads.forEach(l => {
       l.followups_summary = l.followups_summary ? JSON.parse(l.followups_summary) : {};
@@ -289,9 +311,10 @@ router.get('/leads/:id', (req, res) => {
       'SELECT * FROM linkedin_lead_replies WHERE lead_id = ? ORDER BY created_at DESC'
     ).all(id);
 
-    const comments = db.prepare(
+    const rawComments = db.prepare(
       'SELECT * FROM linkedin_lead_comments WHERE lead_id = ? ORDER BY created_at ASC'
     ).all(id);
+    const comments = annotateCommentsForViewer(rawComments, lead.specialist_id, reqUser);
 
     res.json({ ...lead, engagements, history, followups, replies, comments });
   } catch (err) {
@@ -593,16 +616,32 @@ router.delete('/leads/:leadId/replies/:id', (req, res) => {
 
 // ─── COMMENTS ─────────────────────────────────────────────────────────────────
 // A lightweight team discussion thread per lead (status questions, updates,
-// "did we hear back yet" etc). Posting a comment marks the thread's prior
-// comments as read (you've just engaged with it); the new comment itself
-// starts unread so it flags as needing attention until someone replies again
-// or explicitly marks the thread read.
+// "did we hear back yet" etc). Notifications are one-sided: the specialist
+// assigned to the lead is notified about comments from anyone else, and
+// anyone else is notified about comments from the specialist. Posting a
+// comment auto-marks the OTHER side's outstanding comments as read (you've
+// just replied to them); the thread-wide "mark read" button only clears the
+// side that's relevant to the viewer, never the viewer's own comments.
+
+// Tags each comment with whether it's currently unread *for this viewer* —
+// i.e. unread AND written by the opposite side from the viewer, so a
+// specialist never sees their own comment flagged as a notification.
+function annotateCommentsForViewer(comments, leadSpecialistId, reqUser) {
+  const viewerSpecId = matchSpecialistIdForUser(reqUser);
+  const viewerIsSpecialist = viewerSpecId !== null && viewerSpecId === leadSpecialistId;
+  return comments.map(c => ({
+    ...c,
+    is_unread_for_viewer: !c.is_read && (!!c.author_is_specialist !== viewerIsSpecialist),
+  }));
+}
 
 router.get('/leads/:leadId/comments', (req, res) => {
   try {
     const { leadId } = req.params;
+    const lead = db.prepare('SELECT specialist_id FROM linkedin_leads WHERE id = ?').get(leadId);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
     const comments = db.prepare('SELECT * FROM linkedin_lead_comments WHERE lead_id = ? ORDER BY created_at ASC').all(leadId);
-    res.json(comments);
+    res.json(annotateCommentsForViewer(comments, lead.specialist_id, getRequestUser(req)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch comments' });
@@ -616,20 +655,25 @@ router.post('/leads/:leadId/comments', (req, res) => {
     if (!(message && message.trim()) && !screenshot) {
       return res.status(400).json({ error: 'Comment message or screenshot required' });
     }
-    const lead = db.prepare('SELECT id FROM linkedin_leads WHERE id = ?').get(leadId);
+    const lead = db.prepare('SELECT id, specialist_id FROM linkedin_leads WHERE id = ?').get(leadId);
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
     const reqUser = getRequestUser(req);
+    const authorSpecId = matchSpecialistIdForUser(reqUser);
+    const authorIsSpecialist = authorSpecId !== null && authorSpecId === lead.specialist_id;
 
-    db.prepare('UPDATE linkedin_lead_comments SET is_read = 1 WHERE lead_id = ?').run(leadId);
+    // This reply addresses whatever the OTHER side had outstanding — not the
+    // author's own prior comments, which should stay however they were.
+    db.prepare('UPDATE linkedin_lead_comments SET is_read = 1 WHERE lead_id = ? AND author_is_specialist = ?')
+      .run(leadId, authorIsSpecialist ? 0 : 1);
 
     const result = db.prepare(`
-      INSERT INTO linkedin_lead_comments (lead_id, author_name, message, screenshot, is_read)
-      VALUES (?, ?, ?, ?, 0)
-    `).run(leadId, reqUser?.name || null, message ? message.trim() : null, screenshot || null);
+      INSERT INTO linkedin_lead_comments (lead_id, author_name, message, screenshot, is_read, author_is_specialist)
+      VALUES (?, ?, ?, ?, 0, ?)
+    `).run(leadId, reqUser?.name || null, message ? message.trim() : null, screenshot || null, authorIsSpecialist ? 1 : 0);
 
     const created = db.prepare('SELECT * FROM linkedin_lead_comments WHERE id = ?').get(result.lastInsertRowid);
-    res.status(201).json(created);
+    res.status(201).json(annotateCommentsForViewer([created], lead.specialist_id, reqUser)[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to post comment' });
@@ -639,7 +683,17 @@ router.post('/leads/:leadId/comments', (req, res) => {
 router.patch('/leads/:leadId/comments/mark-read', (req, res) => {
   try {
     const { leadId } = req.params;
-    db.prepare('UPDATE linkedin_lead_comments SET is_read = 1 WHERE lead_id = ?').run(leadId);
+    const lead = db.prepare('SELECT specialist_id FROM linkedin_leads WHERE id = ?').get(leadId);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    const reqUser = getRequestUser(req);
+    const viewerSpecId = matchSpecialistIdForUser(reqUser);
+    const viewerIsSpecialist = viewerSpecId !== null && viewerSpecId === lead.specialist_id;
+
+    // Only clear the side relevant to this viewer — never the viewer's own
+    // comments, which aren't "read" by marking them read yourself.
+    db.prepare('UPDATE linkedin_lead_comments SET is_read = 1 WHERE lead_id = ? AND author_is_specialist = ?')
+      .run(leadId, viewerIsSpecialist ? 0 : 1);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -651,11 +705,13 @@ router.patch('/leads/:leadId/comments/:id/read', (req, res) => {
   try {
     const { leadId, id } = req.params;
     const { is_read } = req.body;
+    const lead = db.prepare('SELECT specialist_id FROM linkedin_leads WHERE id = ?').get(leadId);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
     const existing = db.prepare('SELECT id FROM linkedin_lead_comments WHERE id = ? AND lead_id = ?').get(id, leadId);
     if (!existing) return res.status(404).json({ error: 'Comment not found' });
     db.prepare('UPDATE linkedin_lead_comments SET is_read = ? WHERE id = ?').run(is_read ? 1 : 0, id);
     const row = db.prepare('SELECT * FROM linkedin_lead_comments WHERE id = ?').get(id);
-    res.json(row);
+    res.json(annotateCommentsForViewer([row], lead.specialist_id, getRequestUser(req))[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update comment read status' });

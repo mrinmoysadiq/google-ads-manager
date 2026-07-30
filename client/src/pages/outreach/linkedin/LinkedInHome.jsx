@@ -362,9 +362,9 @@ export default function LinkedInHome() {
                   onClick={() => { setFilters(f => ({ ...f, unread: !f.unread })); setPage(1) }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10,
-                    border: `1px solid ${filters.unread ? 'rgba(245,158,11,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                    backgroundColor: filters.unread ? 'rgba(245,158,11,0.15)' : '#242424',
-                    color: filters.unread ? '#f59e0b' : '#8a8680', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                    border: `1px solid ${filters.unread ? 'rgba(249,115,22,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                    backgroundColor: filters.unread ? 'rgba(249,115,22,0.15)' : '#242424',
+                    color: filters.unread ? '#f97316' : '#8a8680', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
                   }}
                   title={filters.unread ? 'Showing leads with unread comments only — click to show all' : 'Show only leads with unread comments'}
                 >

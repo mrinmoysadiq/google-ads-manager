@@ -41,7 +41,7 @@ function ChatIcon({ size = 11 }) {
 
 // Small "live" notification dot — a solid center with a soft expanding ring,
 // the same visual language as a system tray unread indicator.
-function PulseDot({ color = '#3b82f6' }) {
+function PulseDot({ color = '#f97316' }) {
   return (
     <span style={{ position: 'relative', display: 'inline-flex', width: 6, height: 6, flexShrink: 0 }}>
       <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', backgroundColor: color, animation: 'commentPulseRing 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
@@ -69,12 +69,12 @@ function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, on
       className="rounded-xl cursor-pointer select-none overflow-hidden"
       style={{
         position: 'relative', backgroundColor: '#242424',
-        border: `1px solid ${hasUnreadComments ? 'rgba(59,130,246,0.4)' : baseBorderColor}`,
-        boxShadow: hasUnreadComments ? '0 2px 16px -2px rgba(59,130,246,0.28)' : 'none',
+        border: `1px solid ${hasUnreadComments ? 'rgba(249,115,22,0.45)' : baseBorderColor}`,
+        boxShadow: hasUnreadComments ? '0 2px 16px -2px rgba(249,115,22,0.3)' : 'none',
         transition: 'border-color 0.15s, background-color 0.15s, box-shadow 0.15s',
       }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(10,102,194,0.35)'; e.currentTarget.style.backgroundColor = '#272727' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = hasUnreadComments ? 'rgba(59,130,246,0.4)' : baseBorderColor; e.currentTarget.style.backgroundColor = '#242424' }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = hasUnreadComments ? 'rgba(249,115,22,0.6)' : 'rgba(10,102,194,0.35)'; e.currentTarget.style.backgroundColor = '#272727' }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = hasUnreadComments ? 'rgba(249,115,22,0.45)' : baseBorderColor; e.currentTarget.style.backgroundColor = '#242424' }}
     >
       <button
         onClick={e => { e.stopPropagation(); onToggleHotLead(lead.id, !lead.is_hot_lead) }}
@@ -132,7 +132,7 @@ function KanbanCard({ lead, onLeadClick, onViewLog, onConnectionStatusChange, on
             <span
               title={`${lead.unread_comment_count} unread comment${lead.unread_comment_count !== 1 ? 's' : ''}`}
               className="flex items-center gap-1.5 text-[10px] font-semibold pl-1.5 pr-2 py-1 rounded-full"
-              style={{ backgroundColor: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa', letterSpacing: '0.01em' }}
+              style={{ backgroundColor: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.3)', color: '#fb923c', letterSpacing: '0.01em' }}
             >
               <PulseDot />
               <ChatIcon />

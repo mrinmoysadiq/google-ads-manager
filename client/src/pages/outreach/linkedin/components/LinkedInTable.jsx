@@ -158,7 +158,7 @@ export default function LinkedInTable({
                           {lead.unread_comment_count > 0 && (
                             <span
                               title={`${lead.unread_comment_count} unread comment${lead.unread_comment_count !== 1 ? 's' : ''}`}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, backgroundColor: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa', borderRadius: 999, fontSize: 10, fontWeight: 700, padding: '2px 7px', flexShrink: 0 }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, backgroundColor: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.3)', color: '#fb923c', borderRadius: 999, fontSize: 10, fontWeight: 700, padding: '2px 7px', flexShrink: 0 }}
                             >
                               <ChatIcon />
                               {lead.unread_comment_count}
