@@ -458,15 +458,23 @@ function CommentRow({ comment, onToggleRead, onDelete }) {
           <span style={{ color: '#555', fontSize: '11px' }}>{fmtDateTimeLong(comment.created_at)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', color: comment.is_read ? '#22c55e' : '#8a8680', fontSize: '11px', cursor: 'pointer', userSelect: 'none' }}>
-            <input
-              type="checkbox"
-              checked={!!comment.is_read}
-              onChange={e => onToggleRead(comment.id, e.target.checked)}
-              style={{ cursor: 'pointer' }}
-            />
-            Read
-          </label>
+          {comment.is_from_viewer_side ? (
+            // This is the viewer's own side's comment — whether it's been
+            // read is up to the *other* side, not something to check off here.
+            <span style={{ fontSize: '11px', color: comment.is_read ? '#22c55e' : '#8a8680' }}>
+              {comment.is_read ? '✓ Seen' : 'Awaiting reply'}
+            </span>
+          ) : (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', color: comment.is_read ? '#22c55e' : '#8a8680', fontSize: '11px', cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={!!comment.is_read}
+                onChange={e => onToggleRead(comment.id, e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              Read
+            </label>
+          )}
           <button onClick={onDelete} style={{ background: 'none', border: 'none', color: '#555', fontSize: '14px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px' }}
             onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)' }}
             onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.backgroundColor = 'transparent' }}

@@ -629,10 +629,16 @@ router.delete('/leads/:leadId/replies/:id', (req, res) => {
 function annotateCommentsForViewer(comments, leadSpecialistId, reqUser) {
   const viewerSpecId = matchSpecialistIdForUser(reqUser);
   const viewerIsSpecialist = viewerSpecId !== null && viewerSpecId === leadSpecialistId;
-  return comments.map(c => ({
-    ...c,
-    is_unread_for_viewer: !c.is_read && (!!c.author_is_specialist !== viewerIsSpecialist),
-  }));
+  return comments.map(c => {
+    const isFromViewerSide = !!c.author_is_specialist === viewerIsSpecialist;
+    return {
+      ...c,
+      is_unread_for_viewer: !c.is_read && !isFromViewerSide,
+      // Only the *recipient* side should ever be able to mark a comment
+      // read — the author's own side gets a passive status, not a control.
+      is_from_viewer_side: isFromViewerSide,
+    };
+  });
 }
 
 router.get('/leads/:leadId/comments', (req, res) => {
