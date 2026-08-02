@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
 export const CONNECTION_STATUSES = ['Not Connected', 'Request Sent', 'Connected']
 
@@ -10,23 +11,49 @@ export const CONNECTION_STATUS_COLORS = {
 
 // Compact quick-toggle control — click to open a 3-option menu.
 // Stops propagation so it's safe to drop onto a clickable Kanban card / table row.
+//
+// The menu is rendered through a portal into document.body and positioned via
+// getBoundingClientRect() rather than being an absolutely-positioned child —
+// otherwise it gets visually clipped by the Kanban card's overflow-hidden and
+// the column's overflow-y-auto scroll container.
 export default function ConnectionStatusBadge({ status, onChange, size = 'md' }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef(null)
+  const [menuPos, setMenuPos] = useState(null)
+  const wrapRef = useRef(null)
+  const menuRef = useRef(null)
   const c = CONNECTION_STATUS_COLORS[status] || CONNECTION_STATUS_COLORS['Not Connected']
   const isSmall = size === 'sm'
 
+  const openMenu = () => {
+    const rect = wrapRef.current.getBoundingClientRect()
+    setMenuPos({ top: rect.bottom + 6, left: rect.left })
+    setOpen(true)
+  }
+
   useEffect(() => {
     if (!open) return
-    function handleClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    function handleClick(e) {
+      if (wrapRef.current?.contains(e.target)) return
+      if (menuRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
+    function handleReposition() { setOpen(false) }
     document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
+    // Any scroll (card list, page, etc.) would leave the portaled menu behind
+    // the button it's meant to anchor to, so just close it instead of drifting.
+    window.addEventListener('scroll', handleReposition, true)
+    window.addEventListener('resize', handleReposition)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      window.removeEventListener('scroll', handleReposition, true)
+      window.removeEventListener('resize', handleReposition)
+    }
   }, [open])
 
   return (
-    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }} onClick={e => e.stopPropagation()}>
+    <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block' }} onClick={e => e.stopPropagation()}>
       <button
-        onClick={() => setOpen(v => !v)}
+        onClick={() => (open ? setOpen(false) : openMenu())}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,
           backgroundColor: c.bg, color: c.color, border: `1px solid ${c.color}33`,
@@ -38,12 +65,16 @@ export default function ConnectionStatusBadge({ status, onChange, size = 'md' })
         {status || 'Not Connected'}
       </button>
 
-      {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 200,
-          backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px',
-          padding: '4px', minWidth: '150px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-        }}>
+      {open && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 9999,
+            backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px',
+            padding: '4px', minWidth: '150px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          }}
+        >
           {CONNECTION_STATUSES.map(s => {
             const sc = CONNECTION_STATUS_COLORS[s]
             const isActive = s === status
@@ -65,7 +96,8 @@ export default function ConnectionStatusBadge({ status, onChange, size = 'md' })
               </button>
             )
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
