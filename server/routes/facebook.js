@@ -77,6 +77,7 @@ router.get('/ad-accounts', (req, res) => {
     let conditions = ['a.deleted_at IS NULL'];
     if (all !== '1') conditions.push('a.active = 1');
 
+    const params = [];
     // Non-admin: filter to accounts explicitly assigned to this buyer
     if (my_only === '1') {
       const token = (req.headers.authorization || '').replace('Bearer ', '');
@@ -86,12 +87,16 @@ router.get('/ad-accounts', (req, res) => {
           const jwt = require('jsonwebtoken');
           const SECRET = process.env.JWT_SECRET || 'infinix_secret_key_v2';
           const payload = jwt.verify(token, SECRET);
-          const buyer = db.prepare('SELECT id FROM fb_media_buyers WHERE name = ? AND active = 1').get(payload.username || payload.name || '');
-          if (buyer) buyerId = buyer.id;
+          const appUser = db.prepare('SELECT name FROM app_users WHERE id = ? AND active = 1').get(payload.id);
+          if (appUser) {
+            const buyer = db.prepare('SELECT id FROM fb_media_buyers WHERE LOWER(name) = LOWER(?) AND active = 1').get(appUser.name);
+            if (buyer) buyerId = buyer.id;
+          }
         } catch { /* invalid token */ }
       }
       if (buyerId) {
-        conditions.push(`a.id IN (SELECT account_id FROM fb_account_buyers WHERE buyer_id = ${buyerId})`);
+        conditions.push('a.id IN (SELECT account_id FROM fb_account_buyers WHERE buyer_id = ?)');
+        params.push(buyerId);
       } else {
         return res.json([]); // no matching buyer → no accounts
       }
@@ -106,7 +111,7 @@ router.get('/ad-accounts', (req, res) => {
       FROM fb_ad_accounts a
       ${where}
       ORDER BY a.name ASC
-    `).all().map(a => {
+    `).all(...params).map(a => {
       const enriched = enrichAccountWithFieldValues(a);
       return { ...enriched, last_performance_data: a.last_performance_data ? JSON.parse(a.last_performance_data) : null };
     });
