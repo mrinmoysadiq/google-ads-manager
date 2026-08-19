@@ -56,7 +56,7 @@ router.get('/leads', (req, res) => {
   try {
     let {
       specialist_id, status, search,
-      date_from, date_to, hot, unread,
+      date_from, date_to, date_type, hot, unread,
       page = 1, limit = 25,
       sort_by = 'created_at', sort_dir = 'DESC',
     } = req.query;
@@ -94,8 +94,11 @@ router.get('/leads', (req, res) => {
       const s = `%${search}%`;
       params.push(s, s, s);
     }
-    if (date_from) { conditions.push("date(l.created_at) >= ?"); params.push(date_from); }
-    if (date_to) { conditions.push("date(l.created_at) <= ?"); params.push(date_to); }
+    // "created" (default) filters by when the lead was added; "activity"
+    // filters by status_updated_at — the last time the lead's stage moved.
+    const dateColumn = date_type === 'activity' ? 'l.status_updated_at' : 'l.created_at';
+    if (date_from) { conditions.push(`date(${dateColumn}) >= ?`); params.push(date_from); }
+    if (date_to) { conditions.push(`date(${dateColumn}) <= ?`); params.push(date_to); }
     if (hot === '1' || hot === 'true') { conditions.push('l.is_hot_lead = 1'); }
     if (unread === '1' || unread === 'true') {
       conditions.push(`EXISTS (

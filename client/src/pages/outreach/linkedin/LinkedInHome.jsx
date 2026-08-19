@@ -12,6 +12,7 @@ import {
 import LinkedInLeadDrawer from './components/LinkedInLeadDrawer'
 import LinkedInTable from './components/LinkedInTable'
 import LinkedInKanban from './components/LinkedInKanban'
+import DateRangeFilterButton from './components/DateRangeFilterButton'
 import LinkedInDashboard from './components/LinkedInDashboard'
 import FollowupQuickModal from './components/FollowupQuickModal'
 import ReplyQuickModal from './components/ReplyQuickModal'
@@ -54,7 +55,7 @@ export default function LinkedInHome() {
   const [replyModal, setReplyModal] = useState({ open: false, leadId: null, modalKey: 0 })
 
   const [filters, setFilters] = useState({
-    status: '', search: '', date_from: '', date_to: '', sort_by: 'status_updated_at', sort_dir: 'DESC', hot: false, unread: false,
+    status: '', search: '', date_from: '', date_to: '', date_type: 'created', sort_by: 'status_updated_at', sort_dir: 'DESC', hot: false, unread: false,
   })
   const [page, setPage] = useState(1)
   const [searchInput, setSearchInput] = useState('')
@@ -116,6 +117,7 @@ export default function LinkedInHome() {
     if (filters.search) params.search = filters.search
     if (filters.date_from) params.date_from = filters.date_from
     if (filters.date_to) params.date_to = filters.date_to
+    if (filters.date_from || filters.date_to) params.date_type = filters.date_type
     if (filters.hot) params.hot = '1'
     if (filters.unread) params.unread = '1'
 
@@ -370,6 +372,16 @@ export default function LinkedInHome() {
                 >
                   💬 Unread Comments
                 </button>
+
+                <DateRangeFilterButton
+                  dateType={filters.date_type}
+                  dateFrom={filters.date_from}
+                  dateTo={filters.date_to}
+                  onApply={({ date_type, date_from, date_to }) => {
+                    setFilters(f => ({ ...f, date_type, date_from, date_to }))
+                    setPage(1)
+                  }}
+                />
               </div>
               {filters.search && (
                 <p style={{ color: '#8a8680', fontSize: '0.75rem', marginTop: 6, marginLeft: 2 }}>
