@@ -58,6 +58,7 @@ export default function LinkedInHome() {
 
   const [checklist, setChecklist] = useState({ date: null, data: [] })
   const [checklistLoading, setChecklistLoading] = useState(true)
+  const [checklistDate, setChecklistDate] = useState(() => todayLocal())
 
   const [filters, setFilters] = useState({
     status: '', search: '', date_from: '', date_to: '', date_type: 'created', sort_by: 'status_updated_at', sort_dir: 'DESC', hot: false, unread: false,
@@ -141,18 +142,27 @@ export default function LinkedInHome() {
   const fetchChecklist = useCallback(() => {
     if (!metaReady || tab !== 'pipeline' || viewMode !== 'kanban') return
     setChecklistLoading(true)
-    const params = { date: todayLocal() }
+    const params = { date: checklistDate }
     if (selectedSpecialist) params.specialist_id = selectedSpecialist.id
     getLinkedInChecklist(params)
       .then(data => setChecklist(data))
       .catch(() => toast.error('Failed to load daily checklist'))
       .finally(() => setChecklistLoading(false))
-  }, [selectedSpecialist, tab, viewMode, metaReady])
+  }, [selectedSpecialist, tab, viewMode, metaReady, checklistDate])
 
   useEffect(() => { fetchChecklist() }, [fetchChecklist])
   // Also refresh whenever lead activity elsewhere bumps the dashboard, so
   // logging a follow-up updates today's counts without a manual reload.
   useEffect(() => { if (dashboardRefreshKey > 0) fetchChecklist() }, [dashboardRefreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const shiftChecklistDate = (deltaDays) => {
+    setChecklistDate(prev => {
+      const base = prev ? new Date(`${prev}T00:00:00`) : new Date()
+      base.setDate(base.getDate() + deltaDays)
+      const next = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`
+      return next > todayLocal() ? todayLocal() : next
+    })
+  }
 
   const handleSpecialistChange = (opt) => {
     const spec = opt?.value ? specialists.find(s => s.id === opt.value) : null
@@ -430,7 +440,14 @@ export default function LinkedInHome() {
               />
             ) : (
               <>
-                <DailyChecklist date={checklist.date} rows={checklist.data} loading={checklistLoading} />
+                <DailyChecklist
+                  date={checklist.date || checklistDate}
+                  rows={checklist.data}
+                  loading={checklistLoading}
+                  onDateChange={setChecklistDate}
+                  onPrevDay={() => shiftChecklistDate(-1)}
+                  onNextDay={() => shiftChecklistDate(1)}
+                />
                 <LinkedInKanban
                   leads={leads}
                   loading={loading}
