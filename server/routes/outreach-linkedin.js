@@ -828,6 +828,78 @@ router.delete('/dashboard/cards/:id', (req, res) => {
   }
 });
 
+// ─── DAILY CHECKLIST ──────────────────────────────────────────────────────────
+// Per-specialist daily targets for the Kanban view: leads identified (created)
+// today, plus one count per FOLLOWUP_STAGE_KEYS entry logged today (Messaged,
+// Follow-up 1-4, Emailed). Sourced from linkedin_followups.date — the
+// specialist-entered date on the logged message — rather than the server
+// timestamp, since that's what "did I send this today" actually means.
+
+router.get('/checklist', (req, res) => {
+  try {
+    let { specialist_id, date } = req.query;
+
+    const reqUser = getRequestUser(req);
+    const enforcedSpecId = resolveSpecialistForUser(reqUser);
+    if (enforcedSpecId === -1) return res.json({ date: date || null, data: [] });
+    if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
+
+    const targetDate = date || new Date().toISOString().slice(0, 10);
+
+    const specialists = db.prepare(`
+      SELECT id, name FROM outreach_specialists
+      WHERE active = 1 ${specialist_id ? 'AND id = ?' : ''}
+      ORDER BY name ASC
+    `).all(...(specialist_id ? [specialist_id] : []));
+
+    const identifiedCond = specialist_id ? 'AND l.specialist_id = ?' : '';
+    const identifiedParams = specialist_id ? [specialist_id] : [];
+    const identifiedRows = db.prepare(`
+      SELECT l.specialist_id, COUNT(*) as cnt
+      FROM linkedin_leads l
+      WHERE date(l.created_at) = ? AND l.deleted_at IS NULL ${identifiedCond}
+      GROUP BY l.specialist_id
+    `).all(targetDate, ...identifiedParams);
+
+    const followupRows = db.prepare(`
+      SELECT l.specialist_id, f.stage_key, COUNT(*) as cnt
+      FROM linkedin_followups f
+      JOIN linkedin_leads l ON l.id = f.lead_id
+      WHERE f.date IS NOT NULL AND date(f.date) = ? AND l.deleted_at IS NULL ${identifiedCond}
+      GROUP BY l.specialist_id, f.stage_key
+    `).all(targetDate, ...identifiedParams);
+
+    const identifiedMap = {};
+    identifiedRows.forEach(r => { identifiedMap[r.specialist_id] = r.cnt; });
+
+    const followupMap = {};
+    followupRows.forEach(r => {
+      followupMap[r.specialist_id] = followupMap[r.specialist_id] || {};
+      followupMap[r.specialist_id][r.stage_key] = r.cnt;
+    });
+
+    const data = specialists.map(s => {
+      const fu = followupMap[s.id] || {};
+      return {
+        specialist_id: s.id,
+        specialist_name: s.name,
+        identified: identifiedMap[s.id] || 0,
+        messaged: fu['Messaged'] || 0,
+        follow_up_1: fu['Follow-up 1'] || 0,
+        follow_up_2: fu['Follow-up 2'] || 0,
+        follow_up_3: fu['Follow-up 3'] || 0,
+        follow_up_4: fu['Follow-up 4'] || 0,
+        emailed: fu['Emailed'] || 0,
+      };
+    });
+
+    res.json({ date: targetDate, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch checklist' });
+  }
+});
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
 router.get('/dashboard', (req, res) => {

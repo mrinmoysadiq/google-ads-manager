@@ -7,12 +7,14 @@ import { getUser, isAdmin } from '../../../utils/auth'
 import { getSpecialists } from '../../../utils/outreachApi'
 import {
   getLinkedInLeads, updateLinkedInLead, getLinkedInPipelineStages, getLinkedInSettings,
-  upsertFollowup, createReply,
+  upsertFollowup, createReply, getLinkedInChecklist,
 } from '../../../utils/linkedinApi'
+import { todayLocal } from '../../../utils/dates'
 import LinkedInLeadDrawer from './components/LinkedInLeadDrawer'
 import LinkedInTable from './components/LinkedInTable'
 import LinkedInKanban from './components/LinkedInKanban'
 import DateRangeFilterButton from './components/DateRangeFilterButton'
+import DailyChecklist from './components/DailyChecklist'
 import LinkedInDashboard from './components/LinkedInDashboard'
 import FollowupQuickModal from './components/FollowupQuickModal'
 import ReplyQuickModal from './components/ReplyQuickModal'
@@ -53,6 +55,9 @@ export default function LinkedInHome() {
 
   const [followupModal, setFollowupModal] = useState({ open: false, leadId: null, stageKey: null, modalKey: 0 })
   const [replyModal, setReplyModal] = useState({ open: false, leadId: null, modalKey: 0 })
+
+  const [checklist, setChecklist] = useState({ date: null, data: [] })
+  const [checklistLoading, setChecklistLoading] = useState(true)
 
   const [filters, setFilters] = useState({
     status: '', search: '', date_from: '', date_to: '', date_type: 'created', sort_by: 'status_updated_at', sort_dir: 'DESC', hot: false, unread: false,
@@ -131,6 +136,23 @@ export default function LinkedInHome() {
   }, [selectedSpecialist, filters, page, viewMode, metaReady])
 
   useEffect(() => { fetchLeads() }, [fetchLeads])
+
+  // Only relevant on the Kanban pipeline view — skip the request elsewhere.
+  const fetchChecklist = useCallback(() => {
+    if (!metaReady || tab !== 'pipeline' || viewMode !== 'kanban') return
+    setChecklistLoading(true)
+    const params = { date: todayLocal() }
+    if (selectedSpecialist) params.specialist_id = selectedSpecialist.id
+    getLinkedInChecklist(params)
+      .then(data => setChecklist(data))
+      .catch(() => toast.error('Failed to load daily checklist'))
+      .finally(() => setChecklistLoading(false))
+  }, [selectedSpecialist, tab, viewMode, metaReady])
+
+  useEffect(() => { fetchChecklist() }, [fetchChecklist])
+  // Also refresh whenever lead activity elsewhere bumps the dashboard, so
+  // logging a follow-up updates today's counts without a manual reload.
+  useEffect(() => { if (dashboardRefreshKey > 0) fetchChecklist() }, [dashboardRefreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSpecialistChange = (opt) => {
     const spec = opt?.value ? specialists.find(s => s.id === opt.value) : null
@@ -407,18 +429,21 @@ export default function LinkedInHome() {
                 showSpecialistColumn={showSpecialistColumn}
               />
             ) : (
-              <LinkedInKanban
-                leads={leads}
-                loading={loading}
-                onLeadClick={openDrawer}
-                onStatusChange={handleStatusChange}
-                onConnectionStatusChange={handleConnectionStatusChange}
-                onToggleHotLead={handleToggleHotLead}
-                onViewLog={openEngagementsTab}
-                showSpecialistColumn={showSpecialistColumn}
-                stages={stages}
-                warmupThreshold={warmupThreshold}
-              />
+              <>
+                <DailyChecklist date={checklist.date} rows={checklist.data} loading={checklistLoading} />
+                <LinkedInKanban
+                  leads={leads}
+                  loading={loading}
+                  onLeadClick={openDrawer}
+                  onStatusChange={handleStatusChange}
+                  onConnectionStatusChange={handleConnectionStatusChange}
+                  onToggleHotLead={handleToggleHotLead}
+                  onViewLog={openEngagementsTab}
+                  showSpecialistColumn={showSpecialistColumn}
+                  stages={stages}
+                  warmupThreshold={warmupThreshold}
+                />
+              </>
             )}
           </>
         )}

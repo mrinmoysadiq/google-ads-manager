@@ -46,6 +46,9 @@ export const markCommentsRead = (leadId) => api.patch(`/linkedin/leads/${leadId}
 export const toggleCommentRead = (leadId, id, isRead) => api.patch(`/linkedin/leads/${leadId}/comments/${id}/read`, { is_read: isRead }).then(r => r.data)
 export const deleteComment = (leadId, id) => api.delete(`/linkedin/leads/${leadId}/comments/${id}`).then(r => r.data)
 
+// Daily checklist
+export const getLinkedInChecklist = (params) => api.get('/linkedin/checklist', { params }).then(r => r.data)
+
 // Dashboard
 export const getLinkedInDashboard = (params) => api.get('/linkedin/dashboard', { params }).then(r => r.data)
 export const getStaleEngagementLeads = (params) => api.get('/linkedin/stale-engagement', { params }).then(r => r.data)
