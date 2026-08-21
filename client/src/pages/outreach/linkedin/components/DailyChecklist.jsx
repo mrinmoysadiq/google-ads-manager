@@ -4,13 +4,14 @@ import { fmtDateLong, todayLocal } from '../../../../utils/dates'
 const LS_COLLAPSED_KEY = 'linkedin_checklist_collapsed'
 
 const CHECKLIST_ITEMS = [
-  { key: 'identified',  label: 'Identified',  target: 10 },
-  { key: 'messaged',    label: 'Messaged',     target: 10 },
-  { key: 'follow_up_1', label: 'Follow-up 1',  target: 10 },
-  { key: 'follow_up_2', label: 'Follow-up 2',  target: 10 },
-  { key: 'follow_up_3', label: 'Follow-up 3',  target: 10 },
-  { key: 'follow_up_4', label: 'Follow-up 4',  target: 10 },
-  { key: 'emailed',     label: 'Emailed',      target: 5 },
+  { key: 'identified',          label: 'Identified',      target: 10 },
+  { key: 'connection_requests', label: 'Conn. Request',   target: 20 },
+  { key: 'messaged',            label: 'Messaged',        target: 10 },
+  { key: 'follow_up_1',         label: 'Follow-up 1',     target: 10 },
+  { key: 'follow_up_2',         label: 'Follow-up 2',     target: 10 },
+  { key: 'follow_up_3',         label: 'Follow-up 3',     target: 10 },
+  { key: 'follow_up_4',         label: 'Follow-up 4',     target: 10 },
+  { key: 'emailed',             label: 'Emailed',         target: 5 },
 ]
 
 function scoreColor(pct) {
@@ -92,7 +93,7 @@ export default function DailyChecklist({ date, rows, loading, onDateChange, onPr
           ) : rows.length === 0 ? (
             <p style={{ color: '#8a8680', fontSize: 13, padding: '12px 0' }}>No specialists to show.</p>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 760 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 860 }}>
               <thead>
                 <tr>
                   <th style={{ ...thStyle, textAlign: 'left' }}>Specialist</th>

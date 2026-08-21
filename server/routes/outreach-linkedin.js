@@ -163,11 +163,12 @@ router.post('/leads', (req, res) => {
     if (!lead_name || !lead_name.trim()) return res.status(400).json({ error: 'lead_name is required' });
 
     const initialConnectionStatus = CONNECTION_STATUSES.includes(connection_status) ? connection_status : 'Not Connected';
+    const initialConnectionRequestSentAt = initialConnectionStatus === 'Request Sent' ? new Date().toISOString() : null;
 
     const result = db.prepare(`
       INSERT INTO linkedin_leads
-        (specialist_id, lead_name, linkedin_profile_url, activity_url, company_name, job_title, website, email, phone, follower_count, notes, connection_status, source_image)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (specialist_id, lead_name, linkedin_profile_url, activity_url, company_name, job_title, website, email, phone, follower_count, notes, connection_status, connection_request_sent_at, source_image)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       specialist_id,
       lead_name.trim(),
@@ -181,6 +182,7 @@ router.post('/leads', (req, res) => {
       follower_count || null,
       notes || null,
       initialConnectionStatus,
+      initialConnectionRequestSentAt,
       source_image || null,
     );
 
@@ -342,6 +344,7 @@ router.patch('/leads/:id', (req, res) => {
     const nextConnectionStatus = connection_status !== undefined
       ? (CONNECTION_STATUSES.includes(connection_status) ? connection_status : existing.connection_status)
       : existing.connection_status;
+    const connectionRequestJustSent = nextConnectionStatus === 'Request Sent' && nextConnectionStatus !== existing.connection_status;
 
     db.prepare(`
       UPDATE linkedin_leads SET
@@ -358,6 +361,7 @@ router.patch('/leads/:id', (req, res) => {
         status = COALESCE(?, status),
         notes = ?,
         connection_status = ?,
+        connection_request_sent_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE connection_request_sent_at END,
         source_image = ?,
         is_hot_lead = ?,
         conversation_summary = ?,
@@ -377,6 +381,7 @@ router.patch('/leads/:id', (req, res) => {
       status || null,
       notes !== undefined ? (notes || null) : existing.notes,
       nextConnectionStatus,
+      connectionRequestJustSent ? 1 : 0,
       source_image !== undefined ? (source_image || null) : existing.source_image,
       is_hot_lead !== undefined ? (is_hot_lead ? 1 : 0) : existing.is_hot_lead,
       conversation_summary !== undefined ? (conversation_summary || null) : existing.conversation_summary,
@@ -869,6 +874,13 @@ router.get('/checklist', (req, res) => {
       GROUP BY l.specialist_id, f.stage_key
     `).all(targetDate, ...identifiedParams);
 
+    const connectionRequestRows = db.prepare(`
+      SELECT l.specialist_id, COUNT(*) as cnt
+      FROM linkedin_leads l
+      WHERE l.connection_request_sent_at IS NOT NULL AND date(l.connection_request_sent_at) = ? AND l.deleted_at IS NULL ${identifiedCond}
+      GROUP BY l.specialist_id
+    `).all(targetDate, ...identifiedParams);
+
     const identifiedMap = {};
     identifiedRows.forEach(r => { identifiedMap[r.specialist_id] = r.cnt; });
 
@@ -878,12 +890,16 @@ router.get('/checklist', (req, res) => {
       followupMap[r.specialist_id][r.stage_key] = r.cnt;
     });
 
+    const connectionRequestMap = {};
+    connectionRequestRows.forEach(r => { connectionRequestMap[r.specialist_id] = r.cnt; });
+
     const data = specialists.map(s => {
       const fu = followupMap[s.id] || {};
       return {
         specialist_id: s.id,
         specialist_name: s.name,
         identified: identifiedMap[s.id] || 0,
+        connection_requests: connectionRequestMap[s.id] || 0,
         messaged: fu['Messaged'] || 0,
         follow_up_1: fu['Follow-up 1'] || 0,
         follow_up_2: fu['Follow-up 2'] || 0,
