@@ -20,7 +20,7 @@ import {
   deleteComment,
   checkLinkedInDuplicate,
 } from '../../../../utils/linkedinApi'
-import { fmtDateLong, fmtDateTimeLong, todayLocal } from '../../../../utils/dates'
+import { fmtDateLong, fmtDateTimeLong, todayInTz } from '../../../../utils/dates'
 import ConnectionStatusBadge from './ConnectionStatusBadge'
 import ImagePasteZone, { ImageLightbox } from '../../../../components/ImagePasteZone'
 import FollowupQuickModal from './FollowupQuickModal'
@@ -146,7 +146,7 @@ function StatusBadge({ status, onChange, stages = [] }) {
 // ─── Sub-component: EngagementsSection ───────────────────────────────────────
 
 function EngagementsSection({ leadId, initialEngagements = [], warmupThreshold, activityUrl, notes }) {
-  const today = todayLocal()
+  const today = todayInTz()
   const [engagements, setEngagements] = useState(initialEngagements)
   const [form, setForm] = useState({ date: today, post_url: '', liked: true, commented: false, comment_text: '' })
   const [saving, setSaving] = useState(false)

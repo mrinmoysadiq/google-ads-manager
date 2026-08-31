@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { todayLocal } from '../../../../utils/dates'
+import { todayInTz } from '../../../../utils/dates'
 import ImagePasteZone from '../../../../components/ImagePasteZone'
 
 const CHANNELS = ['LinkedIn', 'Email']
@@ -7,9 +7,10 @@ const CHANNELS = ['LinkedIn', 'Email']
 const inputClass =
   'w-full rounded-lg px-3 py-2 text-sm focus:outline-none bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#0a66c2] transition-colors'
 
-// Called with a fresh key each open so form state always resets
+// Called with a fresh key each open so form state always resets. Defaults to
+// today in ET (the checklist's fixed business timezone), not the browser's.
 export default function ReplyQuickModal({ onSave, onClose }) {
-  const today = todayLocal()
+  const today = todayInTz()
   const [fields, setFields] = useState({
     date: today,
     channel: 'LinkedIn',
