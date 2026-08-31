@@ -839,17 +839,61 @@ router.delete('/dashboard/cards/:id', (req, res) => {
 // Follow-up 1-4, Emailed). Sourced from linkedin_followups.date — the
 // specialist-entered date on the logged message — rather than the server
 // timestamp, since that's what "did I send this today" actually means.
+//
+// "Identified" and "Connection Request Sent" have no specialist-entered date —
+// they're keyed off server-stamped UTC timestamps (created_at,
+// connection_request_sent_at). The checklist's day boundary for those is
+// fixed to US Eastern Time (America/New_York, DST-aware) rather than each
+// viewer's own browser clock: relying on browser-local time meant two
+// specialists in different timezones (or a browser with a wrong system
+// clock) saw different, inconsistent counts for the same real-world day.
+
+const CHECKLIST_TIMEZONE = 'America/New_York';
+
+// Minutes such that (local wall-clock time) = (UTC time) + offset, for the
+// given timeZone at the given instant.
+function tzOffsetMinutes(timeZone, date) {
+  const parts = {};
+  new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(date).forEach(p => { if (p.type !== 'literal') parts[p.type] = p.value; });
+  const asUTC = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return (asUTC - date.getTime()) / 60000;
+}
+
+// UTC instant range [start, end) covering one calendar day ("YYYY-MM-DD") in
+// the given IANA timezone. Handles DST transitions correctly.
+function tzDayRangeUtc(dateStr, timeZone) {
+  const guess = new Date(`${dateStr}T00:00:00Z`);
+  // Two passes: the first offset estimate (from the UTC-midnight guess) locates
+  // the true local-midnight instant closely enough to re-derive the offset
+  // from THAT instant, which is what actually matters on a DST changeover day.
+  const roughOffset = tzOffsetMinutes(timeZone, guess);
+  const refinedInstant = new Date(guess.getTime() - roughOffset * 60000);
+  const offsetMin = tzOffsetMinutes(timeZone, refinedInstant);
+  const start = new Date(guess.getTime() - offsetMin * 60000);
+  const end = new Date(start.getTime() + 24 * 60 * 60000);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+// Today's calendar date ("YYYY-MM-DD") in the given IANA timezone.
+function tzToday(timeZone) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date());
+}
 
 router.get('/checklist', (req, res) => {
   try {
-    let { specialist_id, date, range_start, range_end } = req.query;
+    let { specialist_id, date } = req.query;
 
     const reqUser = getRequestUser(req);
     const enforcedSpecId = resolveSpecialistForUser(reqUser);
     if (enforcedSpecId === -1) return res.json({ date: date || null, data: [] });
     if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
 
-    const targetDate = date || new Date().toISOString().slice(0, 10);
+    const targetDate = date || tzToday(CHECKLIST_TIMEZONE);
+    const { start: rangeStart, end: rangeEnd } = tzDayRangeUtc(targetDate, CHECKLIST_TIMEZONE);
 
     const specialists = db.prepare(`
       SELECT id, name FROM outreach_specialists
@@ -860,29 +904,12 @@ router.get('/checklist', (req, res) => {
     const identifiedCond = specialist_id ? 'AND l.specialist_id = ?' : '';
     const identifiedParams = specialist_id ? [specialist_id] : [];
 
-    // "Identified" and "Connection Request Sent" are keyed off server-stamped
-    // UTC timestamps (created_at / connection_request_sent_at), unlike the
-    // follow-up stages below which store a plain specialist-picked local date.
-    // A naive date(...) = ? match on those UTC columns puts activity from the
-    // first few hours of the specialist's local day under the PREVIOUS day.
-    // When the client sends its actual local-day UTC instant bounds, use a
-    // range comparison instead so the count lines up with the specialist's
-    // calendar day, not UTC's.
-    const useRange = !!(range_start && range_end);
-
-    const identifiedRows = useRange
-      ? db.prepare(`
-          SELECT l.specialist_id, COUNT(*) as cnt
-          FROM linkedin_leads l
-          WHERE datetime(l.created_at) >= datetime(?) AND datetime(l.created_at) < datetime(?) AND l.deleted_at IS NULL ${identifiedCond}
-          GROUP BY l.specialist_id
-        `).all(range_start, range_end, ...identifiedParams)
-      : db.prepare(`
-          SELECT l.specialist_id, COUNT(*) as cnt
-          FROM linkedin_leads l
-          WHERE date(l.created_at) = ? AND l.deleted_at IS NULL ${identifiedCond}
-          GROUP BY l.specialist_id
-        `).all(targetDate, ...identifiedParams);
+    const identifiedRows = db.prepare(`
+      SELECT l.specialist_id, COUNT(*) as cnt
+      FROM linkedin_leads l
+      WHERE datetime(l.created_at) >= datetime(?) AND datetime(l.created_at) < datetime(?) AND l.deleted_at IS NULL ${identifiedCond}
+      GROUP BY l.specialist_id
+    `).all(rangeStart, rangeEnd, ...identifiedParams);
 
     const followupRows = db.prepare(`
       SELECT l.specialist_id, f.stage_key, COUNT(*) as cnt
@@ -892,19 +919,12 @@ router.get('/checklist', (req, res) => {
       GROUP BY l.specialist_id, f.stage_key
     `).all(targetDate, ...identifiedParams);
 
-    const connectionRequestRows = useRange
-      ? db.prepare(`
-          SELECT l.specialist_id, COUNT(*) as cnt
-          FROM linkedin_leads l
-          WHERE l.connection_request_sent_at IS NOT NULL AND datetime(l.connection_request_sent_at) >= datetime(?) AND datetime(l.connection_request_sent_at) < datetime(?) AND l.deleted_at IS NULL ${identifiedCond}
-          GROUP BY l.specialist_id
-        `).all(range_start, range_end, ...identifiedParams)
-      : db.prepare(`
-          SELECT l.specialist_id, COUNT(*) as cnt
-          FROM linkedin_leads l
-          WHERE l.connection_request_sent_at IS NOT NULL AND date(l.connection_request_sent_at) = ? AND l.deleted_at IS NULL ${identifiedCond}
-          GROUP BY l.specialist_id
-        `).all(targetDate, ...identifiedParams);
+    const connectionRequestRows = db.prepare(`
+      SELECT l.specialist_id, COUNT(*) as cnt
+      FROM linkedin_leads l
+      WHERE l.connection_request_sent_at IS NOT NULL AND datetime(l.connection_request_sent_at) >= datetime(?) AND datetime(l.connection_request_sent_at) < datetime(?) AND l.deleted_at IS NULL ${identifiedCond}
+      GROUP BY l.specialist_id
+    `).all(rangeStart, rangeEnd, ...identifiedParams);
 
     const identifiedMap = {};
     identifiedRows.forEach(r => { identifiedMap[r.specialist_id] = r.cnt; });

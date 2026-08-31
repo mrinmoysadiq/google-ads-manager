@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fmtDateLong, todayLocal } from '../../../../utils/dates'
+import { fmtDateLong, todayInTz } from '../../../../utils/dates'
 
 const LS_COLLAPSED_KEY = 'linkedin_checklist_collapsed'
 
@@ -39,8 +39,8 @@ export default function DailyChecklist({ date, rows, loading, onDateChange, onPr
     })
   }
 
-  const isToday = date === todayLocal()
-  const canGoNext = !!date && date < todayLocal()
+  const isToday = date === todayInTz()
+  const canGoNext = !!date && date < todayInTz()
 
   const navBtnStyle = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#2a2a2a', color: '#c5c1b9', fontSize: 14, lineHeight: 1, cursor: 'pointer' }
 
@@ -54,7 +54,12 @@ export default function DailyChecklist({ date, rows, loading, onDateChange, onPr
           <span style={{ fontSize: 13, fontWeight: 700, color: '#c5c1b9', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             📋 Daily Checklist
           </span>
-          {date && <span style={{ fontSize: 12, color: '#8a8680', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{fmtDateLong(date)}{isToday ? ' · Today' : ''}</span>}
+          {date && (
+            <span style={{ fontSize: 12, color: '#8a8680', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+              {fmtDateLong(date)}{isToday ? ' · Today' : ''}
+              <span title="All checklist counts are bucketed by US Eastern Time (EST/EDT), not your local timezone" style={{ color: '#555' }}> · ET</span>
+            </span>
+          )}
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
@@ -62,7 +67,7 @@ export default function DailyChecklist({ date, rows, loading, onDateChange, onPr
           <input
             type="date"
             value={date || ''}
-            max={todayLocal()}
+            max={todayInTz()}
             onChange={e => e.target.value && onDateChange(e.target.value)}
             style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#c5c1b9', padding: '4px 8px', fontSize: 12, colorScheme: 'dark' }}
           />
@@ -73,7 +78,7 @@ export default function DailyChecklist({ date, rows, loading, onDateChange, onPr
             style={{ ...navBtnStyle, opacity: canGoNext ? 1 : 0.35, cursor: canGoNext ? 'pointer' : 'not-allowed' }}
           >›</button>
           {!isToday && (
-            <button onClick={() => onDateChange(todayLocal())} style={{ background: 'none', border: '1px solid rgba(10,102,194,0.35)', color: '#0a66c2', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+            <button onClick={() => onDateChange(todayInTz())} style={{ background: 'none', border: '1px solid rgba(10,102,194,0.35)', color: '#0a66c2', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
               Today
             </button>
           )}

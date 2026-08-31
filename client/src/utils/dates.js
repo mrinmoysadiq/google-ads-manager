@@ -72,3 +72,12 @@ export function daysAgoLocal(n) {
   d.setDate(d.getDate() - n);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
+
+// Today's date "YYYY-MM-DD" in a fixed IANA timezone (defaults to
+// America/New_York, i.e. US Eastern — EST/EDT, DST-aware). Used where a
+// feature needs one consistent business "day" regardless of which timezone
+// each viewer's browser happens to be set to (e.g. the LinkedIn tracker's
+// daily checklist, whose backend buckets activity into the same timezone).
+export function todayInTz(timeZone = 'America/New_York') {
+  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date());
+}
