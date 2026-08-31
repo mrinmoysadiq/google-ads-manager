@@ -142,7 +142,18 @@ export default function LinkedInHome() {
   const fetchChecklist = useCallback(() => {
     if (!metaReady || tab !== 'pipeline' || viewMode !== 'kanban') return
     setChecklistLoading(true)
-    const params = { date: checklistDate }
+    // Send the UTC instant bounds of the selected LOCAL calendar day, not just
+    // the date string — the server stamps created_at/connection_request_sent_at
+    // in UTC, so a bare date match would miscount activity from the first few
+    // hours of the local day (misattributed to the previous UTC day).
+    const rangeStart = new Date(`${checklistDate}T00:00:00`)
+    const rangeEnd = new Date(rangeStart)
+    rangeEnd.setDate(rangeEnd.getDate() + 1)
+    const params = {
+      date: checklistDate,
+      range_start: rangeStart.toISOString(),
+      range_end: rangeEnd.toISOString(),
+    }
     if (selectedSpecialist) params.specialist_id = selectedSpecialist.id
     getLinkedInChecklist(params)
       .then(data => setChecklist(data))

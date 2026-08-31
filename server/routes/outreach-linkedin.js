@@ -842,7 +842,7 @@ router.delete('/dashboard/cards/:id', (req, res) => {
 
 router.get('/checklist', (req, res) => {
   try {
-    let { specialist_id, date } = req.query;
+    let { specialist_id, date, range_start, range_end } = req.query;
 
     const reqUser = getRequestUser(req);
     const enforcedSpecId = resolveSpecialistForUser(reqUser);
@@ -859,12 +859,30 @@ router.get('/checklist', (req, res) => {
 
     const identifiedCond = specialist_id ? 'AND l.specialist_id = ?' : '';
     const identifiedParams = specialist_id ? [specialist_id] : [];
-    const identifiedRows = db.prepare(`
-      SELECT l.specialist_id, COUNT(*) as cnt
-      FROM linkedin_leads l
-      WHERE date(l.created_at) = ? AND l.deleted_at IS NULL ${identifiedCond}
-      GROUP BY l.specialist_id
-    `).all(targetDate, ...identifiedParams);
+
+    // "Identified" and "Connection Request Sent" are keyed off server-stamped
+    // UTC timestamps (created_at / connection_request_sent_at), unlike the
+    // follow-up stages below which store a plain specialist-picked local date.
+    // A naive date(...) = ? match on those UTC columns puts activity from the
+    // first few hours of the specialist's local day under the PREVIOUS day.
+    // When the client sends its actual local-day UTC instant bounds, use a
+    // range comparison instead so the count lines up with the specialist's
+    // calendar day, not UTC's.
+    const useRange = !!(range_start && range_end);
+
+    const identifiedRows = useRange
+      ? db.prepare(`
+          SELECT l.specialist_id, COUNT(*) as cnt
+          FROM linkedin_leads l
+          WHERE datetime(l.created_at) >= datetime(?) AND datetime(l.created_at) < datetime(?) AND l.deleted_at IS NULL ${identifiedCond}
+          GROUP BY l.specialist_id
+        `).all(range_start, range_end, ...identifiedParams)
+      : db.prepare(`
+          SELECT l.specialist_id, COUNT(*) as cnt
+          FROM linkedin_leads l
+          WHERE date(l.created_at) = ? AND l.deleted_at IS NULL ${identifiedCond}
+          GROUP BY l.specialist_id
+        `).all(targetDate, ...identifiedParams);
 
     const followupRows = db.prepare(`
       SELECT l.specialist_id, f.stage_key, COUNT(*) as cnt
@@ -874,12 +892,19 @@ router.get('/checklist', (req, res) => {
       GROUP BY l.specialist_id, f.stage_key
     `).all(targetDate, ...identifiedParams);
 
-    const connectionRequestRows = db.prepare(`
-      SELECT l.specialist_id, COUNT(*) as cnt
-      FROM linkedin_leads l
-      WHERE l.connection_request_sent_at IS NOT NULL AND date(l.connection_request_sent_at) = ? AND l.deleted_at IS NULL ${identifiedCond}
-      GROUP BY l.specialist_id
-    `).all(targetDate, ...identifiedParams);
+    const connectionRequestRows = useRange
+      ? db.prepare(`
+          SELECT l.specialist_id, COUNT(*) as cnt
+          FROM linkedin_leads l
+          WHERE l.connection_request_sent_at IS NOT NULL AND datetime(l.connection_request_sent_at) >= datetime(?) AND datetime(l.connection_request_sent_at) < datetime(?) AND l.deleted_at IS NULL ${identifiedCond}
+          GROUP BY l.specialist_id
+        `).all(range_start, range_end, ...identifiedParams)
+      : db.prepare(`
+          SELECT l.specialist_id, COUNT(*) as cnt
+          FROM linkedin_leads l
+          WHERE l.connection_request_sent_at IS NOT NULL AND date(l.connection_request_sent_at) = ? AND l.deleted_at IS NULL ${identifiedCond}
+          GROUP BY l.specialist_id
+        `).all(targetDate, ...identifiedParams);
 
     const identifiedMap = {};
     identifiedRows.forEach(r => { identifiedMap[r.specialist_id] = r.cnt; });
