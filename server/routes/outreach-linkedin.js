@@ -919,10 +919,20 @@ router.get('/checklist', (req, res) => {
       GROUP BY l.specialist_id, f.stage_key
     `).all(targetDate, ...identifiedParams);
 
+    // "Connection Request Sent" is counted from linkedin_status_history (the
+    // pipeline-stage move a specialist makes on the Kanban board), NOT from
+    // the separate connection_status field/badge — that field tracks whether
+    // LinkedIn shows the connection as accepted yet, which a specialist may
+    // rarely touch, and it only started being timestamped when that badge
+    // shipped. Status history has been recorded since the tracker went live,
+    // so this also correctly recovers counts for any past day.
     const connectionRequestRows = db.prepare(`
-      SELECT l.specialist_id, COUNT(*) as cnt
-      FROM linkedin_leads l
-      WHERE l.connection_request_sent_at IS NOT NULL AND datetime(l.connection_request_sent_at) >= datetime(?) AND datetime(l.connection_request_sent_at) < datetime(?) AND l.deleted_at IS NULL ${identifiedCond}
+      SELECT l.specialist_id, COUNT(DISTINCT h.lead_id) as cnt
+      FROM linkedin_status_history h
+      JOIN linkedin_leads l ON l.id = h.lead_id
+      WHERE h.new_status = 'Connection Request Sent'
+        AND datetime(h.changed_at) >= datetime(?) AND datetime(h.changed_at) < datetime(?)
+        AND l.deleted_at IS NULL ${identifiedCond}
       GROUP BY l.specialist_id
     `).all(rangeStart, rangeEnd, ...identifiedParams);
 
