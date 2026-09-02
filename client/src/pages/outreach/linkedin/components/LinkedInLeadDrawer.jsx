@@ -751,8 +751,13 @@ export default function LinkedInLeadDrawer({
       ...(updated || {}),
       followups: [...(prev.followups || []).filter(f => f.stage_key !== stageKey), saved],
     }))
+    // Notify the parent even when the stage doesn't advance — the daily
+    // checklist reads linkedin_followups, not lead.status, so a re-log here
+    // (e.g. nudging an unresponsive lead again under an already-used stage
+    // slot) still needs to bump the dashboard or the checklist keeps
+    // showing a stale count until something else happens to refresh it.
+    if (onLeadUpdated) onLeadUpdated(updated || lead)
     if (updated) {
-      if (onLeadUpdated) onLeadUpdated(updated)
       toast.success(`${stageKey} logged — moved to ${stageKey}`)
       if (workingStage && stageKey !== workingStage) navigateTo(1)
     } else {

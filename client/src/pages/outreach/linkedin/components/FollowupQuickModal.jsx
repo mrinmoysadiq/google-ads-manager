@@ -6,14 +6,21 @@ const inputClass =
   'w-full rounded-lg px-3 py-2 text-sm focus:outline-none bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#0a66c2] transition-colors'
 
 // Called with a fresh key each open so form state always resets.
-// Defaults to today in the checklist's fixed business timezone (ET), not the
-// specialist's own browser clock — otherwise a specialist logging activity
-// in a timezone ahead of ET gets a pre-filled date the daily checklist
-// doesn't consider "today" yet, and the entry silently doesn't count.
+// Date always defaults to today in the checklist's fixed business timezone
+// (ET) — even when re-opening an already-logged stage. A lead can only hold
+// one row per stage (UNIQUE lead_id+stage_key), so re-opening "Follow-up 1"
+// isn't just for fixing a typo — in practice it's usually a specialist
+// nudging an unresponsive lead again days later. If the date stayed
+// pre-filled with the OLD stored date, saving without noticing/changing it
+// would silently re-file today's real touch under the original day instead,
+// which is why this stage in particular (the highest-traffic one, since
+// most leads sit here through several nudges before advancing or going
+// cold) kept showing checklist counts that didn't match what was actually
+// done that day.
 export default function FollowupQuickModal({ stageKey, initialData, onSave, onClose }) {
   const today = todayInTz()
   const [fields, setFields] = useState({
-    date: initialData?.date || today,
+    date: today,
     message_body: initialData?.message_body || '',
   })
   const [saving, setSaving] = useState(false)
