@@ -143,15 +143,24 @@ export default function LinkedInHome() {
   // not the browser's local clock, so two specialists in different timezones
   // (or a browser with a wrong system clock) see the same, correct counts —
   // we just tell it which calendar day to compute.
+  const checklistRequestId = useRef(0)
   const fetchChecklist = useCallback(() => {
     if (!metaReady || tab !== 'pipeline' || viewMode !== 'kanban') return
+    // Identifying a lead and then immediately moving it to Connection Request
+    // Sent each bump the dashboard, firing two overlapping requests. Without
+    // this guard, whichever response happens to arrive back LAST wins — even
+    // if it was actually issued FIRST — so a fast one-two action could leave
+    // the checklist showing the older, pre-update counts until something else
+    // triggered another refresh. Only the response for the most recently
+    // issued request is allowed to update state.
+    const requestId = ++checklistRequestId.current
     setChecklistLoading(true)
     const params = { date: checklistDate }
     if (selectedSpecialist) params.specialist_id = selectedSpecialist.id
     getLinkedInChecklist(params)
-      .then(data => setChecklist(data))
-      .catch(() => toast.error('Failed to load daily checklist'))
-      .finally(() => setChecklistLoading(false))
+      .then(data => { if (requestId === checklistRequestId.current) setChecklist(data) })
+      .catch(() => { if (requestId === checklistRequestId.current) toast.error('Failed to load daily checklist') })
+      .finally(() => { if (requestId === checklistRequestId.current) setChecklistLoading(false) })
   }, [selectedSpecialist, tab, viewMode, metaReady, checklistDate])
 
   useEffect(() => { fetchChecklist() }, [fetchChecklist])
