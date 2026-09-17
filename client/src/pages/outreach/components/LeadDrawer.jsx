@@ -238,7 +238,7 @@ function CustomFieldsSection({ fields, values, saved = {}, onSaveField, onManage
       )}
 
       {fields.map(f => (
-        <div key={f.id} style={f.field_type === 'link' || f.field_type === 'image' ? { gridColumn: '1 / -1' } : undefined}>
+        <div key={f.id} style={f.width === 'full' ? { gridColumn: '1 / -1' } : undefined}>
           {f.field_type !== 'link' && (
             <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {f.label} <SavedIndicator show={saved[`custom_${f.field_key}`]} />
@@ -263,17 +263,17 @@ function ManageCustomFieldsModal({ fields, onClose, onChanged }) {
   const [list, setList] = useState(fields)
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState(null)
-  const [form, setForm] = useState({ label: '', field_type: 'text', options: [] })
+  const [form, setForm] = useState({ label: '', field_type: 'text', options: [], width: 'half' })
   const [optionInput, setOptionInput] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { setList(fields) }, [fields])
 
-  const resetForm = () => { setForm({ label: '', field_type: 'text', options: [] }); setOptionInput(''); setAdding(false); setEditingId(null) }
+  const resetForm = () => { setForm({ label: '', field_type: 'text', options: [], width: 'half' }); setOptionInput(''); setAdding(false); setEditingId(null) }
 
   const startEdit = (f) => {
     setEditingId(f.id)
-    setForm({ label: f.label, field_type: f.field_type, options: f.options || [] })
+    setForm({ label: f.label, field_type: f.field_type, options: f.options || [], width: f.width || 'half' })
     setAdding(true)
   }
 
@@ -336,6 +336,9 @@ function ManageCustomFieldsModal({ fields, onClose, onChanged }) {
                   <span style={{ fontSize: '14px', flexShrink: 0 }}>{CUSTOM_FIELD_TYPES.find(t => t.value === f.field_type)?.icon}</span>
                   <span style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.label}</span>
                   <span style={{ color: '#8a8680', fontSize: '11px', flexShrink: 0 }}>{CUSTOM_FIELD_TYPES.find(t => t.value === f.field_type)?.label}</span>
+                  <span style={{ color: '#555', fontSize: '10px', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px', padding: '1px 5px' }}>
+                    {f.width === 'full' ? 'Full width' : 'Half width'}
+                  </span>
                 </div>
                 <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                   <button onClick={() => startEdit(f)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '4px 10px', color: '#c5c1b9', cursor: 'pointer', fontSize: '11px' }}>Edit</button>
@@ -368,6 +371,19 @@ function ManageCustomFieldsModal({ fields, onClose, onChanged }) {
                 style={{ cursor: 'pointer' }}
               >
                 {CUSTOM_FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.icon} {t.label}</option>)}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Field Width</label>
+              <select
+                value={form.width}
+                onChange={e => setForm(p => ({ ...p, width: e.target.value }))}
+                className={inputClass}
+                style={{ cursor: 'pointer' }}
+              >
+                <option value="half">Half width (side by side)</option>
+                <option value="full">Full width (own row)</option>
               </select>
             </div>
 
@@ -1273,13 +1289,15 @@ export default function LeadDrawer({
             <form onSubmit={handleCreate} style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-                {/* Custom Fields — top of the form */}
-                <CustomFieldsSection
-                  fields={customFields}
-                  values={createForm.custom_fields}
-                  onSaveField={saveCreateCustomField}
-                  onManageClick={() => setManageFieldsOpen(true)}
-                />
+                {/* Custom Fields — top of the form (own grid so half/full width settings apply) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <CustomFieldsSection
+                    fields={customFields}
+                    values={createForm.custom_fields}
+                    onSaveField={saveCreateCustomField}
+                    onManageClick={() => setManageFieldsOpen(true)}
+                  />
+                </div>
 
                 {/* Company Name */}
                 <div>

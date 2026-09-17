@@ -714,14 +714,14 @@ router.get('/custom-fields', (req, res) => {
 
 router.post('/custom-fields', (req, res) => {
   try {
-    const { label, field_type = 'text', options = [] } = req.body;
+    const { label, field_type = 'text', options = [], width = 'half' } = req.body;
     if (!label || !label.trim()) return res.status(400).json({ error: 'Label is required' });
     const field_key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     if (!field_key) return res.status(400).json({ error: 'Label must contain at least one letter or number' });
     const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM outreach_custom_fields').get();
     const sort_order = (maxOrder.m || 0) + 1;
-    const result = db.prepare('INSERT INTO outreach_custom_fields (label, field_key, field_type, sort_order, options) VALUES (?, ?, ?, ?, ?)')
-      .run(label.trim(), field_key, field_type, sort_order, JSON.stringify(options));
+    const result = db.prepare('INSERT INTO outreach_custom_fields (label, field_key, field_type, sort_order, options, width) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(label.trim(), field_key, field_type, sort_order, JSON.stringify(options), width === 'full' ? 'full' : 'half');
     res.status(201).json(parseCustomField(db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(result.lastInsertRowid)));
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE')) {
@@ -735,7 +735,7 @@ router.post('/custom-fields', (req, res) => {
 router.patch('/custom-fields/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { label, field_type, sort_order, active, options } = req.body;
+    const { label, field_type, sort_order, active, options, width } = req.body;
     const existing = db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Field not found' });
     db.prepare(`
@@ -744,7 +744,8 @@ router.patch('/custom-fields/:id', (req, res) => {
         field_type = COALESCE(?, field_type),
         sort_order = COALESCE(?, sort_order),
         active = COALESCE(?, active),
-        options = COALESCE(?, options)
+        options = COALESCE(?, options),
+        width = COALESCE(?, width)
       WHERE id = ?
     `).run(
       label || null,
@@ -752,6 +753,7 @@ router.patch('/custom-fields/:id', (req, res) => {
       sort_order !== undefined ? sort_order : null,
       active !== undefined ? active : null,
       options !== undefined ? JSON.stringify(options) : null,
+      width !== undefined ? (width === 'full' ? 'full' : 'half') : null,
       id,
     );
     res.json(parseCustomField(db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id)));

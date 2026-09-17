@@ -581,6 +581,7 @@ function initializeDatabase() {
     'ALTER TABLE outreach_leads ADD COLUMN fb_page_url TEXT',
     'ALTER TABLE outreach_leads ADD COLUMN ig_url TEXT',
     'ALTER TABLE outreach_leads ADD COLUMN linkedin_url TEXT',
+    "ALTER TABLE outreach_custom_fields ADD COLUMN width TEXT DEFAULT 'half'",
     'ALTER TABLE outreach_status_history ADD COLUMN performed_by TEXT',
     'ALTER TABLE fb_ad_accounts ADD COLUMN website TEXT',
     'ALTER TABLE fb_ad_accounts ADD COLUMN notes TEXT',
