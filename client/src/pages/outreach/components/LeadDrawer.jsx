@@ -212,26 +212,31 @@ function CustomFieldValueInput({ field, value, onCommit }) {
 
 // ─── Sub-component: CustomFieldsSection (render + save custom field values) ──
 
-function CustomFieldsSection({ fields, values, saved, onSaveField, onManageClick }) {
-  if (fields.length === 0) {
-    return (
-      <div style={{ gridColumn: '1 / -1' }}>
+function CustomFieldsSection({ fields, values, saved = {}, onSaveField, onManageClick }) {
+  return (
+    <>
+      <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: '11px', color: '#8a8680', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+          Custom Fields
+        </span>
         <button
           type="button"
           onClick={onManageClick}
           style={{
-            width: '100%', background: 'rgba(87,94,207,0.08)', border: '1px dashed rgba(87,94,207,0.35)',
-            borderRadius: '8px', padding: '12px', color: '#575ECF', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+            background: 'none', border: 'none', color: '#575ECF', cursor: 'pointer',
+            fontSize: '12px', fontWeight: 500, padding: '2px 0',
           }}
         >
-          + Add Custom Field
+          ⚙ Manage Fields
         </button>
       </div>
-    )
-  }
 
-  return (
-    <>
+      {fields.length === 0 && (
+        <div style={{ gridColumn: '1 / -1', color: '#555', fontSize: '12px', fontStyle: 'italic' }}>
+          No custom fields yet — click "Manage Fields" to add one (text, link, date, dropdown, or image).
+        </div>
+      )}
+
       {fields.map(f => (
         <div key={f.id} style={f.field_type === 'link' || f.field_type === 'image' ? { gridColumn: '1 / -1' } : undefined}>
           {f.field_type !== 'link' && (
@@ -246,18 +251,8 @@ function CustomFieldsSection({ fields, values, saved, onSaveField, onManageClick
           />
         </div>
       ))}
-      <div style={{ gridColumn: '1 / -1' }}>
-        <button
-          type="button"
-          onClick={onManageClick}
-          style={{
-            background: 'none', border: 'none', color: '#575ECF', cursor: 'pointer',
-            fontSize: '12px', fontWeight: 500, padding: '4px 0',
-          }}
-        >
-          ⚙ Manage Custom Fields
-        </button>
-      </div>
+
+      <div style={{ gridColumn: '1 / -1', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '4px', marginBottom: '4px' }} />
     </>
   )
 }
@@ -990,8 +985,13 @@ export default function LeadDrawer({
     next_followup: '',
     source_url: '',
     source_image: null,
+    custom_fields: {},
   })
   const [creating, setCreating] = useState(false)
+
+  const saveCreateCustomField = (fieldKey, value) => {
+    setCreateForm(v => ({ ...v, custom_fields: { ...v.custom_fields, [fieldKey]: value } }))
+  }
 
   // Fetch custom field definitions once
   useEffect(() => {
@@ -1151,6 +1151,7 @@ export default function LeadDrawer({
         next_followup_date: createForm.next_followup || undefined,
         source_url: createForm.source_url || undefined,
         source_image: createForm.source_image || undefined,
+        custom_fields: Object.keys(createForm.custom_fields).length > 0 ? createForm.custom_fields : undefined,
         performed_by: getUser()?.name || undefined,
       }
       const newLead = await createLead(payload)
@@ -1263,6 +1264,14 @@ export default function LeadDrawer({
             {/* Form */}
             <form onSubmit={handleCreate} style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                {/* Custom Fields — top of the form */}
+                <CustomFieldsSection
+                  fields={customFields}
+                  values={createForm.custom_fields}
+                  onSaveField={saveCreateCustomField}
+                  onManageClick={() => setManageFieldsOpen(true)}
+                />
 
                 {/* Company Name */}
                 <div>
@@ -1586,6 +1595,15 @@ export default function LeadDrawer({
                   <div style={{ display: activeTab === 'details' ? 'block' : 'none' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
+                      {/* Custom Fields — top of the tab */}
+                      <CustomFieldsSection
+                        fields={customFields}
+                        values={lead.custom_fields}
+                        saved={saved}
+                        onSaveField={saveCustomField}
+                        onManageClick={() => setManageFieldsOpen(true)}
+                      />
+
                       {/* Company Name — full width */}
                       <div style={{ gridColumn: '1 / -1' }}>
                         <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -1799,16 +1817,6 @@ export default function LeadDrawer({
                           }}
                         />
                       </div>
-
-                      {/* Custom Fields */}
-                      <div style={{ gridColumn: '1 / -1', paddingTop: '8px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.08)' }} />
-                      <CustomFieldsSection
-                        fields={customFields}
-                        values={lead.custom_fields}
-                        saved={saved}
-                        onSaveField={saveCustomField}
-                        onManageClick={() => setManageFieldsOpen(true)}
-                      />
 
                     </div>
                   </div>
