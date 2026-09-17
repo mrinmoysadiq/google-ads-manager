@@ -988,6 +988,7 @@ export default function LeadDrawer({
     custom_fields: {},
   })
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState(null)
 
   const saveCreateCustomField = (fieldKey, value) => {
     setCreateForm(v => ({ ...v, custom_fields: { ...v.custom_fields, [fieldKey]: value } }))
@@ -1037,8 +1038,12 @@ export default function LeadDrawer({
       setLead(prev => ({ ...prev, ...updated }))
       markSaved(field)
       if (onLeadUpdated) onLeadUpdated(updated)
-    } catch {
-      toast.error('Failed to save')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save', { duration: 6000 })
+      if (err.response?.status === 409) {
+        // Revert the input to the last saved value so the rejected duplicate doesn't linger on screen
+        getLead(leadId).then(setLead).catch(() => {})
+      }
     }
   }
 
@@ -1126,6 +1131,7 @@ export default function LeadDrawer({
 
   const handleCreate = async (e) => {
     e.preventDefault()
+    setCreateError(null)
     if (!createForm.company_name.trim()) {
       toast.error('Company name is required')
       return
@@ -1159,8 +1165,10 @@ export default function LeadDrawer({
       onSaved()
       setLeadId(newLead.id)
       setMode('edit')
-    } catch {
-      toast.error('Failed to create lead')
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Failed to create lead'
+      setCreateError(msg)
+      toast.error(msg, { duration: 6000 })
     } finally {
       setCreating(false)
     }
@@ -1343,7 +1351,7 @@ export default function LeadDrawer({
                     type="email"
                     className={inputClass}
                     value={createForm.email}
-                    onChange={e => setCreateForm(v => ({ ...v, email: e.target.value }))}
+                    onChange={e => { setCreateForm(v => ({ ...v, email: e.target.value })); setCreateError(null) }}
                     placeholder="contact@example.com"
                   />
                 </div>
@@ -1355,7 +1363,7 @@ export default function LeadDrawer({
                     type="text"
                     className={inputClass}
                     value={createForm.phone}
-                    onChange={e => setCreateForm(v => ({ ...v, phone: e.target.value }))}
+                    onChange={e => { setCreateForm(v => ({ ...v, phone: e.target.value })); setCreateError(null) }}
                     placeholder="+1 (555) 000-0000"
                   />
                 </div>
@@ -1367,7 +1375,7 @@ export default function LeadDrawer({
                     type="text"
                     className={inputClass}
                     value={createForm.fb_page_url}
-                    onChange={e => setCreateForm(v => ({ ...v, fb_page_url: e.target.value }))}
+                    onChange={e => { setCreateForm(v => ({ ...v, fb_page_url: e.target.value })); setCreateError(null) }}
                     placeholder="https://facebook.com/…"
                   />
                 </div>
@@ -1448,6 +1456,18 @@ export default function LeadDrawer({
                   />
                 </div>
               </div>
+
+              {/* Duplicate lead error — shown right above the submit button */}
+              {createError && (
+                <div style={{
+                  marginTop: '18px', display: 'flex', alignItems: 'flex-start', gap: '8px',
+                  backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.35)',
+                  borderRadius: '8px', padding: '12px 14px', color: '#ef4444', fontSize: '13px', fontWeight: 500,
+                }}>
+                  <span style={{ flexShrink: 0 }}>⚠</span>
+                  <span>{createError}</span>
+                </div>
+              )}
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: '10px', marginTop: '28px' }}>

@@ -54,6 +54,46 @@ const APPOINTMENT_OR_BEYOND = [
 
 const NOT_OVERDUE_STATUSES = ['Closed / Booked as Client', 'Disqualified / Dead', 'Meeting Done - Not Interested'];
 
+// ─── Duplicate lead detection (by email / phone / Facebook page) ────────────────
+
+function normalizeEmail(v) { return (v || '').trim().toLowerCase(); }
+function normalizePhone(v) {
+  const digits = (v || '').replace(/\D/g, '');
+  // Strip a leading US/Canada country code so "+1 (555) 123-4567" matches "555.123.4567"
+  return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+}
+function normalizeUrlForMatch(v) {
+  return (v || '').trim().toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/+$/, '');
+}
+
+// Returns { field, lead } for the first active lead that shares a normalized
+// email, phone, or Facebook page URL with the given values, or null.
+function findDuplicateLead({ email, phone, fb_page_url, excludeId }) {
+  const nEmail = normalizeEmail(email);
+  const nPhone = normalizePhone(phone);
+  const nFb = normalizeUrlForMatch(fb_page_url);
+  if (!nEmail && !nPhone && !nFb) return null;
+
+  const params = [];
+  let query = 'SELECT id, company_name, email, phone, fb_page_url FROM outreach_leads WHERE deleted_at IS NULL';
+  if (excludeId) { query += ' AND id != ?'; params.push(excludeId); }
+  const candidates = db.prepare(query).all(...params);
+
+  for (const lead of candidates) {
+    if (nEmail && normalizeEmail(lead.email) === nEmail) return { field: 'email address', lead };
+    if (nPhone && normalizePhone(lead.phone) === nPhone) return { field: 'phone number', lead };
+    if (nFb && normalizeUrlForMatch(lead.fb_page_url) === nFb) return { field: 'Facebook page', lead };
+  }
+  return null;
+}
+
+function duplicateErrorMessage(dup) {
+  return `Duplicate lead: this ${dup.field} is already used by "${dup.lead.company_name}" (lead #${dup.lead.id}).`;
+}
+
 // ─── SPECIALISTS ──────────────────────────────────────────────────────────────
 
 router.get('/specialists', (req, res) => {
@@ -315,6 +355,9 @@ router.post('/leads', (req, res) => {
     if (!specIds.length) return res.status(400).json({ error: 'At least one specialist is required' });
     if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'company_name is required' });
 
+    const dup = findDuplicateLead({ email, phone, fb_page_url });
+    if (dup) return res.status(409).json({ error: duplicateErrorMessage(dup) });
+
     const result = db.prepare(`
       INSERT INTO outreach_leads
         (specialist_id, company_name, contact_name, job_title, website, industry_id, location, next_followup_date, source_url, source_image, email, phone, fb_page_url, ig_url, linkedin_url)
@@ -449,6 +492,14 @@ router.patch('/leads/:id', (req, res) => {
     const followupValue = hasFollowupField ? (next_followup_date || next_followup || null) : undefined;
 
     const statusChanged = status && status !== existing.status;
+
+    const dup = findDuplicateLead({
+      email: email !== undefined ? email : existing.email,
+      phone: phone !== undefined ? phone : existing.phone,
+      fb_page_url: fb_page_url !== undefined ? fb_page_url : existing.fb_page_url,
+      excludeId: id,
+    });
+    if (dup) return res.status(409).json({ error: duplicateErrorMessage(dup) });
 
     db.prepare(`
       UPDATE outreach_leads SET
