@@ -302,7 +302,8 @@ router.post('/leads', (req, res) => {
       company_name, contact_name, job_title,
       website, industry_id, location,
       next_followup_date, next_followup,
-      source_url, source_image, email, phone, fb_page_url, ig_url,
+      source_url, source_image, email, phone, fb_page_url, ig_url, linkedin_url,
+      custom_fields,
       performed_by,
     } = req.body;
     const followupDate = next_followup_date || next_followup || null;
@@ -316,8 +317,8 @@ router.post('/leads', (req, res) => {
 
     const result = db.prepare(`
       INSERT INTO outreach_leads
-        (specialist_id, company_name, contact_name, job_title, website, industry_id, location, next_followup_date, source_url, source_image, email, phone, fb_page_url, ig_url)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (specialist_id, company_name, contact_name, job_title, website, industry_id, location, next_followup_date, source_url, source_image, email, phone, fb_page_url, ig_url, linkedin_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       specIds[0],
       company_name.trim(),
@@ -333,9 +334,15 @@ router.post('/leads', (req, res) => {
       phone || null,
       fb_page_url || null,
       ig_url || null,
+      linkedin_url || null,
     );
 
     const leadId = result.lastInsertRowid;
+
+    if (custom_fields && typeof custom_fields === 'object') {
+      const upsertVal = db.prepare('INSERT INTO outreach_lead_custom_values (lead_id, field_key, value) VALUES (?, ?, ?) ON CONFLICT(lead_id, field_key) DO UPDATE SET value = excluded.value');
+      Object.entries(custom_fields).forEach(([key, val]) => upsertVal.run(leadId, key, val ?? null));
+    }
 
     // Insert all specialists into junction table
     const insertSpec = db.prepare('INSERT OR IGNORE INTO outreach_lead_specialists (lead_id, specialist_id) VALUES (?, ?)');
@@ -411,7 +418,11 @@ router.get('/leads/:id', (req, res) => {
       WHERE ols.lead_id = ? ORDER BY s.name ASC
     `).all(id);
 
-    res.json({ ...lead, touchpoints, history, responses, specialists });
+    const customValues = db.prepare('SELECT field_key, value FROM outreach_lead_custom_values WHERE lead_id = ?').all(id);
+    const custom_fields = {};
+    customValues.forEach(v => { custom_fields[v.field_key] = v.value; });
+
+    res.json({ ...lead, touchpoints, history, responses, specialists, custom_fields });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch lead' });
@@ -428,7 +439,8 @@ router.patch('/leads/:id', (req, res) => {
       specialist_id, specialist_ids, company_name, contact_name, job_title,
       website, industry_id, location, status,
       next_followup_date, next_followup,
-      source_url, source_image, email, phone, fb_page_url, ig_url,
+      source_url, source_image, email, phone, fb_page_url, ig_url, linkedin_url,
+      custom_fields,
       performed_by,
     } = req.body;
 
@@ -455,6 +467,7 @@ router.patch('/leads/:id', (req, res) => {
         phone = ?,
         fb_page_url = ?,
         ig_url = ?,
+        linkedin_url = ?,
         status_updated_at = CASE WHEN ? IS NOT NULL AND ? != status THEN CURRENT_TIMESTAMP ELSE status_updated_at END
       WHERE id = ?
     `).run(
@@ -473,6 +486,7 @@ router.patch('/leads/:id', (req, res) => {
       phone !== undefined ? (phone || null) : existing.phone,
       fb_page_url !== undefined ? (fb_page_url || null) : existing.fb_page_url,
       ig_url !== undefined ? (ig_url || null) : existing.ig_url,
+      linkedin_url !== undefined ? (linkedin_url || null) : existing.linkedin_url,
       status || null, status || null,
       id,
     );
@@ -480,6 +494,11 @@ router.patch('/leads/:id', (req, res) => {
     if (statusChanged) {
       db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status, performed_by) VALUES (?, ?, ?, ?)')
         .run(id, existing.status, status, performed_by || null);
+    }
+
+    if (custom_fields && typeof custom_fields === 'object') {
+      const upsertVal = db.prepare('INSERT INTO outreach_lead_custom_values (lead_id, field_key, value) VALUES (?, ?, ?) ON CONFLICT(lead_id, field_key) DO UPDATE SET value = excluded.value');
+      Object.entries(custom_fields).forEach(([key, val]) => upsertVal.run(id, key, val ?? null));
     }
 
     // Update specialist assignments if specialist_ids array provided
@@ -508,6 +527,13 @@ router.patch('/leads/:id', (req, res) => {
     updated.specialists = updatedSpecialists;
     updated.specialist_ids = updatedSpecialists.map(s => s.id);
     updated.specialist_names = updatedSpecialists.map(s => s.name).join(', ');
+
+    if (custom_fields && typeof custom_fields === 'object') {
+      const customValues = db.prepare('SELECT field_key, value FROM outreach_lead_custom_values WHERE lead_id = ?').all(id);
+      updated.custom_fields = {};
+      customValues.forEach(v => { updated.custom_fields[v.field_key] = v.value; });
+    }
+
     res.json(updated);
   } catch (err) {
     console.error(err);
@@ -610,6 +636,91 @@ router.put('/leads/:leadId/touchpoints/:number', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to save touchpoint' });
+  }
+});
+
+// ─── LEAD CUSTOM FIELDS (CRUD) ────────────────────────────────────────────────
+
+function parseCustomField(f) {
+  if (!f) return f;
+  let options = [];
+  try { options = JSON.parse(f.options || '[]'); } catch { options = []; }
+  return { ...f, options };
+}
+
+router.get('/custom-fields', (req, res) => {
+  try {
+    const { all } = req.query;
+    const query = all === '1'
+      ? 'SELECT * FROM outreach_custom_fields ORDER BY sort_order ASC, id ASC'
+      : 'SELECT * FROM outreach_custom_fields WHERE active = 1 ORDER BY sort_order ASC, id ASC';
+    res.json(db.prepare(query).all().map(parseCustomField));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch custom fields' });
+  }
+});
+
+router.post('/custom-fields', (req, res) => {
+  try {
+    const { label, field_type = 'text', options = [] } = req.body;
+    if (!label || !label.trim()) return res.status(400).json({ error: 'Label is required' });
+    const field_key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    if (!field_key) return res.status(400).json({ error: 'Label must contain at least one letter or number' });
+    const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM outreach_custom_fields').get();
+    const sort_order = (maxOrder.m || 0) + 1;
+    const result = db.prepare('INSERT INTO outreach_custom_fields (label, field_key, field_type, sort_order, options) VALUES (?, ?, ?, ?, ?)')
+      .run(label.trim(), field_key, field_type, sort_order, JSON.stringify(options));
+    res.status(201).json(parseCustomField(db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(result.lastInsertRowid)));
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE')) {
+      return res.status(409).json({ error: 'A field with this name already exists' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create custom field' });
+  }
+});
+
+router.patch('/custom-fields/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { label, field_type, sort_order, active, options } = req.body;
+    const existing = db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ error: 'Field not found' });
+    db.prepare(`
+      UPDATE outreach_custom_fields SET
+        label = COALESCE(?, label),
+        field_type = COALESCE(?, field_type),
+        sort_order = COALESCE(?, sort_order),
+        active = COALESCE(?, active),
+        options = COALESCE(?, options)
+      WHERE id = ?
+    `).run(
+      label || null,
+      field_type || null,
+      sort_order !== undefined ? sort_order : null,
+      active !== undefined ? active : null,
+      options !== undefined ? JSON.stringify(options) : null,
+      id,
+    );
+    res.json(parseCustomField(db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id)));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update custom field' });
+  }
+});
+
+router.delete('/custom-fields/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ error: 'Field not found' });
+    db.prepare('DELETE FROM outreach_lead_custom_values WHERE field_key = ?').run(existing.field_key);
+    db.prepare('DELETE FROM outreach_custom_fields WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete custom field' });
   }
 });
 

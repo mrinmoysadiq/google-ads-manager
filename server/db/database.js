@@ -274,6 +274,25 @@ function initializeDatabase() {
       color TEXT DEFAULT '#575ECF',
       sort_order INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS outreach_custom_fields (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      field_key TEXT NOT NULL UNIQUE,
+      field_type TEXT NOT NULL DEFAULT 'text',
+      options TEXT DEFAULT '[]',
+      sort_order INTEGER DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_lead_custom_values (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL REFERENCES outreach_leads(id) ON DELETE CASCADE,
+      field_key TEXT NOT NULL,
+      value TEXT,
+      UNIQUE(lead_id, field_key)
+    );
   `);
 
   // Seed default industries if empty
@@ -437,6 +456,14 @@ function initializeDatabase() {
       is_read INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS linkedin_lead_magnets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL REFERENCES linkedin_leads(id) ON DELETE CASCADE,
+      image TEXT NOT NULL,
+      caption TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Seed default LinkedIn pipeline stages
@@ -553,6 +580,7 @@ function initializeDatabase() {
     'ALTER TABLE outreach_leads ADD COLUMN phone TEXT',
     'ALTER TABLE outreach_leads ADD COLUMN fb_page_url TEXT',
     'ALTER TABLE outreach_leads ADD COLUMN ig_url TEXT',
+    'ALTER TABLE outreach_leads ADD COLUMN linkedin_url TEXT',
     'ALTER TABLE outreach_status_history ADD COLUMN performed_by TEXT',
     'ALTER TABLE fb_ad_accounts ADD COLUMN website TEXT',
     'ALTER TABLE fb_ad_accounts ADD COLUMN notes TEXT',

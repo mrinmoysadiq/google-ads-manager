@@ -10,6 +10,10 @@ import {
   createLead,
   createLeadResponse,
   deleteLeadResponse,
+  getCustomFields,
+  createCustomField,
+  updateCustomField,
+  deleteCustomField,
 } from '../../../utils/outreachApi'
 import TouchpointQuickModal from './TouchpointQuickModal'
 import ResponseQuickModal from './ResponseQuickModal'
@@ -20,6 +24,21 @@ function getTouchpointNumber(status) {
   const m = status && status.match(/^Touchpoint (\d+)$/)
   return m ? parseInt(m[1]) : null
 }
+
+// Bare domains like "example.com" would otherwise resolve as a relative link
+function normalizeUrl(url) {
+  if (!url) return ''
+  const trimmed = url.trim()
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+}
+
+const CUSTOM_FIELD_TYPES = [
+  { value: 'text', label: 'Text', icon: 'T' },
+  { value: 'link', label: 'Link', icon: '🔗' },
+  { value: 'date', label: 'Date', icon: '📅' },
+  { value: 'dropdown', label: 'Dropdown', icon: '▾' },
+  { value: 'image', label: 'Image', icon: '🖼' },
+]
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -90,6 +109,312 @@ function SavedIndicator({ show }) {
     <span style={{ color: '#22c55e', fontSize: '11px', marginLeft: '6px', transition: 'opacity 0.3s' }}>
       Saved ✓
     </span>
+  )
+}
+
+// ─── Sub-component: LinkField (text input + open-in-new-tab icon) ───────────
+
+function LinkField({ label, value, savedFlag, placeholder, fullWidth = true, onCommit }) {
+  return (
+    <div style={fullWidth ? { gridColumn: '1 / -1' } : undefined}>
+      <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {label} <SavedIndicator show={savedFlag} />
+      </label>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <input
+          key={value}
+          type="text"
+          className={inputClass}
+          defaultValue={value || ''}
+          onBlur={e => onCommit(e.target.value)}
+          placeholder={placeholder}
+          style={{ flex: 1 }}
+        />
+        {value && (
+          <a
+            href={normalizeUrl(value)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Open ${label}`}
+            style={{ color: '#575ECF', fontSize: '16px', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}
+          >
+            ↗
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Sub-component: CustomFieldValueInput ────────────────────────────────────
+
+function CustomFieldValueInput({ field, value, onCommit }) {
+  const { field_type, label, options = [] } = field
+
+  if (field_type === 'date') {
+    return (
+      <input
+        key={value}
+        type="date"
+        className={inputClass}
+        defaultValue={value ? value.slice(0, 10) : ''}
+        onBlur={e => onCommit(e.target.value || null)}
+      />
+    )
+  }
+
+  if (field_type === 'dropdown') {
+    const opts = options.map(o => ({ value: o, label: o }))
+    return (
+      <Select
+        styles={selectStyles}
+        options={opts}
+        value={opts.find(o => o.value === value) || null}
+        onChange={opt => onCommit(opt?.value || null)}
+        placeholder="Select…"
+        isClearable
+      />
+    )
+  }
+
+  if (field_type === 'image') {
+    return (
+      <ImagePasteZone
+        value={value || null}
+        onChange={v => onCommit(v)}
+      />
+    )
+  }
+
+  if (field_type === 'link') {
+    return (
+      <LinkField
+        label={label}
+        value={value}
+        fullWidth={false}
+        placeholder="https://…"
+        onCommit={onCommit}
+      />
+    )
+  }
+
+  return (
+    <input
+      key={value}
+      type="text"
+      className={inputClass}
+      defaultValue={value || ''}
+      onBlur={e => onCommit(e.target.value || null)}
+      placeholder="—"
+    />
+  )
+}
+
+// ─── Sub-component: CustomFieldsSection (render + save custom field values) ──
+
+function CustomFieldsSection({ fields, values, saved, onSaveField, onManageClick }) {
+  if (fields.length === 0) {
+    return (
+      <div style={{ gridColumn: '1 / -1' }}>
+        <button
+          type="button"
+          onClick={onManageClick}
+          style={{
+            width: '100%', background: 'rgba(87,94,207,0.08)', border: '1px dashed rgba(87,94,207,0.35)',
+            borderRadius: '8px', padding: '12px', color: '#575ECF', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+          }}
+        >
+          + Add Custom Field
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {fields.map(f => (
+        <div key={f.id} style={f.field_type === 'link' || f.field_type === 'image' ? { gridColumn: '1 / -1' } : undefined}>
+          {f.field_type !== 'link' && (
+            <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {f.label} <SavedIndicator show={saved[`custom_${f.field_key}`]} />
+            </label>
+          )}
+          <CustomFieldValueInput
+            field={f}
+            value={values?.[f.field_key]}
+            onCommit={val => onSaveField(f.field_key, val)}
+          />
+        </div>
+      ))}
+      <div style={{ gridColumn: '1 / -1' }}>
+        <button
+          type="button"
+          onClick={onManageClick}
+          style={{
+            background: 'none', border: 'none', color: '#575ECF', cursor: 'pointer',
+            fontSize: '12px', fontWeight: 500, padding: '4px 0',
+          }}
+        >
+          ⚙ Manage Custom Fields
+        </button>
+      </div>
+    </>
+  )
+}
+
+// ─── Sub-component: ManageCustomFieldsModal ──────────────────────────────────
+
+function ManageCustomFieldsModal({ fields, onClose, onChanged }) {
+  const [list, setList] = useState(fields)
+  const [adding, setAdding] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [form, setForm] = useState({ label: '', field_type: 'text', options: [] })
+  const [optionInput, setOptionInput] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { setList(fields) }, [fields])
+
+  const resetForm = () => { setForm({ label: '', field_type: 'text', options: [] }); setOptionInput(''); setAdding(false); setEditingId(null) }
+
+  const startEdit = (f) => {
+    setEditingId(f.id)
+    setForm({ label: f.label, field_type: f.field_type, options: f.options || [] })
+    setAdding(true)
+  }
+
+  const addOption = () => {
+    if (!optionInput.trim()) return
+    if (!form.options.includes(optionInput.trim())) setForm(p => ({ ...p, options: [...p.options, optionInput.trim()] }))
+    setOptionInput('')
+  }
+
+  const save = async () => {
+    if (!form.label.trim()) return
+    setSaving(true)
+    try {
+      if (editingId) {
+        const updated = await updateCustomField(editingId, form)
+        setList(prev => prev.map(f => f.id === editingId ? updated : f))
+        toast.success('Field updated')
+      } else {
+        const created = await createCustomField(form)
+        setList(prev => [...prev, created])
+        toast.success('Field added')
+      }
+      onChanged()
+      resetForm()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save field')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const del = async (f) => {
+    if (!confirm(`Delete field "${f.label}"? All stored values will be lost.`)) return
+    try {
+      await deleteCustomField(f.id)
+      setList(prev => prev.filter(x => x.id !== f.id))
+      toast.success('Field deleted')
+      onChanged()
+    } catch {
+      toast.error('Failed to delete field')
+    }
+  }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.7)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '24px', width: '440px', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <h3 style={{ color: '#c5c1b9', fontSize: '16px', fontWeight: 600, margin: 0 }}>Manage Custom Fields</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8a8680', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+        </div>
+
+        {list.length > 0 && (
+          <div style={{ marginBottom: '16px' }}>
+            {list.map(f => (
+              <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#2a2a2a', borderRadius: '8px', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                  <span style={{ fontSize: '14px', flexShrink: 0 }}>{CUSTOM_FIELD_TYPES.find(t => t.value === f.field_type)?.icon}</span>
+                  <span style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.label}</span>
+                  <span style={{ color: '#8a8680', fontSize: '11px', flexShrink: 0 }}>{CUSTOM_FIELD_TYPES.find(t => t.value === f.field_type)?.label}</span>
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  <button onClick={() => startEdit(f)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '4px 10px', color: '#c5c1b9', cursor: 'pointer', fontSize: '11px' }}>Edit</button>
+                  <button onClick={() => del(f)} style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '6px', padding: '4px 10px', color: '#ef4444', cursor: 'pointer', fontSize: '11px' }}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!adding ? (
+          <button
+            onClick={() => setAdding(true)}
+            style={{ width: '100%', background: 'rgba(87,94,207,0.1)', border: '1px dashed rgba(87,94,207,0.4)', borderRadius: '8px', padding: '10px 0', color: '#575ECF', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}
+          >
+            + Add New Field
+          </button>
+        ) : (
+          <div style={{ background: '#1b1b1b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '16px' }}>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Field Label</label>
+              <input className={inputClass} value={form.label} onChange={e => setForm(p => ({ ...p, label: e.target.value }))} placeholder="e.g. LinkedIn Bio" />
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Field Type</label>
+              <select
+                value={form.field_type}
+                onChange={e => setForm(p => ({ ...p, field_type: e.target.value, options: [] }))}
+                className={inputClass}
+                style={{ cursor: 'pointer' }}
+              >
+                {CUSTOM_FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.icon} {t.label}</option>)}
+              </select>
+            </div>
+
+            {form.field_type === 'dropdown' && (
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Options</label>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <input
+                    className={inputClass}
+                    value={optionInput}
+                    onChange={e => setOptionInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addOption() } }}
+                    placeholder="Type an option and press Enter"
+                    style={{ flex: 1 }}
+                  />
+                  <button type="button" onClick={addOption} style={{ background: '#575ECF', border: 'none', borderRadius: '8px', padding: '0 16px', color: '#fff', cursor: 'pointer' }}>Add</button>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {form.options.map(o => (
+                    <span key={o} style={{ background: 'rgba(87,94,207,0.2)', color: '#a5aaee', borderRadius: '20px', padding: '3px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {o}
+                      <button type="button" onClick={() => setForm(p => ({ ...p, options: p.options.filter(x => x !== o) }))} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', padding: 0, fontSize: '14px', lineHeight: 1 }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '14px' }}>
+              <button onClick={resetForm} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '7px', padding: '7px 14px', color: '#8a8680', cursor: 'pointer', fontSize: '13px' }}>Cancel</button>
+              <button
+                onClick={save}
+                disabled={!form.label.trim() || saving}
+                style={{ background: '#575ECF', border: 'none', borderRadius: '7px', padding: '7px 18px', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: (!form.label.trim() || saving) ? 0.6 : 1, fontSize: '13px' }}
+              >
+                {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Field'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -646,6 +971,8 @@ export default function LeadDrawer({
   const [deleting, setDeleting] = useState(false)
   const [tpQuickModal, setTpQuickModal] = useState({ open: false, number: null, status: null, modalKey: 0 })
   const [responseModal, setResponseModal] = useState({ open: false, status: null, modalKey: 0 })
+  const [customFields, setCustomFields] = useState([])
+  const [manageFieldsOpen, setManageFieldsOpen] = useState(false)
 
   // Create form state
   const [createForm, setCreateForm] = useState({
@@ -653,18 +980,27 @@ export default function LeadDrawer({
     contact_name: '',
     job_title: '',
     website: '',
-    industry_id: '',
     location: '',
     email: '',
     phone: '',
     fb_page_url: '',
     ig_url: '',
+    linkedin_url: '',
     specialist_ids: defaultSpecialistId ? [defaultSpecialistId] : [],
     next_followup: '',
     source_url: '',
     source_image: null,
   })
   const [creating, setCreating] = useState(false)
+
+  // Fetch custom field definitions once
+  useEffect(() => {
+    getCustomFields().then(setCustomFields).catch(() => {})
+  }, [])
+
+  const refreshCustomFields = () => {
+    getCustomFields().then(setCustomFields).catch(() => {})
+  }
 
   // Animate in
   useEffect(() => {
@@ -700,6 +1036,21 @@ export default function LeadDrawer({
       const updated = await updateLead(leadId, { [field]: value })
       setLead(prev => ({ ...prev, ...updated }))
       markSaved(field)
+      if (onLeadUpdated) onLeadUpdated(updated)
+    } catch {
+      toast.error('Failed to save')
+    }
+  }
+
+  const saveCustomField = async (fieldKey, value) => {
+    try {
+      const updated = await updateLead(leadId, { custom_fields: { [fieldKey]: value } })
+      setLead(prev => ({
+        ...prev,
+        ...updated,
+        custom_fields: { ...prev.custom_fields, ...(updated.custom_fields || {}) },
+      }))
+      markSaved(`custom_${fieldKey}`)
       if (onLeadUpdated) onLeadUpdated(updated)
     } catch {
       toast.error('Failed to save')
@@ -790,12 +1141,12 @@ export default function LeadDrawer({
         contact_name: createForm.contact_name || undefined,
         job_title: createForm.job_title || undefined,
         website: createForm.website || undefined,
-        industry_id: createForm.industry_id || undefined,
         location: createForm.location || undefined,
         email: createForm.email || undefined,
         phone: createForm.phone || undefined,
         fb_page_url: createForm.fb_page_url || undefined,
         ig_url: createForm.ig_url || undefined,
+        linkedin_url: createForm.linkedin_url || undefined,
         specialist_ids: createForm.specialist_ids,
         next_followup_date: createForm.next_followup || undefined,
         source_url: createForm.source_url || undefined,
@@ -851,7 +1202,6 @@ export default function LeadDrawer({
 
   // ── Derived select options ────────────────────────────────────────────────────
 
-  const industryOptions = industries.map(i => ({ value: i.id, label: i.name }))
   const specialistOptions = specialists.map(s => ({ value: s.id, label: s.name }))
 
   // ── Touchpoints ───────────────────────────────────────────────────────────────
@@ -965,19 +1315,6 @@ export default function LeadDrawer({
                   />
                 </div>
 
-                {/* Industry */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Industry</label>
-                  <Select
-                    styles={selectStyles}
-                    options={industryOptions}
-                    value={industryOptions.find(o => o.value === createForm.industry_id) || null}
-                    onChange={opt => setCreateForm(v => ({ ...v, industry_id: opt?.value || '' }))}
-                    placeholder="Select industry…"
-                    isClearable
-                  />
-                </div>
-
                 {/* Location */}
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Location</label>
@@ -1035,6 +1372,18 @@ export default function LeadDrawer({
                     value={createForm.ig_url}
                     onChange={e => setCreateForm(v => ({ ...v, ig_url: e.target.value }))}
                     placeholder="https://instagram.com/…"
+                  />
+                </div>
+
+                {/* LinkedIn URL */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>LinkedIn Profile</label>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={createForm.linkedin_url}
+                    onChange={e => setCreateForm(v => ({ ...v, linkedin_url: e.target.value }))}
+                    placeholder="https://linkedin.com/in/…"
                   />
                 </div>
 
@@ -1286,60 +1635,16 @@ export default function LeadDrawer({
                       </div>
 
                       {/* Website - full width */}
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Website <SavedIndicator show={saved.website} />
-                        </label>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <input
-                            key={lead.website}
-                            type="text"
-                            className={inputClass}
-                            defaultValue={lead.website || ''}
-                            onBlur={e => {
-                              setLead(prev => ({ ...prev, website: e.target.value }))
-                              saveField('website', e.target.value)
-                            }}
-                            placeholder="example.com or https://example.com"
-                            style={{ flex: 1 }}
-                          />
-                          {lead.website && (
-                            <a
-                              href={lead.website}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Open website"
-                              style={{
-                                color: '#575ECF',
-                                fontSize: '16px',
-                                textDecoration: 'none',
-                                flexShrink: 0,
-                                lineHeight: 1,
-                              }}
-                            >
-                              ↗
-                            </a>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Industry */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Industry <SavedIndicator show={saved.industry_id} />
-                        </label>
-                        <Select
-                          styles={selectStyles}
-                          options={industryOptions}
-                          value={industryOptions.find(o => o.value === lead.industry_id) || null}
-                          onChange={opt => {
-                            setLead(prev => ({ ...prev, industry_id: opt?.value || null }))
-                            saveField('industry_id', opt?.value || null)
-                          }}
-                          placeholder="Select…"
-                          isClearable
-                        />
-                      </div>
+                      <LinkField
+                        label="Website"
+                        value={lead.website}
+                        savedFlag={saved.website}
+                        placeholder="example.com or https://example.com"
+                        onCommit={val => {
+                          setLead(prev => ({ ...prev, website: val }))
+                          saveField('website', val)
+                        }}
+                      />
 
                       {/* Location */}
                       <div>
@@ -1387,54 +1692,40 @@ export default function LeadDrawer({
                       </div>
 
                       {/* Facebook Page URL */}
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Facebook Page URL <SavedIndicator show={saved.fb_page_url} />
-                        </label>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <input
-                            key={lead.fb_page_url}
-                            type="text"
-                            className={inputClass}
-                            defaultValue={lead.fb_page_url || ''}
-                            onBlur={e => {
-                              setLead(prev => ({ ...prev, fb_page_url: e.target.value }))
-                              saveField('fb_page_url', e.target.value || null)
-                            }}
-                            placeholder="https://facebook.com/…"
-                            style={{ flex: 1 }}
-                          />
-                          {lead.fb_page_url && (
-                            <a href={lead.fb_page_url} target="_blank" rel="noopener noreferrer" title="Open Facebook page"
-                              style={{ color: '#575ECF', fontSize: '16px', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}>↗</a>
-                          )}
-                        </div>
-                      </div>
+                      <LinkField
+                        label="Facebook Page URL"
+                        value={lead.fb_page_url}
+                        savedFlag={saved.fb_page_url}
+                        placeholder="https://facebook.com/…"
+                        onCommit={val => {
+                          setLead(prev => ({ ...prev, fb_page_url: val }))
+                          saveField('fb_page_url', val || null)
+                        }}
+                      />
 
                       {/* Instagram URL */}
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Instagram URL <SavedIndicator show={saved.ig_url} />
-                        </label>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <input
-                            key={lead.ig_url}
-                            type="text"
-                            className={inputClass}
-                            defaultValue={lead.ig_url || ''}
-                            onBlur={e => {
-                              setLead(prev => ({ ...prev, ig_url: e.target.value }))
-                              saveField('ig_url', e.target.value || null)
-                            }}
-                            placeholder="https://instagram.com/…"
-                            style={{ flex: 1 }}
-                          />
-                          {lead.ig_url && (
-                            <a href={lead.ig_url} target="_blank" rel="noopener noreferrer" title="Open Instagram"
-                              style={{ color: '#575ECF', fontSize: '16px', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}>↗</a>
-                          )}
-                        </div>
-                      </div>
+                      <LinkField
+                        label="Instagram URL"
+                        value={lead.ig_url}
+                        savedFlag={saved.ig_url}
+                        placeholder="https://instagram.com/…"
+                        onCommit={val => {
+                          setLead(prev => ({ ...prev, ig_url: val }))
+                          saveField('ig_url', val || null)
+                        }}
+                      />
+
+                      {/* LinkedIn Profile URL */}
+                      <LinkField
+                        label="LinkedIn Profile"
+                        value={lead.linkedin_url}
+                        savedFlag={saved.linkedin_url}
+                        placeholder="https://linkedin.com/in/…"
+                        onCommit={val => {
+                          setLead(prev => ({ ...prev, linkedin_url: val }))
+                          saveField('linkedin_url', val || null)
+                        }}
+                      />
 
                       {/* Specialists — multi-select, full width */}
                       <div style={{ gridColumn: '1 / -1' }}>
@@ -1484,19 +1775,16 @@ export default function LeadDrawer({
                       </div>
 
                       {/* Source URL — full width */}
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Source URL <SavedIndicator show={saved.source_url} />
-                        </label>
-                        <input
-                          key={lead.source_url}
-                          type="text"
-                          className={inputClass}
-                          defaultValue={lead.source_url || ''}
-                          onBlur={e => saveField('source_url', e.target.value || null)}
-                          placeholder="LinkedIn profile, website, etc."
-                        />
-                      </div>
+                      <LinkField
+                        label="Source URL"
+                        value={lead.source_url}
+                        savedFlag={saved.source_url}
+                        placeholder="LinkedIn profile, website, etc."
+                        onCommit={val => {
+                          setLead(prev => ({ ...prev, source_url: val }))
+                          saveField('source_url', val || null)
+                        }}
+                      />
 
                       {/* Source Image — full width */}
                       <div style={{ gridColumn: '1 / -1' }}>
@@ -1511,6 +1799,16 @@ export default function LeadDrawer({
                           }}
                         />
                       </div>
+
+                      {/* Custom Fields */}
+                      <div style={{ gridColumn: '1 / -1', paddingTop: '8px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.08)' }} />
+                      <CustomFieldsSection
+                        fields={customFields}
+                        values={lead.custom_fields}
+                        saved={saved}
+                        onSaveField={saveCustomField}
+                        onManageClick={() => setManageFieldsOpen(true)}
+                      />
 
                     </div>
                   </div>
@@ -1755,6 +2053,15 @@ export default function LeadDrawer({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Manage Custom Fields Modal ────────────────────────────────────────── */}
+      {manageFieldsOpen && (
+        <ManageCustomFieldsModal
+          fields={customFields}
+          onClose={() => setManageFieldsOpen(false)}
+          onChanged={refreshCustomFields}
+        />
       )}
     </>
   )
