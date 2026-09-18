@@ -40,6 +40,15 @@ const CUSTOM_FIELD_TYPES = [
   { value: 'image', label: 'Image', icon: '🖼' },
 ]
 
+// Sizes a freshly-created field starts at before anyone drags it
+const CUSTOM_FIELD_DEFAULT_SIZE = {
+  text: { width: 260, height: 80 },
+  link: { width: 320, height: 42 },
+  date: { width: 200, height: 42 },
+  dropdown: { width: 260, height: 42 },
+  image: { width: 320, height: 220 },
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const STATUS_COLORS = {
@@ -159,6 +168,7 @@ function CustomFieldValueInput({ field, value, onCommit }) {
         className={inputClass}
         defaultValue={value ? value.slice(0, 10) : ''}
         onBlur={e => onCommit(e.target.value || null)}
+        style={{ height: '100%', boxSizing: 'border-box' }}
       />
     )
   }
@@ -167,7 +177,12 @@ function CustomFieldValueInput({ field, value, onCommit }) {
     const opts = options.map(o => ({ value: o, label: o }))
     return (
       <Select
-        styles={selectStyles}
+        styles={{
+          ...selectStyles,
+          control: (base, state) => ({ ...selectStyles.control(base, state), height: '100%', minHeight: '38px' }),
+          menuPortal: base => ({ ...base, zIndex: 9999 }),
+        }}
+        menuPortalTarget={typeof document !== 'undefined' ? document.body : undefined}
         options={opts}
         value={opts.find(o => o.value === value) || null}
         onChange={opt => onCommit(opt?.value || null)}
@@ -182,6 +197,7 @@ function CustomFieldValueInput({ field, value, onCommit }) {
       <ImagePasteZone
         value={value || null}
         onChange={v => onCommit(v)}
+        maxHeight={400}
       />
     )
   }
@@ -199,23 +215,63 @@ function CustomFieldValueInput({ field, value, onCommit }) {
   }
 
   return (
-    <input
+    <textarea
       key={value}
-      type="text"
       className={inputClass}
       defaultValue={value || ''}
       onBlur={e => onCommit(e.target.value || null)}
       placeholder="—"
+      style={{ width: '100%', height: '100%', boxSizing: 'border-box', resize: 'none' }}
     />
+  )
+}
+
+// ─── Sub-component: ResizableFieldBox (native drag-to-resize, corner handle) ─
+
+function ResizableFieldBox({ field, onResizeEnd, children }) {
+  const ref = useRef(null)
+  const defaults = CUSTOM_FIELD_DEFAULT_SIZE[field.field_type] || CUSTOM_FIELD_DEFAULT_SIZE.text
+  const width = field.width_px || defaults.width
+  const height = field.height_px || defaults.height
+
+  const handleMouseUp = () => {
+    const el = ref.current
+    if (!el) return
+    const w = Math.round(el.offsetWidth)
+    const h = Math.round(el.offsetHeight)
+    if (w !== width || h !== height) onResizeEnd(w, h)
+  }
+
+  return (
+    <div
+      ref={ref}
+      onMouseUp={handleMouseUp}
+      title="Drag the bottom-right corner to resize"
+      style={{
+        width: `${width}px`,
+        height: `${height}px`,
+        minWidth: '140px',
+        minHeight: '38px',
+        maxWidth: '100%',
+        resize: 'both',
+        overflow: 'auto',
+        boxSizing: 'border-box',
+        border: '1px dashed rgba(255,255,255,0.1)',
+        borderRadius: '8px',
+        padding: '3px',
+      }}
+    >
+      {children}
+    </div>
   )
 }
 
 // ─── Sub-component: CustomFieldsSection (render + save custom field values) ──
 
-function CustomFieldsSection({ fields, values, saved = {}, onSaveField, onManageClick }) {
+function CustomFieldsSection({ fields, values, saved = {}, onSaveField, onManageClick, onResizeField }) {
   return (
-    <>
-      <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div style={{ gridColumn: '1 / -1' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
         <span style={{ fontSize: '11px', color: '#8a8680', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
           Custom Fields
         </span>
@@ -232,28 +288,34 @@ function CustomFieldsSection({ fields, values, saved = {}, onSaveField, onManage
       </div>
 
       {fields.length === 0 && (
-        <div style={{ gridColumn: '1 / -1', color: '#555', fontSize: '12px', fontStyle: 'italic' }}>
+        <div style={{ color: '#555', fontSize: '12px', fontStyle: 'italic', marginBottom: '8px' }}>
           No custom fields yet — click "Manage Fields" to add one (text, link, date, dropdown, or image).
         </div>
       )}
 
-      {fields.map(f => (
-        <div key={f.id} style={f.width === 'full' ? { gridColumn: '1 / -1' } : undefined}>
-          {f.field_type !== 'link' && (
-            <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {f.label} <SavedIndicator show={saved[`custom_${f.field_key}`]} />
-            </label>
-          )}
-          <CustomFieldValueInput
-            field={f}
-            value={values?.[f.field_key]}
-            onCommit={val => onSaveField(f.field_key, val)}
-          />
+      {fields.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-start' }}>
+          {fields.map(f => (
+            <div key={f.id}>
+              {f.field_type !== 'link' && (
+                <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {f.label} <SavedIndicator show={saved[`custom_${f.field_key}`]} />
+                </label>
+              )}
+              <ResizableFieldBox field={f} onResizeEnd={(w, h) => onResizeField(f, w, h)}>
+                <CustomFieldValueInput
+                  field={f}
+                  value={values?.[f.field_key]}
+                  onCommit={val => onSaveField(f.field_key, val)}
+                />
+              </ResizableFieldBox>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
 
-      <div style={{ gridColumn: '1 / -1', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '4px', marginBottom: '4px' }} />
-    </>
+      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px', marginBottom: '4px' }} />
+    </div>
   )
 }
 
@@ -336,8 +398,8 @@ function ManageCustomFieldsModal({ fields, onClose, onChanged }) {
                   <span style={{ fontSize: '14px', flexShrink: 0 }}>{CUSTOM_FIELD_TYPES.find(t => t.value === f.field_type)?.icon}</span>
                   <span style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.label}</span>
                   <span style={{ color: '#8a8680', fontSize: '11px', flexShrink: 0 }}>{CUSTOM_FIELD_TYPES.find(t => t.value === f.field_type)?.label}</span>
-                  <span style={{ color: '#555', fontSize: '10px', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px', padding: '1px 5px' }}>
-                    {f.width === 'full' ? 'Full width' : 'Half width'}
+                  <span style={{ color: '#555', fontSize: '10px', flexShrink: 0 }}>
+                    {Math.round(f.width_px || CUSTOM_FIELD_DEFAULT_SIZE[f.field_type]?.width || 260)}×{Math.round(f.height_px || CUSTOM_FIELD_DEFAULT_SIZE[f.field_type]?.height || 42)}px
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
@@ -374,18 +436,9 @@ function ManageCustomFieldsModal({ fields, onClose, onChanged }) {
               </select>
             </div>
 
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Field Width</label>
-              <select
-                value={form.width}
-                onChange={e => setForm(p => ({ ...p, width: e.target.value }))}
-                className={inputClass}
-                style={{ cursor: 'pointer' }}
-              >
-                <option value="half">Half width (side by side)</option>
-                <option value="full">Full width (own row)</option>
-              </select>
-            </div>
+            <p style={{ color: '#555', fontSize: '11px', margin: '0 0 10px' }}>
+              💡 Size isn't fixed — once added, drag the bottom-right corner of the field to resize it.
+            </p>
 
             {form.field_type === 'dropdown' && (
               <div style={{ marginBottom: '10px' }}>
@@ -1019,6 +1072,13 @@ export default function LeadDrawer({
     getCustomFields().then(setCustomFields).catch(() => {})
   }
 
+  const resizeCustomField = (field, width_px, height_px) => {
+    setCustomFields(prev => prev.map(f => f.id === field.id ? { ...f, width_px, height_px } : f))
+    updateCustomField(field.id, { width_px, height_px }).catch(() => {
+      toast.error('Failed to save field size')
+    })
+  }
+
   // Animate in
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 10)
@@ -1289,15 +1349,14 @@ export default function LeadDrawer({
             <form onSubmit={handleCreate} style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-                {/* Custom Fields — top of the form (own grid so half/full width settings apply) */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <CustomFieldsSection
-                    fields={customFields}
-                    values={createForm.custom_fields}
-                    onSaveField={saveCreateCustomField}
-                    onManageClick={() => setManageFieldsOpen(true)}
-                  />
-                </div>
+                {/* Custom Fields — top of the form */}
+                <CustomFieldsSection
+                  fields={customFields}
+                  values={createForm.custom_fields}
+                  onSaveField={saveCreateCustomField}
+                  onManageClick={() => setManageFieldsOpen(true)}
+                  onResizeField={resizeCustomField}
+                />
 
                 {/* Company Name */}
                 <div>
@@ -1640,6 +1699,7 @@ export default function LeadDrawer({
                         saved={saved}
                         onSaveField={saveCustomField}
                         onManageClick={() => setManageFieldsOpen(true)}
+                        onResizeField={resizeCustomField}
                       />
 
                       {/* Company Name — full width */}

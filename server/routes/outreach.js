@@ -735,7 +735,7 @@ router.post('/custom-fields', (req, res) => {
 router.patch('/custom-fields/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { label, field_type, sort_order, active, options, width } = req.body;
+    const { label, field_type, sort_order, active, options, width, width_px, height_px } = req.body;
     const existing = db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Field not found' });
     db.prepare(`
@@ -745,7 +745,9 @@ router.patch('/custom-fields/:id', (req, res) => {
         sort_order = COALESCE(?, sort_order),
         active = COALESCE(?, active),
         options = COALESCE(?, options),
-        width = COALESCE(?, width)
+        width = COALESCE(?, width),
+        width_px = CASE WHEN ? THEN ? ELSE width_px END,
+        height_px = CASE WHEN ? THEN ? ELSE height_px END
       WHERE id = ?
     `).run(
       label || null,
@@ -754,6 +756,8 @@ router.patch('/custom-fields/:id', (req, res) => {
       active !== undefined ? active : null,
       options !== undefined ? JSON.stringify(options) : null,
       width !== undefined ? (width === 'full' ? 'full' : 'half') : null,
+      width_px !== undefined ? 1 : 0, width_px !== undefined ? Math.round(width_px) : null,
+      height_px !== undefined ? 1 : 0, height_px !== undefined ? Math.round(height_px) : null,
       id,
     );
     res.json(parseCustomField(db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id)));

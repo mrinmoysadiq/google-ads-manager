@@ -120,7 +120,7 @@ export function ImageLightbox({ src, onClose }) {
 // Click-to-focus, then Ctrl+V / ⌘V to paste a screenshot. Click the thumbnail to
 // view it fullscreen. `accentColor` lets each module match its own theme color.
 
-export default function ImagePasteZone({ value, onChange, accentColor = '#575ECF' }) {
+export default function ImagePasteZone({ value, onChange, accentColor = '#575ECF', maxHeight = 180 }) {
   const zoneRef = useRef(null)
   const [focused, setFocused] = useState(false)
   const [lightbox, setLightbox] = useState(false)
@@ -148,7 +148,7 @@ export default function ImagePasteZone({ value, onChange, accentColor = '#575ECF
             alt="Source screenshot"
             onClick={() => setLightbox(true)}
             style={{
-              maxWidth: '100%', maxHeight: '180px', borderRadius: '8px',
+              maxWidth: '100%', maxHeight: `${maxHeight}px`, borderRadius: '8px',
               border: '1px solid rgba(255,255,255,0.1)', display: 'block',
               cursor: 'zoom-in',
             }}
