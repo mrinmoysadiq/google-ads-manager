@@ -689,10 +689,9 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
   const [actLeads, setActLeads] = useState([]);
   const [actLeadsLoading, setActLeadsLoading] = useState(false);
 
-  // Collect all statuses for the formula builder (from by_status + known statuses)
-  const allStatuses = metrics?.by_status
-    ? [...new Set([...ALL_KNOWN_STATUSES, ...Object.keys(metrics.by_status)])]
-    : ALL_KNOWN_STATUSES;
+  // Statuses for the formula builder: the server's by_status already holds every
+  // configured stage plus any status a lead is actually in.
+  const allStatuses = metrics?.by_status ? Object.keys(metrics.by_status) : ALL_KNOWN_STATUSES;
 
   const fetchCards = useCallback(async () => {
     try {

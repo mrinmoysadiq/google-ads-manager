@@ -30,6 +30,14 @@ const STATUSES = [
   'Closed / Booked as Client', 'Disqualified / Dead',
 ];
 
+// Active pipeline stage names in board order (falls back to the seeded defaults).
+function getStageNames() {
+  try {
+    const rows = db.prepare('SELECT name FROM outreach_pipeline_stages WHERE active != 0 ORDER BY order_index ASC, id ASC').all();
+    return rows.length ? rows.map(r => r.name) : STATUSES;
+  } catch { return STATUSES; }
+}
+
 function getMaxTouchpoints() {
   try {
     const setting = db.prepare("SELECT value FROM outreach_settings WHERE key = 'max_touchpoints'").get();
@@ -962,7 +970,7 @@ router.get('/dashboard', (req, res) => {
 
     // by_status (current status distribution — includes ALL actual statuses, not just hardcoded list)
     const by_status = {};
-    STATUSES.forEach(s => { by_status[s] = 0; }); // initialize known statuses to 0
+    getStageNames().forEach(s => { by_status[s] = 0; }); // initialize configured stages to 0
     leads.forEach(l => {
       if (l.status) by_status[l.status] = (by_status[l.status] || 0) + 1;
     });
@@ -1328,11 +1336,11 @@ router.get('/export/pdf', (req, res) => {
     `).all(...params);
 
     const byStatus = {};
-    STATUSES.forEach(s => { byStatus[s] = 0; });
-    leads.forEach(l => { if (byStatus.hasOwnProperty(l.status)) byStatus[l.status]++; });
+    getStageNames().forEach(s => { byStatus[s] = 0; });
+    leads.forEach(l => { if (l.status) byStatus[l.status] = (byStatus[l.status] || 0) + 1; });
 
     const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const rows = STATUSES.map(s => `<tr><td>${s}</td><td style="text-align:right">${byStatus[s]}</td></tr>`).join('');
+    const rows = Object.keys(byStatus).map(s => `<tr><td>${s}</td><td style="text-align:right">${byStatus[s]}</td></tr>`).join('');
 
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Outreach Report</title>
     <style>
