@@ -883,6 +883,18 @@ function initializeDatabase() {
     console.log('Seeded super-admin: admin / admin123');
   }
 
+  // ── MCP connector tokens (Claude app → /mcp/:token) ──────────────────────
+  // Only a SHA-256 hash of each token is stored; the raw token is shown once.
+  db.prepare(`CREATE TABLE IF NOT EXISTS mcp_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES app_users(id),
+    token_hash TEXT NOT NULL UNIQUE,
+    label TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used_at DATETIME,
+    revoked_at DATETIME
+  )`).run();
+
   // ── Tracking Audit clients ───────────────────────────────────────────────
   db.prepare(`CREATE TABLE IF NOT EXISTS tracking_clients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
