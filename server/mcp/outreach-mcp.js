@@ -255,11 +255,13 @@ function buildServer(user) {
       message_body: z.string().optional(),
       loom_url: z.string().optional(),
       notes: z.string().optional(),
-      move_to_stage: z.boolean().optional().describe('Default true'),
+      move_to_stage: z.boolean().optional().describe('Default true. Set false if no "Touchpoint N" stage exists for this number.'),
       next_followup_date: z.string().optional().describe('YYYY-MM-DD'),
     },
   }, tool(async a => {
     await loadLead(a.lead_id);
+    // Resolve the stage first so a missing "Touchpoint N" stage fails before anything is saved.
+    const status = a.move_to_stage !== false ? await assertStage(`Touchpoint ${a.touchpoint_number}`) : null;
     const touchpoint = await api('PUT', `/leads/${a.lead_id}/touchpoints/${a.touchpoint_number}`, {
       body: {
         date: a.date || new Date().toISOString().slice(0, 10),
@@ -267,7 +269,7 @@ function buildServer(user) {
       },
     });
     const body = {};
-    if (a.move_to_stage !== false) body.status = await assertStage(`Touchpoint ${a.touchpoint_number}`);
+    if (status) body.status = status;
     if (a.next_followup_date !== undefined) body.next_followup_date = a.next_followup_date;
     let lead = null;
     if (Object.keys(body).length) lead = await api('PATCH', `/leads/${a.lead_id}`, { body: { ...body, performed_by } });
