@@ -13,6 +13,7 @@ const facebookRouter = require('./routes/facebook');
 const authRouter = require('./routes/auth');
 const appAdminRouter = require('./routes/app-admin');
 const trackingRouter = require('./routes/tracking');
+const { handleMcpRequest } = require('./mcp/outreach-mcp');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -41,6 +42,10 @@ app.use('/api/facebook', facebookRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/app-admin', appAdminRouter);
 app.use('/api/tracking', trackingRouter);
+
+// Remote MCP connector for the Claude app (Outreach CRM tools).
+// Auth is the per-user token in the URL — see server/mcp/.
+app.all('/mcp/:token', handleMcpRequest);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -306,6 +306,13 @@ GET    /settings
 PATCH  /settings
 ```
 
+### Claude Connector (remote MCP server)
+`server/mcp/outreach-mcp.js` exposes the Outreach CRM to the Claude app as tools (search/get/create/update/delete lead, move stage, log touchpoint/response, dashboard, overdue, activity).
+- Endpoint: `POST /mcp/:token` (mounted in `server/index.js`, outside `/api`). Stateless Streamable HTTP.
+- Tokens: users create/revoke them on the Profile page ("Connect to Claude"); stored hashed in `mcp_tokens`; API at `/api/auth/mcp-tokens`.
+- Every tool forwards to the existing `/api/outreach` REST routes with a short-lived JWT for the token's user, so validation, duplicate detection and non-admin scoping are reused — add new behaviour to the REST route, then expose it as a tool.
+- Status changes made via Claude are recorded with `performed_by = "<name> (via Claude)"`.
+
 ---
 
 ## 7. Database Schema Quick Reference

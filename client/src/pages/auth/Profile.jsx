@@ -58,6 +58,11 @@ export default function Profile() {
   const [showConfirmPw, setShowConfirmPw] = useState(false)
   const [savingPw, setSavingPw] = useState(false)
 
+  // Claude connector (MCP) tokens
+  const [mcpTokens, setMcpTokens] = useState([])
+  const [newConnectorUrl, setNewConnectorUrl] = useState(null)
+  const [creatingToken, setCreatingToken] = useState(false)
+
   // Determine role from best available source
   const role = user?.role || tokenPayload?.role || 'user'
   const isAdmin = role === 'admin'
@@ -81,7 +86,39 @@ export default function Profile() {
         setApiError(true)
       })
       .finally(() => setLoading(false))
+    api.get('/auth/mcp-tokens')
+      .then(({ data }) => { if (Array.isArray(data)) setMcpTokens(data) })
+      .catch(() => {})
   }, [])
+
+  async function createConnector() {
+    setCreatingToken(true)
+    try {
+      const { data } = await api.post('/auth/mcp-tokens', { label: 'Claude' })
+      setNewConnectorUrl(data.url)
+      setMcpTokens(t => [{ id: data.id, label: data.label, created_at: new Date().toISOString(), last_used_at: null }, ...t])
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to create connector link')
+    }
+    setCreatingToken(false)
+  }
+
+  async function revokeConnector(id) {
+    if (!window.confirm('Revoke this connector link? Claude will lose access until you add a new one.')) return
+    try {
+      await api.delete(`/auth/mcp-tokens/${id}`)
+      setMcpTokens(t => t.filter(x => x.id !== id))
+      toast.success('Connector link revoked')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to revoke')
+    }
+  }
+
+  function copyConnectorUrl() {
+    navigator.clipboard.writeText(newConnectorUrl)
+      .then(() => toast.success('Copied'))
+      .catch(() => toast.error('Copy failed — select and copy manually'))
+  }
 
   async function handleAvatarChange(e) {
     const file = e.target.files[0]
@@ -249,6 +286,48 @@ export default function Profile() {
             </form>
           </div>
         )}
+
+        {/* Connect to Claude (MCP connector) */}
+        <div className="bg-[#242424] border border-white/8 rounded-2xl p-6">
+          <h2 className="text-sm font-semibold text-[#c5c1b9] mb-1">Connect to Claude</h2>
+          <p className="text-xs text-[#8a8680] mb-4">
+            Let Claude search, add and update your Outreach CRM leads. Create a link, then in the Claude app go to
+            Settings → Connectors → Add custom connector and paste it as the URL. Claude acts as you and sees only the leads you can see.
+          </p>
+
+          {newConnectorUrl && (
+            <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: '#575ECF15', border: '1px solid #575ECF40' }}>
+              <p className="text-xs text-[#f59e0b] mb-2">Copy this now — it won't be shown again. Anyone with this link can edit your leads.</p>
+              <div className="flex gap-2">
+                <input className={inp + ' font-mono text-xs'} value={newConnectorUrl} readOnly onFocus={e => e.target.select()} />
+                <button onClick={copyConnectorUrl} className="px-4 rounded-xl text-sm font-semibold text-white flex-shrink-0" style={{ backgroundColor: '#575ECF' }}>Copy</button>
+              </div>
+            </div>
+          )}
+
+          {mcpTokens.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {mcpTokens.map(t => (
+                <div key={t.id} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ backgroundColor: '#2a2a2a' }}>
+                  <div className="min-w-0">
+                    <p className="text-sm text-[#c5c1b9] truncate">{t.label || 'Claude'}</p>
+                    <p className="text-xs text-[#8a8680]">
+                      Created {new Date(t.created_at.replace(' ', 'T') + (t.created_at.includes('Z') ? '' : 'Z')).toLocaleDateString()}
+                      {' · '}{t.last_used_at ? `last used ${new Date(t.last_used_at.replace(' ', 'T') + 'Z').toLocaleString()}` : 'never used'}
+                    </p>
+                  </div>
+                  <button onClick={() => revokeConnector(t.id)} className="text-xs text-[#8a8680] hover:text-[#ef4444] flex-shrink-0 ml-3">Revoke</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button onClick={createConnector} disabled={creatingToken}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
+            style={{ backgroundColor: creatingToken ? 'rgba(87,94,207,0.5)' : '#575ECF', cursor: creatingToken ? 'not-allowed' : 'pointer' }}>
+            {creatingToken ? 'Creating…' : 'Create connector link'}
+          </button>
+        </div>
 
         {/* Sign out */}
         <button onClick={logout}
