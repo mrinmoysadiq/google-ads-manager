@@ -677,6 +677,15 @@ function initializeDatabase() {
       SELECT id, specialist_id FROM outreach_leads WHERE specialist_id IS NOT NULL
     `);
   } catch (e) { /* ignore */ }
+  // Indexes for outreach lead list queries (specialist filter, sort, per-lead subqueries)
+  [
+    'CREATE INDEX IF NOT EXISTS idx_ols_specialist ON outreach_lead_specialists (specialist_id, lead_id)',
+    'CREATE INDEX IF NOT EXISTS idx_outreach_leads_status_updated ON outreach_leads (status_updated_at)',
+    'CREATE INDEX IF NOT EXISTS idx_outreach_leads_created ON outreach_leads (created_at)',
+    'CREATE INDEX IF NOT EXISTS idx_outreach_leads_status ON outreach_leads (status)',
+    'CREATE INDEX IF NOT EXISTS idx_outreach_status_history_lead ON outreach_status_history (lead_id)',
+    'CREATE INDEX IF NOT EXISTS idx_outreach_lead_responses_lead ON outreach_lead_responses (lead_id)',
+  ].forEach(sql => { try { db.exec(sql); } catch (e) { /* ignore */ } });
 
   // ── LMS (Learning Management System) tables ─────────────────────────────
   db.exec(`

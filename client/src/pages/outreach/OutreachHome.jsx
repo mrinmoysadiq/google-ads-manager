@@ -37,7 +37,12 @@ export default function OutreachHome() {
   const [viewMode, setViewMode] = useState(() => localStorage.getItem(LS_VIEW_KEY) || 'kanban')
   const [specialists, setSpecialists] = useState([])
   const [industries, setIndustries] = useState([])
-  const [selectedSpecialist, setSelectedSpecialist] = useState(null) // null = All
+  // Restore the saved specialist synchronously so the first lead fetch is already filtered
+  // (avoids flashing every specialist's leads while metadata loads)
+  const [selectedSpecialistId, setSelectedSpecialistId] = useState(() => {
+    const saved = parseInt(localStorage.getItem(LS_SPECIALIST_KEY), 10)
+    return Number.isFinite(saved) ? saved : null
+  }) // null = All
   const [leads, setLeads] = useState([])
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 })
   const [loading, setLoading] = useState(true)
@@ -61,6 +66,7 @@ export default function OutreachHome() {
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebounce(searchInput, 350)
   const searchRef = useRef(null)
+  const leadsRequestRef = useRef(0) // ignore responses from superseded lead requests
 
   // Sync debounced search → filters
   useEffect(() => {
@@ -91,22 +97,22 @@ export default function OutreachHome() {
           // Regular user: auto-select specialist matching their name, create if missing
           const match = activeSpecs.find(s => s.name.toLowerCase() === appUser.name.toLowerCase())
           if (match) {
-            setSelectedSpecialist(match)
+            setSelectedSpecialistId(match.id)
             localStorage.setItem(LS_SPECIALIST_KEY, String(match.id))
           } else {
             try {
               const created = await createSpecialist({ name: appUser.name })
               setSpecialists(prev => [...prev, created])
-              setSelectedSpecialist(created)
+              setSelectedSpecialistId(created.id)
               localStorage.setItem(LS_SPECIALIST_KEY, String(created.id))
             } catch { /* ignore */ }
           }
         } else {
-          // Admin: restore from localStorage or leave as "All"
+          // Admin: restored from localStorage at init; drop it if that specialist is gone/inactive
           const saved = localStorage.getItem(LS_SPECIALIST_KEY)
-          if (saved) {
-            const found = activeSpecs.find(s => String(s.id) === saved)
-            if (found) setSelectedSpecialist(found)
+          if (saved && !activeSpecs.some(s => String(s.id) === saved)) {
+            setSelectedSpecialistId(null)
+            localStorage.setItem(LS_SPECIALIST_KEY, '')
           }
         }
       })
@@ -116,6 +122,7 @@ export default function OutreachHome() {
   // Fetch leads — Kanban loads up to 500 (no images in list response, so this is fast);
   // Table stays at 25/page with server-side pagination.
   const fetchLeads = useCallback(() => {
+    const requestId = ++leadsRequestRef.current
     setLoading(true)
     const isKanban = viewMode === 'kanban'
     const params = {
@@ -124,7 +131,7 @@ export default function OutreachHome() {
       sort_by: filters.sort_by,
       sort_dir: filters.sort_dir,
     }
-    if (selectedSpecialist) params.specialist_id = selectedSpecialist.id
+    if (selectedSpecialistId) params.specialist_id = selectedSpecialistId
     if (filters.status) params.status = filters.status
     if (filters.industry_id) params.industry_id = filters.industry_id
     if (filters.search) params.search = filters.search
@@ -134,6 +141,7 @@ export default function OutreachHome() {
 
     getLeads(params)
       .then(data => {
+        if (requestId !== leadsRequestRef.current) return
         setLeads(data.data)
         setPagination({ page: data.page, total: data.total, totalPages: data.totalPages })
         // Count overdue in current result set for badge
@@ -141,15 +149,15 @@ export default function OutreachHome() {
         const overdue = data.data.filter(l => l.next_followup_date && l.next_followup_date < today && !NOT_OVERDUE_STATUSES.includes(l.status)).length
         setOverdueCount(overdue)
       })
-      .catch(() => toast.error('Failed to load leads'))
-      .finally(() => setLoading(false))
-  }, [selectedSpecialist, filters, page, viewMode])
+      .catch(() => { if (requestId === leadsRequestRef.current) toast.error('Failed to load leads') })
+      .finally(() => { if (requestId === leadsRequestRef.current) setLoading(false) })
+  }, [selectedSpecialistId, filters, page, viewMode])
 
   useEffect(() => { fetchLeads() }, [fetchLeads])
 
   const handleSpecialistChange = (opt) => {
     const spec = opt?.value ? specialists.find(s => s.id === opt.value) : null
-    setSelectedSpecialist(spec)
+    setSelectedSpecialistId(spec ? spec.id : null)
     localStorage.setItem(LS_SPECIALIST_KEY, spec ? String(spec.id) : '')
     setPage(1)
   }
@@ -230,7 +238,7 @@ export default function OutreachHome() {
   const handleExportCsv = async () => {
     try {
       const params = {}
-      if (selectedSpecialist) params.specialist_id = selectedSpecialist.id
+      if (selectedSpecialistId) params.specialist_id = selectedSpecialistId
       if (filters.status) params.status = filters.status
       if (filters.date_from) params.date_from = filters.date_from
       if (filters.date_to) params.date_to = filters.date_to
@@ -252,7 +260,8 @@ export default function OutreachHome() {
     ...specialists.map(s => ({ value: s.id, label: s.name })),
   ]
 
-  const showSpecialistColumn = !selectedSpecialist
+  const selectedSpecialist = specialists.find(s => s.id === selectedSpecialistId) || null
+  const showSpecialistColumn = !selectedSpecialistId
 
   return (
     <div className="min-h-screen bg-[#1b1b1b]">
@@ -286,7 +295,7 @@ export default function OutreachHome() {
             <div style={{ minWidth: 180 }}>
               <Select
                 options={specialistOptions}
-                value={selectedSpecialist ? { value: selectedSpecialist.id, label: selectedSpecialist.name } : specialistOptions[0]}
+                value={selectedSpecialistId ? { value: selectedSpecialistId, label: selectedSpecialist?.name || 'Loading…' } : specialistOptions[0]}
                 onChange={handleSpecialistChange}
                 styles={selectStyles}
                 isSearchable={false}
@@ -465,7 +474,7 @@ export default function OutreachHome() {
 
         {tab === 'dashboard' && (
           <Dashboard
-            specialistId={selectedSpecialist ? selectedSpecialist.id : ''}
+            specialistId={selectedSpecialistId || ''}
             specialists={specialists}
             onLeadClick={openDrawer}
             refreshKey={dashboardRefreshKey}
@@ -478,7 +487,7 @@ export default function OutreachHome() {
         <LeadDrawer
           key={drawerKey}
           leadId={drawerLeadId}
-          defaultSpecialistId={selectedSpecialist?.id || null}
+          defaultSpecialistId={selectedSpecialistId || null}
           onClose={() => setDrawerLeadId(undefined)}
           onSaved={handleLeadSaved}
           onDeleted={handleLeadDeleted}
