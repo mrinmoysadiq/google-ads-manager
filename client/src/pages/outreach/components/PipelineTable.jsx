@@ -1,34 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Select from 'react-select';
 import { fmtDate as formatDate } from '../../../utils/dates';
+import { stageColor, isClosedStatus } from '../stageTypes';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const STATUS_COLORS = {
-  'New Lead':                        { bg: 'rgba(87,94,207,0.15)',  color: '#575ECF' },
-  'Touchpoint 1':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
-  'Touchpoint 2':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
-  'Touchpoint 3':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
-  'Touchpoint 4':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
-  'Touchpoint 5':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
-  'Contacted':                       { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' },
-  'Responded':                       { bg: 'rgba(59,130,246,0.15)',  color: '#3b82f6' },
-  'Interested':                      { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7' },
-  'Not Interested':                  { bg: 'rgba(107,114,128,0.15)', color: '#6b7280' },
-  'Not interested':                  { bg: 'rgba(107,114,128,0.15)', color: '#6b7280' },
-  'Appointment Booked':              { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b' },
-  'No Show':                         { bg: 'rgba(239,68,68,0.15)',   color: '#ef4444' },
-  'Meeting Done - Not Interested':   { bg: 'rgba(107,114,128,0.15)', color: '#6b7280' },
-  'Started Trial':                   { bg: 'rgba(6,182,212,0.15)',   color: '#06b6d4' },
-  'Closed / Booked as Client':       { bg: 'rgba(34,197,94,0.15)',   color: '#22c55e' },
-  'Disqualified / Dead':             { bg: 'rgba(55,65,81,0.2)',     color: '#6b7280' },
-};
-
-// Fallback for any custom/unknown stage
-const DEFAULT_STATUS_COLOR = { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' };
-function getStatusColor(status) {
-  return STATUS_COLORS[status] || DEFAULT_STATUS_COLOR;
-}
 
 // Complete default stage list — used when stages prop is not yet loaded
 const DEFAULT_STAGES = [
@@ -50,16 +25,10 @@ const CHANNEL_COLORS = {
   'Other':        '#6b7280',
 };
 
-const CLOSED_STATUSES = new Set([
-  'Closed / Booked as Client',
-  'Disqualified / Dead',
-  'Meeting Done - Not Interested',
-]);
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getFollowupColor(dateStr, status) {
-  if (!dateStr || CLOSED_STATUSES.has(status)) return null;
+function getFollowupColor(dateStr, status, stages) {
+  if (!dateStr || isClosedStatus(stages, status)) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const d = new Date(dateStr);
@@ -148,7 +117,7 @@ function ChannelPills({ channels }) {
   );
 }
 
-function StatusDropdown({ currentStatus, leadId, stageNames, onStatusChange, onClose }) {
+function StatusDropdown({ currentStatus, leadId, stageNames, stages, onStatusChange, onClose }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -179,7 +148,7 @@ function StatusDropdown({ currentStatus, leadId, stageNames, onStatusChange, onC
       onClick={(e) => e.stopPropagation()}
     >
       {stageNames.map((s) => {
-        const { color } = getStatusColor(s);
+        const { color } = stageColor(stages, s);
         const isActive = s === currentStatus;
         return (
           <div
@@ -204,9 +173,9 @@ function StatusDropdown({ currentStatus, leadId, stageNames, onStatusChange, onC
   );
 }
 
-function StatusBadge({ lead, stageNames, onStatusChange }) {
+function StatusBadge({ lead, stageNames, stages, onStatusChange }) {
   const [open, setOpen] = useState(false);
-  const { bg, color } = getStatusColor(lead.status);
+  const { bg, color } = stageColor(stages, lead.status);
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -230,6 +199,7 @@ function StatusBadge({ lead, stageNames, onStatusChange }) {
           currentStatus={lead.status}
           leadId={lead.id}
           stageNames={stageNames}
+          stages={stages}
           onStatusChange={onStatusChange}
           onClose={() => setOpen(false)}
         />
@@ -544,7 +514,7 @@ export default function PipelineTable({
               </tr>
             ) : (
               leads.map((lead, idx) => {
-                const followupColor = getFollowupColor(lead.next_followup_date, lead.status);
+                const followupColor = getFollowupColor(lead.next_followup_date, lead.status, stages);
                 const rowNum = ((pagination.page || 1) - 1) * 25 + idx + 1;
 
                 return (
@@ -635,7 +605,7 @@ export default function PipelineTable({
 
                     {/* Status */}
                     <td style={{ ...tdStyle }} onClick={(e) => e.stopPropagation()}>
-                      <StatusBadge lead={lead} stageNames={stageNames} onStatusChange={onStatusChange} />
+                      <StatusBadge lead={lead} stageNames={stageNames} stages={stages} onStatusChange={onStatusChange} />
                     </td>
 
                     {/* Channels */}

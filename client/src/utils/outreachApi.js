@@ -87,6 +87,10 @@ export const updateSettings = (data) => api.patch('/outreach/settings', data).th
 export const createLeadResponse = (leadId, data) => api.post(`/outreach/leads/${leadId}/responses`, data).then(r => r.data)
 export const deleteLeadResponse = (leadId, id) => api.delete(`/outreach/leads/${leadId}/responses/${id}`).then(r => r.data)
 
+// Lead fields (built-in + custom, in form order)
+export const getFields = (params) => api.get('/outreach/fields', { params }).then(r => r.data)
+export const reorderFields = (ids) => api.patch('/outreach/fields/order', { ids }).then(r => r.data)
+
 // Lead Custom Fields
 export const getCustomFields = (params) => api.get('/outreach/custom-fields', { params }).then(r => r.data)
 export const createCustomField = (data) => api.post('/outreach/custom-fields', data).then(r => r.data)

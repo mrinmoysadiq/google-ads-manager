@@ -50,14 +50,6 @@ function checkLeadAccess(req, res, leadId) {
   return true;
 }
 
-const STATUSES = [
-  'New Lead',
-  'Touchpoint 1', 'Touchpoint 2', 'Touchpoint 3', 'Touchpoint 4', 'Touchpoint 5',
-  'Responded', 'Interested', 'Not Interested', 'Appointment Booked',
-  'No Show', 'Meeting Done - Not Interested', 'Started Trial',
-  'Closed / Booked as Client', 'Disqualified / Dead',
-];
-
 function getMaxTouchpoints() {
   try {
     const setting = db.prepare("SELECT value FROM outreach_settings WHERE key = 'max_touchpoints'").get();
@@ -65,25 +57,48 @@ function getMaxTouchpoints() {
   } catch { return 5; }
 }
 
-const RESPONDED_OR_BEYOND = [
-  'Responded', 'Interested', 'Appointment Booked', 'No Show',
-  'Meeting Done - Not Interested', 'Started Trial', 'Closed / Booked as Client',
+// ─── Stage types ──────────────────────────────────────────────────────────────
+// Stages can be renamed freely; what a stage *means* — for metrics, overdue rules and
+// which logger opens when a lead moves there — comes from its type.
+
+const STAGE_TYPES = [
+  'new', 'touchpoint', 'in_progress', 'interested', 'not_interested',
+  'booked', 'no_show', 'meeting_lost', 'trial', 'won', 'dead',
 ];
 
-const INTERESTED_OR_BEYOND = [
-  'Interested', 'Appointment Booked', 'No Show',
-  'Meeting Done - Not Interested', 'Started Trial', 'Closed / Booked as Client',
-];
+const TYPE_GROUPS = {
+  responded:  ['interested', 'not_interested', 'booked', 'no_show', 'meeting_lost', 'trial', 'won'],
+  interested: ['interested', 'booked', 'no_show', 'meeting_lost', 'trial', 'won'],
+  booked:     ['booked', 'no_show', 'meeting_lost', 'trial', 'won'],
+  closed:     ['won', 'dead', 'meeting_lost', 'not_interested'], // finished — never overdue
+};
 
-const APPOINTMENT_OR_BEYOND = [
-  'Appointment Booked', 'No Show', 'Meeting Done - Not Interested',
-  'Started Trial', 'Closed / Booked as Client',
-];
+function getStages() {
+  return db.prepare('SELECT * FROM outreach_pipeline_stages ORDER BY order_index ASC, id ASC').all();
+}
 
-const NOT_OVERDUE_STATUSES = [
-  'Closed / Booked as Client', 'Disqualified / Dead', 'Meeting Done - Not Interested',
-  'Not Interested', 'Not interested',
-];
+function stageNamesOfTypes(types, stages = getStages()) {
+  return stages.filter(s => types.includes(s.stage_type)).map(s => s.name);
+}
+
+// SQL fragment excluding leads in finished stages (safe when there are none)
+function notClosedClause(column) {
+  const closed = stageNamesOfTypes(TYPE_GROUPS.closed);
+  if (!closed.length) return { sql: '1 = 1', params: [] };
+  return { sql: `${column} NOT IN (${closed.map(() => '?').join(',')})`, params: closed };
+}
+
+// New leads start in the first active "new" stage (or the first active stage)
+function defaultStageName() {
+  const active = getStages().filter(s => s.active);
+  return (active.find(s => s.stage_type === 'new') || active[0] || { name: 'New Lead' }).name;
+}
+
+// Touchpoint stages are numbered 1..n in pipeline order; inactive ones keep their number
+function withTouchpointNumbers(stages) {
+  let n = 0;
+  return stages.map(s => ({ ...s, touchpoint_number: s.stage_type === 'touchpoint' ? ++n : null }));
+}
 
 // ─── Duplicate lead detection (by email / phone / Facebook page) ────────────────
 
@@ -299,9 +314,9 @@ router.get('/leads', (req, res) => {
     }
     if (followup_overdue === 'true') {
       const today = new Date().toISOString().slice(0, 10);
-      const notOverdueList = NOT_OVERDUE_STATUSES.map(() => '?').join(',');
-      conditions.push(`(l.next_followup_date < ? AND l.status NOT IN (${notOverdueList}))`);
-      params.push(today, ...NOT_OVERDUE_STATUSES);
+      const notClosed = notClosedClause('l.status');
+      conditions.push(`(l.next_followup_date < ? AND ${notClosed.sql})`);
+      params.push(today, ...notClosed.params);
     }
     if (date_from) { conditions.push("date(l.created_at) >= ?"); params.push(date_from); }
     if (date_to) { conditions.push("date(l.created_at) <= ?"); params.push(date_to); }
@@ -402,15 +417,18 @@ router.post('/leads', (req, res) => {
 
     if (!specIds.length) return res.status(400).json({ error: 'At least one specialist is required' });
     if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'company_name is required' });
+    const missing = missingRequiredField(req.body, false);
+    if (missing) return res.status(400).json({ error: missing });
 
     const dup = findDuplicateLead({ email, phone, fb_page_url });
     if (dup) return res.status(409).json({ error: duplicateErrorMessage(dup) });
 
+    const initialStage = defaultStageName();
     const leadId = db.transaction(() => {
       const result = db.prepare(`
         INSERT INTO outreach_leads
           (specialist_id, company_name, contact_name, job_title, website, industry_id, location, next_followup_date, source_url, source_image, email, phone, fb_page_url, ig_url, linkedin_url, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'New Lead')
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         specIds[0],
         company_name.trim(),
@@ -427,13 +445,14 @@ router.post('/leads', (req, res) => {
         fb_page_url || null,
         ig_url || null,
         linkedin_url || null,
+        initialStage,
       );
 
       const id = result.lastInsertRowid;
 
       if (custom_fields && typeof custom_fields === 'object') {
         const upsertVal = db.prepare('INSERT INTO outreach_lead_custom_values (lead_id, field_key, value) VALUES (?, ?, ?) ON CONFLICT(lead_id, field_key) DO UPDATE SET value = excluded.value');
-        Object.entries(custom_fields).forEach(([key, val]) => upsertVal.run(id, key, val ?? null));
+        Object.entries(custom_fields).forEach(([key, val]) => upsertVal.run(id, key, serializeCustomValue(val)));
       }
 
       // Insert all specialists into junction table
@@ -442,7 +461,7 @@ router.post('/leads', (req, res) => {
 
       // Seed status history entry
       db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status, performed_by) VALUES (?, ?, ?, ?)')
-        .run(id, null, 'New Lead', performed_by || null);
+        .run(id, null, initialStage, performed_by || null);
       return id;
     })();
 
@@ -544,6 +563,11 @@ router.patch('/leads/:id', (req, res) => {
     if (Array.isArray(specialist_ids) && specialist_ids.length === 0) {
       return res.status(400).json({ error: 'At least one specialist is required' });
     }
+    if (company_name !== undefined && !String(company_name || '').trim()) {
+      return res.status(400).json({ error: '"Company Name" is required' });
+    }
+    const missing = missingRequiredField(req.body, true);
+    if (missing) return res.status(400).json({ error: missing });
 
     const dup = findDuplicateLead({
       email: email !== undefined ? email : existing.email,
@@ -602,7 +626,7 @@ router.patch('/leads/:id', (req, res) => {
 
       if (custom_fields && typeof custom_fields === 'object') {
         const upsertVal = db.prepare('INSERT INTO outreach_lead_custom_values (lead_id, field_key, value) VALUES (?, ?, ?) ON CONFLICT(lead_id, field_key) DO UPDATE SET value = excluded.value');
-        Object.entries(custom_fields).forEach(([key, val]) => upsertVal.run(id, key, val ?? null));
+        Object.entries(custom_fields).forEach(([key, val]) => upsertVal.run(id, key, serializeCustomValue(val)));
       }
 
       // Update specialist assignments if specialist_ids array provided
@@ -724,7 +748,7 @@ router.put('/leads/:leadId/touchpoints/:number', (req, res) => {
     if (!checkLeadAccess(req, res, leadId)) return;
     const { date, channel, message_body, loom_url, notes } = req.body;
     const num = parseInt(number);
-    const maxTp = getMaxTouchpoints();
+    const maxTp = Math.max(getMaxTouchpoints(), stageNamesOfTypes(['touchpoint']).length);
     if (num < 1 || num > maxTp) return res.status(400).json({ error: `Touchpoint number must be 1–${maxTp}` });
 
     db.prepare(`
@@ -748,21 +772,67 @@ router.put('/leads/:leadId/touchpoints/:number', (req, res) => {
   }
 });
 
-// ─── LEAD CUSTOM FIELDS (CRUD) ────────────────────────────────────────────────
+// ─── LEAD FIELDS ──────────────────────────────────────────────────────────────
+// One ordered list (outreach_custom_fields) drives the lead form. Built-in fields
+// (is_builtin = 1) store values in outreach_leads columns and have a fixed type;
+// custom fields store values in outreach_lead_custom_values. `active = 0` means a
+// built-in is hidden or a custom field is archived (values are kept).
+
+const CUSTOM_FIELD_TYPES = [
+  'text', 'short_text', 'number', 'email', 'phone', 'link',
+  'date', 'dropdown', 'multiselect', 'checkbox', 'image',
+];
+// Values of these types are plain strings, so a field can switch between them safely
+const TEXT_LIKE_TYPES = ['text', 'short_text', 'email', 'phone', 'link'];
+// Built-ins that every lead needs — always shown and required
+const LOCKED_BUILTINS = ['company_name', 'specialist_ids'];
 
 function parseCustomField(f) {
   if (!f) return f;
   let options = [];
   try { options = JSON.parse(f.options || '[]'); } catch { options = []; }
-  return { ...f, options };
+  return { ...f, options, is_builtin: !!f.is_builtin, required: !!f.required, locked: LOCKED_BUILTINS.includes(f.field_key) };
 }
 
+function getField(id) {
+  return parseCustomField(db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id));
+}
+
+// Custom values are stored as text: multi-select as a JSON array, checkbox as '1'/'0'
+function serializeCustomValue(v) {
+  if (v === undefined || v === null) return null;
+  if (Array.isArray(v)) return JSON.stringify(v);
+  if (typeof v === 'boolean') return v ? '1' : '0';
+  return String(v);
+}
+
+function isEmptyValue(v) {
+  return v === undefined || v === null || v === '[]' || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0);
+}
+
+// Message for the first required (and visible) field that `body` leaves empty, or null.
+// With `partial` (PATCH) only fields actually present in the body are checked.
+function missingRequiredField(body, partial) {
+  const custom = body.custom_fields && typeof body.custom_fields === 'object' ? body.custom_fields : {};
+  const required = db.prepare('SELECT * FROM outreach_custom_fields WHERE active = 1 AND required = 1').all();
+  for (const f of required) {
+    if (LOCKED_BUILTINS.includes(f.field_key)) continue; // validated by the lead routes themselves
+    let key = f.field_key;
+    if (f.is_builtin && key === 'next_followup_date' && body.next_followup !== undefined) key = 'next_followup';
+    const source = f.is_builtin ? body : custom;
+    if (partial && !(key in source)) continue;
+    if (isEmptyValue(source[key])) return `"${f.label}" is required`;
+  }
+  return null;
+}
+
+// Custom fields only (kept for the Claude connector and older clients)
 router.get('/custom-fields', (req, res) => {
   try {
     const { all } = req.query;
     const query = all === '1'
-      ? 'SELECT * FROM outreach_custom_fields ORDER BY sort_order ASC, id ASC'
-      : 'SELECT * FROM outreach_custom_fields WHERE active = 1 ORDER BY sort_order ASC, id ASC';
+      ? 'SELECT * FROM outreach_custom_fields WHERE is_builtin = 0 ORDER BY sort_order ASC, id ASC'
+      : 'SELECT * FROM outreach_custom_fields WHERE is_builtin = 0 AND active = 1 ORDER BY sort_order ASC, id ASC';
     res.json(db.prepare(query).all().map(parseCustomField));
   } catch (err) {
     console.error(err);
@@ -770,17 +840,63 @@ router.get('/custom-fields', (req, res) => {
   }
 });
 
+// Full form layout: built-in + custom fields in order. Admins can pass all=1 to also get
+// hidden/archived fields and how many leads have a value in each custom field.
+router.get('/fields', (req, res) => {
+  try {
+    const includeAll = req.query.all === '1' && req.user.role === 'admin';
+    const fields = db.prepare(`
+      SELECT * FROM outreach_custom_fields ${includeAll ? '' : 'WHERE active = 1'}
+      ORDER BY sort_order ASC, id ASC
+    `).all().map(parseCustomField);
+    if (includeAll) {
+      const counts = {};
+      db.prepare(`
+        SELECT v.field_key, COUNT(*) as cnt FROM outreach_lead_custom_values v
+        JOIN outreach_leads l ON l.id = v.lead_id AND l.deleted_at IS NULL
+        WHERE v.value IS NOT NULL AND v.value != '' AND v.value != '[]'
+        GROUP BY v.field_key
+      `).all().forEach(r => { counts[r.field_key] = r.cnt; });
+      fields.forEach(f => { f.value_count = f.is_builtin ? null : (counts[f.field_key] || 0); });
+    }
+    res.json(fields);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch fields' });
+  }
+});
+
+// Sets the form order from a full list of field ids
+router.patch('/fields/order', requireAdmin, (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids must be a non-empty array' });
+    const setOrder = db.prepare('UPDATE outreach_custom_fields SET sort_order = ? WHERE id = ?');
+    db.transaction(() => { ids.forEach((id, i) => setOrder.run(i + 1, id)); })();
+    res.json(db.prepare('SELECT * FROM outreach_custom_fields ORDER BY sort_order ASC, id ASC').all().map(parseCustomField));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reorder fields' });
+  }
+});
+
 router.post('/custom-fields', requireAdmin, (req, res) => {
   try {
-    const { label, field_type = 'text', options = [], width = 'half' } = req.body;
+    const { label, field_type = 'text', options = [], width = 'half', help_text = null, required = false } = req.body;
     if (!label || !label.trim()) return res.status(400).json({ error: 'Label is required' });
+    if (!CUSTOM_FIELD_TYPES.includes(field_type)) return res.status(400).json({ error: 'Unknown field type' });
     const field_key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     if (!field_key) return res.status(400).json({ error: 'Label must contain at least one letter or number' });
     const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM outreach_custom_fields').get();
     const sort_order = (maxOrder.m || 0) + 1;
-    const result = db.prepare('INSERT INTO outreach_custom_fields (label, field_key, field_type, sort_order, options, width) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(label.trim(), field_key, field_type, sort_order, JSON.stringify(options), width === 'full' ? 'full' : 'half');
-    res.status(201).json(parseCustomField(db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(result.lastInsertRowid)));
+    const result = db.prepare(`
+      INSERT INTO outreach_custom_fields (label, field_key, field_type, sort_order, options, width, help_text, required)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      label.trim(), field_key, field_type, sort_order, JSON.stringify(Array.isArray(options) ? options : []),
+      width === 'full' ? 'full' : 'half', help_text ? String(help_text).trim() || null : null, required ? 1 : 0,
+    );
+    res.status(201).json(getField(result.lastInsertRowid));
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE')) {
       return res.status(409).json({ error: 'A field with this name already exists' });
@@ -793,9 +909,31 @@ router.post('/custom-fields', requireAdmin, (req, res) => {
 router.patch('/custom-fields/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
-    const { label, field_type, sort_order, active, options, width, width_px, height_px } = req.body;
+    const { label, field_type, sort_order, active, options, width, width_px, height_px, help_text, required } = req.body;
     const existing = db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Field not found' });
+
+    if (existing.is_builtin) {
+      if (field_type !== undefined && field_type !== existing.field_type) {
+        return res.status(400).json({ error: "A built-in field's type can't be changed" });
+      }
+      if (LOCKED_BUILTINS.includes(existing.field_key) && ((active !== undefined && !active) || (required !== undefined && !required))) {
+        return res.status(400).json({ error: `"${existing.label}" is always shown and required` });
+      }
+    } else if (field_type !== undefined && field_type !== existing.field_type) {
+      if (!CUSTOM_FIELD_TYPES.includes(field_type)) return res.status(400).json({ error: 'Unknown field type' });
+      const compatible = TEXT_LIKE_TYPES.includes(existing.field_type) && TEXT_LIKE_TYPES.includes(field_type);
+      if (!compatible) {
+        const used = db.prepare(`
+          SELECT COUNT(*) as cnt FROM outreach_lead_custom_values
+          WHERE field_key = ? AND value IS NOT NULL AND value != '' AND value != '[]'
+        `).get(existing.field_key).cnt;
+        if (used > 0) {
+          return res.status(409).json({ error: `Can't change the type: ${used} lead(s) already have a value. Create a new field instead.` });
+        }
+      }
+    }
+
     db.prepare(`
       UPDATE outreach_custom_fields SET
         label = COALESCE(?, label),
@@ -805,33 +943,42 @@ router.patch('/custom-fields/:id', requireAdmin, (req, res) => {
         options = COALESCE(?, options),
         width = COALESCE(?, width),
         width_px = CASE WHEN ? THEN ? ELSE width_px END,
-        height_px = CASE WHEN ? THEN ? ELSE height_px END
+        height_px = CASE WHEN ? THEN ? ELSE height_px END,
+        help_text = CASE WHEN ? THEN ? ELSE help_text END,
+        required = COALESCE(?, required)
       WHERE id = ?
     `).run(
-      label || null,
-      field_type || null,
+      label && label.trim() ? label.trim() : null,
+      existing.is_builtin ? null : (field_type || null),
       sort_order !== undefined ? sort_order : null,
-      active !== undefined ? active : null,
-      options !== undefined ? JSON.stringify(options) : null,
+      active !== undefined ? (active ? 1 : 0) : null,
+      options !== undefined && !existing.is_builtin ? JSON.stringify(Array.isArray(options) ? options : []) : null,
       width !== undefined ? (width === 'full' ? 'full' : 'half') : null,
-      width_px !== undefined ? 1 : 0, width_px !== undefined ? Math.round(width_px) : null,
-      height_px !== undefined ? 1 : 0, height_px !== undefined ? Math.round(height_px) : null,
+      width_px !== undefined ? 1 : 0, width_px !== undefined && width_px !== null ? Math.round(width_px) : null,
+      height_px !== undefined ? 1 : 0, height_px !== undefined && height_px !== null ? Math.round(height_px) : null,
+      help_text !== undefined ? 1 : 0, help_text ? String(help_text).trim() || null : null,
+      required !== undefined ? (required ? 1 : 0) : null,
       id,
     );
-    res.json(parseCustomField(db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id)));
+    res.json(getField(id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update custom field' });
   }
 });
 
+// Permanent delete — only for archived custom fields, so values are never lost by one click
 router.delete('/custom-fields/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const existing = db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Field not found' });
-    db.prepare('DELETE FROM outreach_lead_custom_values WHERE field_key = ?').run(existing.field_key);
-    db.prepare('DELETE FROM outreach_custom_fields WHERE id = ?').run(id);
+    if (existing.is_builtin) return res.status(400).json({ error: "Built-in fields can't be deleted — hide them instead" });
+    if (existing.active) return res.status(409).json({ error: 'Archive the field before deleting it' });
+    db.transaction(() => {
+      db.prepare('DELETE FROM outreach_lead_custom_values WHERE field_key = ?').run(existing.field_key);
+      db.prepare('DELETE FROM outreach_custom_fields WHERE id = ?').run(id);
+    })();
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -974,19 +1121,24 @@ router.get('/dashboard', (req, res) => {
     // "Responded" = lead is in Interested OR Not Interested stage (or beyond)
     // using current status prevents inflated rates from historical stage passes.
 
-    const RESPONDED_CURRENT   = ['Interested','Not Interested','Not interested','Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client'];
-    const INTERESTED_CURRENT  = ['Interested','Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client'];
-    const APPOINTMENT_CURRENT = ['Appointment Booked','No Show','Meeting Done - Not Interested','Started Trial','Closed / Booked as Client'];
+    const stages = getStages();
+    const namesOf = (...types) => stageNamesOfTypes(types, stages);
+    const RESPONDED_CURRENT   = namesOf(...TYPE_GROUPS.responded);
+    const INTERESTED_CURRENT  = namesOf(...TYPE_GROUPS.interested);
+    const APPOINTMENT_CURRENT = namesOf(...TYPE_GROUPS.booked);
+    const WON = namesOf('won');
+    const CLOSED_OUT = namesOf(...TYPE_GROUPS.closed);
 
     const respondedLeads          = leads.filter(l => RESPONDED_CURRENT.includes(l.status));
     const responded               = respondedLeads.length;
     const interested              = leads.filter(l => INTERESTED_CURRENT.includes(l.status)).length;
     const appointments_booked     = leads.filter(l => APPOINTMENT_CURRENT.includes(l.status)).length;
-    const no_shows                = leads.filter(l => l.status === 'No Show').length;
-    const meetings_done_ni        = leads.filter(l => l.status === 'Meeting Done - Not Interested').length;
-    const started_trial           = leads.filter(l => l.status === 'Started Trial').length;
-    const closed                  = leads.filter(l => l.status === 'Closed / Booked as Client').length;
-    const disqualified            = leads.filter(l => l.status === 'Disqualified / Dead').length;
+    const countIn = names => leads.filter(l => names.includes(l.status)).length;
+    const no_shows                = countIn(namesOf('no_show'));
+    const meetings_done_ni        = countIn(namesOf('meeting_lost'));
+    const started_trial           = countIn(namesOf('trial'));
+    const closed                  = countIn(WON);
+    const disqualified            = countIn(namesOf('dead'));
     const meetings_happened       = no_shows + meetings_done_ni + started_trial + closed;
 
     // Rates
@@ -1015,12 +1167,12 @@ router.get('/dashboard', (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     const overdue_followups = leads.filter(l =>
       l.next_followup_date && l.next_followup_date < today &&
-      !NOT_OVERDUE_STATUSES.includes(l.status)
+      !CLOSED_OUT.includes(l.status)
     ).length;
 
     // by_status (current status distribution — includes ALL actual statuses, not just hardcoded list)
     const by_status = {};
-    STATUSES.forEach(s => { by_status[s] = 0; }); // initialize known statuses to 0
+    stages.filter(s => s.active).forEach(s => { by_status[s.name] = 0; }); // initialize active stages to 0
     leads.forEach(l => {
       if (l.status) by_status[l.status] = (by_status[l.status] || 0) + 1;
     });
@@ -1054,7 +1206,7 @@ router.get('/dashboard', (req, res) => {
         }
         const status = leadStatusMap[a.lead_id];
         specialistMap[a.specialist_id].total++;
-        if (status === 'Closed / Booked as Client') specialistMap[a.specialist_id].closed++;
+        if (WON.includes(status)) specialistMap[a.specialist_id].closed++;
         if (RESPONDED_CURRENT.includes(status)) specialistMap[a.specialist_id].responded++;
         if (APPOINTMENT_CURRENT.includes(status)) specialistMap[a.specialist_id].booked++;
       });
@@ -1269,12 +1421,9 @@ router.get('/overdue', (req, res) => {
     if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
 
     const today = new Date().toISOString().slice(0, 10);
-    const conditions = [
-      'l.deleted_at IS NULL',
-      'l.next_followup_date < ?',
-      `l.status NOT IN (${NOT_OVERDUE_STATUSES.map(() => '?').join(',')})`,
-    ];
-    const params = [today, ...NOT_OVERDUE_STATUSES];
+    const notClosed = notClosedClause('l.status');
+    const conditions = ['l.deleted_at IS NULL', 'l.next_followup_date < ?', notClosed.sql];
+    const params = [today, ...notClosed.params];
     if (specialist_id) {
       conditions.push('EXISTS (SELECT 1 FROM outreach_lead_specialists ols WHERE ols.lead_id = l.id AND ols.specialist_id = ?)');
       params.push(specialist_id);
@@ -1401,12 +1550,15 @@ router.get('/export/pdf', (req, res) => {
       ${whereClause} ORDER BY l.created_at DESC
     `).all(...params);
 
+    // Active stages in pipeline order, plus any status leads are still sitting in
     const byStatus = {};
-    STATUSES.forEach(s => { byStatus[s] = 0; });
-    leads.forEach(l => { if (byStatus.hasOwnProperty(l.status)) byStatus[l.status]++; });
+    getStages().filter(s => s.active).forEach(s => { byStatus[s.name] = 0; });
+    leads.forEach(l => { byStatus[l.status] = (byStatus[l.status] || 0) + 1; });
+    const statusNames = Object.keys(byStatus);
 
     const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const rows = STATUSES.map(s => `<tr><td>${s}</td><td style="text-align:right">${byStatus[s]}</td></tr>`).join('');
+    const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const rows = statusNames.map(s => `<tr><td>${esc(s)}</td><td style="text-align:right">${byStatus[s]}</td></tr>`).join('');
 
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Outreach Report</title>
     <style>
@@ -1438,8 +1590,7 @@ router.get('/export/pdf', (req, res) => {
 
 router.get('/pipeline-stages', (req, res) => {
   try {
-    const stages = db.prepare('SELECT * FROM outreach_pipeline_stages ORDER BY order_index ASC, id ASC').all();
-    res.json(stages);
+    res.json(withTouchpointNumbers(getStages()));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch pipeline stages' });
@@ -1448,13 +1599,13 @@ router.get('/pipeline-stages', (req, res) => {
 
 router.post('/pipeline-stages', requireAdmin, (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, stage_type = 'in_progress' } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
+    if (!STAGE_TYPES.includes(stage_type)) return res.status(400).json({ error: 'Unknown stage type' });
     const maxOrder = db.prepare('SELECT MAX(order_index) as mx FROM outreach_pipeline_stages').get();
     const nextOrder = (maxOrder.mx || 0) + 1;
-    const result = db.prepare('INSERT INTO outreach_pipeline_stages (name, order_index) VALUES (?, ?)').run(name.trim(), nextOrder);
-    const created = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE id = ?').get(result.lastInsertRowid);
-    res.status(201).json(created);
+    const result = db.prepare('INSERT INTO outreach_pipeline_stages (name, order_index, stage_type) VALUES (?, ?, ?)').run(name.trim(), nextOrder, stage_type);
+    res.status(201).json(withTouchpointNumbers(getStages()).find(s => s.id === Number(result.lastInsertRowid)));
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE')) {
       return res.status(409).json({ error: 'A stage with this name already exists' });
@@ -1523,27 +1674,29 @@ router.post('/pipeline-stages/remap', requireAdmin, (req, res) => {
 router.patch('/pipeline-stages/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, order_index, active } = req.body;
+    const { name, order_index, active, stage_type } = req.body;
     const existing = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Stage not found' });
+    if (stage_type !== undefined && !STAGE_TYPES.includes(stage_type)) return res.status(400).json({ error: 'Unknown stage type' });
     const newName = typeof name === 'string' && name.trim() ? name.trim() : null;
     db.transaction(() => {
       db.prepare(`
         UPDATE outreach_pipeline_stages SET
           name = COALESCE(?, name),
           order_index = COALESCE(?, order_index),
-          active = COALESCE(?, active)
+          active = COALESCE(?, active),
+          stage_type = COALESCE(?, stage_type)
         WHERE id = ?
       `).run(
         newName,
         order_index !== undefined ? order_index : null,
         active !== undefined ? active : null,
+        stage_type || null,
         id
       );
       if (newName && newName !== existing.name) renameStageReferences(existing.name, newName);
     })();
-    const updated = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE id = ?').get(id);
-    res.json(updated);
+    res.json(withTouchpointNumbers(getStages()).find(s => s.id === Number(id)));
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE')) {
       return res.status(409).json({ error: 'A stage with this name already exists' });

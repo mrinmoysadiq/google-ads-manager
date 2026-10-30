@@ -205,16 +205,24 @@ New Lead → Touchpoint 1 → Touchpoint 2 → Touchpoint 3 → Touchpoint 4 →
 → Disqualified / Dead
 ```
 
-### "Responded" Definition (CRITICAL)
-"Responded" does NOT include the "Responded" pipeline stage. It means:
-```js
-const RESPONDED_CURRENT = [
-  'Interested', 'Not Interested', 'Not interested',
-  'Appointment Booked', 'No Show', 'Meeting Done - Not Interested',
-  'Started Trial', 'Closed / Booked as Client'
-];
-```
-This is used in dashboard calculations and the `by_status` map.
+### Stage Types (CRITICAL)
+Stage *names* are free text; behaviour comes from `outreach_pipeline_stages.stage_type`
+(`new, touchpoint, in_progress, interested, not_interested, booked, no_show, meeting_lost, trial, won, dead`),
+set per stage in Admin. Server: `STAGE_TYPES` / `TYPE_GROUPS` in `outreach.js`; client: `pages/outreach/stageTypes.js`.
+- **Responded** = types `interested, not_interested, booked, no_show, meeting_lost, trial, won` (not `in_progress`, so a stage named "Responded" doesn't count)
+- **Never overdue** = `won, dead, meeting_lost, not_interested`
+- **Touchpoint logger** opens for `touchpoint` stages; they're numbered 1..n in pipeline order (`touchpoint_number` from `GET /pipeline-stages`)
+- **Response logger** opens for `interested, not_interested, meeting_lost`
+- New leads start in the first active `new` stage
+- Renaming a stage carries leads, status history and dashboard cards along
+Never match stage names in code — use the type helpers.
+
+### Lead Fields (form layout)
+`outreach_custom_fields` holds built-in fields (`is_builtin = 1`, values in `outreach_leads` columns, type fixed)
+and custom fields (values in `outreach_lead_custom_values`) in one ordered list. `GET /fields` returns the layout;
+`LeadDrawer` renders it via `components/LeadFields.jsx`. Admin → Lead Fields manages label, order, width, help text,
+required, hide (built-ins) / archive (custom, values kept). `company_name` and `specialist_ids` are locked.
+New built-in columns must also be added to `OUTREACH_BUILTIN_FIELDS` in `database.js`.
 
 ### Status Change Flow (OutreachHome.jsx)
 ```
@@ -365,7 +373,7 @@ try { db.exec(`ALTER TABLE outreach_leads ADD COLUMN email TEXT`); } catch(e) { 
 - Don't add `DROP TABLE` anywhere in `database.js`
 - Don't change the `CORS_ORIGIN` or `VITE_API_URL` in `render.yaml` — they're set manually in Render dashboard
 - Don't include `source_image` in bulk lead list queries (it's a base64 string that makes responses huge)
-- Don't hardcode pipeline stage names in the frontend — always derive from DB via `getPipelineStages()`
+- Don't hardcode pipeline stage names anywhere — use stage types (`stageTypes.js` / `TYPE_GROUPS`)
 
 ### ✅ Always Do This
 - Call `bumpDashboard()` after any lead status change, create, or delete

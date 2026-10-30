@@ -2,21 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import {
   getDashboard, getOverdueLeads, exportCsv, getExportPdfHtml,
-  getDashboardCards, createDashboardCard, updateDashboardCard, deleteDashboardCard,
+  getDashboardCards, createDashboardCard, updateDashboardCard, deleteDashboardCard, getPipelineStages,
   getActivity, getActivityLeads,
 } from '../../../utils/outreachApi';
 import { fmtDate, fmtDateTime } from '../../../utils/dates';
 import { isAdmin } from '../../../utils/auth';
+import { stageColor } from '../stageTypes';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const ALL_KNOWN_STATUSES = [
-  'New Lead',
-  'Touchpoint 1', 'Touchpoint 2', 'Touchpoint 3', 'Touchpoint 4', 'Touchpoint 5',
-  'Responded', 'Interested', 'Not Interested', 'Appointment Booked',
-  'No Show', 'Meeting Done - Not Interested', 'Started Trial',
-  'Closed / Booked as Client', 'Disqualified / Dead',
-];
 
 const PRESET_COLORS = [
   '#575ECF', '#3b82f6', '#a855f7', '#f59e0b', '#22c55e',
@@ -183,25 +176,8 @@ function Spinner() {
 }
 
 
-const STATUS_PILL_COLORS = {
-  'New Lead':                    { bg: 'rgba(87,94,207,0.15)',  color: '#575ECF' },
-  'Touchpoint 1':                { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
-  'Touchpoint 2':                { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
-  'Touchpoint 3':                { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
-  'Touchpoint 4':                { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
-  'Touchpoint 5':                { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
-  'Responded':                   { bg: 'rgba(168,85,247,0.15)', color: '#a855f7' },
-  'Interested':                  { bg: 'rgba(34,197,94,0.15)',  color: '#22c55e' },
-  'Not Interested':              { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444' },
-  'Appointment Booked':          { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
-  'No Show':                     { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444' },
-  'Meeting Done - Not Interested':{ bg: 'rgba(239,68,68,0.12)', color: '#ef4444' },
-  'Started Trial':               { bg: 'rgba(6,182,212,0.15)',  color: '#06b6d4' },
-  'Closed / Booked as Client':   { bg: 'rgba(34,197,94,0.15)',  color: '#22c55e' },
-  'Disqualified / Dead':         { bg: 'rgba(138,134,128,0.15)',color: '#8a8680' },
-};
-function statusPill(status) {
-  const c = STATUS_PILL_COLORS[status] || { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' };
+function statusPill(status, stages) {
+  const c = stageColor(stages, status);
   return (
     <span style={{
       display: 'inline-block', padding: '2px 8px', borderRadius: 999,
@@ -212,7 +188,7 @@ function statusPill(status) {
   );
 }
 
-function ActivityLeadsDrawer({ title, subtitle, leads, loading, onClose, onLeadClick }) {
+function ActivityLeadsDrawer({ title, subtitle, leads, stages, loading, onClose, onLeadClick }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9500, display: 'flex' }}>
       {/* Backdrop */}
@@ -282,7 +258,7 @@ function ActivityLeadsDrawer({ title, subtitle, leads, loading, onClose, onLeadC
                 <span style={{ color: '#575ECF', fontWeight: 600, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {lead.company_name || '—'}
                 </span>
-                {statusPill(lead.status)}
+                {statusPill(lead.status, stages)}
               </div>
 
               {/* Row 2: contact + move arrow (if stage move) */}
@@ -672,6 +648,11 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [metrics, setMetrics] = useState(null);
+  const [stages, setStages] = useState([]);
+
+  useEffect(() => {
+    getPipelineStages().then(setStages).catch(() => {});
+  }, []);
   const [cards, setCards] = useState([]);
   const [overdueLeads, setOverdueLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -690,10 +671,11 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
   const [actLeads, setActLeads] = useState([]);
   const [actLeadsLoading, setActLeadsLoading] = useState(false);
 
-  // Collect all statuses for the formula builder (from by_status + known statuses)
-  const allStatuses = metrics?.by_status
-    ? [...new Set([...ALL_KNOWN_STATUSES, ...Object.keys(metrics.by_status)])]
-    : ALL_KNOWN_STATUSES;
+  // Statuses for the formula builder: active stages, plus any status leads are still in
+  const allStatuses = [...new Set([
+    ...stages.filter(s => s.active).map(s => s.name),
+    ...Object.keys(metrics?.by_status || {}),
+  ])];
 
   const fetchCards = useCallback(async () => {
     try {
@@ -1260,6 +1242,7 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
           title={actDrawer.title}
           subtitle={actDrawer.subtitle}
           leads={actLeads}
+          stages={stages}
           loading={actLeadsLoading}
           onClose={() => setActDrawer(null)}
           onLeadClick={onLeadClick}

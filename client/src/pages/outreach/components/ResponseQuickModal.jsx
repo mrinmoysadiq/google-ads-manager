@@ -59,7 +59,6 @@ export default function ResponseQuickModal({ newStatus, onSave, onClose }) {
     color: hasError ? '#ef4444' : '#8a8680',
   })
 
-  const isNotInterested = newStatus === 'Meeting Done - Not Interested'
 
   const handleSave = async () => {
     const newErrors = {}
@@ -114,9 +113,7 @@ export default function ResponseQuickModal({ newStatus, onSave, onClose }) {
               Log Response
             </h3>
             <p style={{ color: '#8a8680', fontSize: '12px', marginTop: '4px' }}>
-              {isNotInterested
-                ? 'Log their response — lead will be moved to "Meeting Done - Not Interested".'
-                : 'Log their response — lead will be moved to "Interested".'}
+              {`Log their response — lead will be moved to "${newStatus}".`}
             </p>
           </div>
           <button
@@ -217,7 +214,7 @@ export default function ResponseQuickModal({ newStatus, onSave, onClose }) {
             onClick={handleSave}
             disabled={saving}
             style={{
-              backgroundColor: isNotInterested ? '#6b7280' : '#a855f7',
+              backgroundColor: '#575ECF',
               color: '#fff',
               border: 'none',
               borderRadius: '7px',

@@ -21,7 +21,14 @@ import {
   getTrashLeads,
   restoreTrashLead,
   permanentDeleteLead,
+  getFields,
+  reorderFields,
+  createCustomField,
+  updateCustomField,
+  deleteCustomField,
 } from '../../utils/outreachApi';
+import { STAGE_TYPES, stageTypeMeta } from './stageTypes';
+import { CUSTOM_FIELD_TYPES, fieldTypeLabel } from './components/LeadFields';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -625,6 +632,21 @@ function IndustriesSection({ industries, setIndustries }) {
 
 // ─── Section: Pipeline Stages ─────────────────────────────────────────────────
 
+function StageTypeSelect({ value, onChange }) {
+  const meta = stageTypeMeta(value);
+  return (
+    <select
+      value={value || 'in_progress'}
+      onChange={e => onChange(e.target.value)}
+      title={meta?.hint}
+      className="rounded-lg px-2 py-1.5 text-xs bg-[#2a2a2a] border border-white/10 focus:outline-none focus:border-[#575ECF] cursor-pointer shrink-0"
+      style={{ color: meta?.color || '#c5c1b9' }}
+    >
+      {STAGE_TYPES.map(t => <option key={t.value} value={t.value} style={{ color: '#c5c1b9' }}>{t.label}</option>)}
+    </select>
+  );
+}
+
 // Leads sitting in a status with no active stage are invisible on the Kanban board —
 // this lists them and moves each group into a real stage.
 function OrphanedStagesPanel({ stages, orphans, onRemapped }) {
@@ -697,6 +719,7 @@ function PipelineStagesSection({ stages, setStages }) {
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
   const [orphans, setOrphans] = useState([]);
+  const [newType, setNewType] = useState('in_progress');
 
   const refreshOrphans = useCallback(() => {
     getOrphanedStages().then(setOrphans).catch(() => {});
@@ -704,12 +727,15 @@ function PipelineStagesSection({ stages, setStages }) {
 
   useEffect(() => { refreshOrphans(); }, [refreshOrphans]);
 
+  // Touchpoint numbers depend on every stage's type and position, so reload the whole list
+  const refreshStages = () => getPipelineStages().then(setStages).catch(() => {});
+
   const handleAdd = async () => {
     if (!newName.trim()) return;
     setAdding(true);
     try {
-      const created = await createPipelineStage({ name: newName.trim() });
-      setStages(prev => [...prev, created]);
+      await createPipelineStage({ name: newName.trim(), stage_type: newType });
+      refreshStages();
       setNewName('');
       toast.success('Stage added');
     } catch (err) {
@@ -745,6 +771,16 @@ function PipelineStagesSection({ stages, setStages }) {
     }
   };
 
+  const handleTypeChange = async (stage, stage_type) => {
+    try {
+      await updatePipelineStage(stage.id, { stage_type });
+      refreshStages();
+      toast.success(`"${stage.name}" is now a ${stageTypeMeta(stage_type)?.label.toLowerCase()} stage`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to change stage type');
+    }
+  };
+
   const handleDelete = async (stage) => {
     if (!window.confirm(`Delete stage "${stage.name}"?`)) return;
     try {
@@ -768,6 +804,7 @@ function PipelineStagesSection({ stages, setStages }) {
         updatePipelineStage(other.id, { order_index: stage.order_index }),
       ]);
       setStages(prev => prev.map(s => s.id === stage.id ? a : s.id === other.id ? b : s));
+      refreshStages();
     } catch {
       toast.error('Failed to reorder stages');
     }
@@ -778,7 +815,12 @@ function PipelineStagesSection({ stages, setStages }) {
   return (
     <div className="bg-[#242424] border border-white/[0.08] rounded-xl p-6">
       <h2 className="text-base font-semibold text-[#c5c1b9] mb-1">Pipeline Stages</h2>
-      <p className="text-xs text-[#8a8680] mb-5">Manage the stages in your pipeline. Stages in use cannot be deleted. Renaming a stage moves its leads along.</p>
+      <p className="text-xs text-[#8a8680] mb-5">
+        Name stages however you like — each stage's <span className="text-[#c5c1b9]">type</span> decides how it behaves:
+        touchpoint stages open the touchpoint logger (numbered in order), interested / not interested / meeting-lost
+        stages ask for the lead's reply, and the dashboard metrics and overdue rules are based on types.
+        Stages in use can't be deleted; renaming moves leads along.
+      </p>
 
       <OrphanedStagesPanel stages={stages} orphans={orphans} onRemapped={refreshOrphans} />
 
@@ -791,6 +833,7 @@ function PipelineStagesSection({ stages, setStages }) {
           placeholder="New stage name…"
           onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
         />
+        <StageTypeSelect value={newType} onChange={setNewType} />
         <Btn variant="primary" size="sm" onClick={handleAdd} disabled={adding || !newName.trim()}>
           {adding ? <Spinner /> : 'Add'}
         </Btn>
@@ -844,6 +887,13 @@ function PipelineStagesSection({ stages, setStages }) {
                 )}
               </div>
 
+              {stage.touchpoint_number && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#14b8a6]/15 text-[#14b8a6]">
+                  TP {stage.touchpoint_number}
+                </span>
+              )}
+              <StageTypeSelect value={stage.stage_type} onChange={t => handleTypeChange(stage, t)} />
+
               <Badge active={!!stage.active} />
 
               {/* Active toggle */}
@@ -863,6 +913,276 @@ function PipelineStagesSection({ stages, setStages }) {
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── Section: Lead Fields ─────────────────────────────────────────────────────
+
+const EMPTY_FIELD_FORM = { label: '', field_type: 'short_text', options: [], width: 'half', help_text: '', required: false };
+
+function FieldEditorModal({ field, onClose, onSaved }) {
+  const isNew = !field;
+  const isBuiltin = !!field?.is_builtin;
+  const [form, setForm] = useState(() => field
+    ? { label: field.label, field_type: field.field_type, options: field.options || [], width: field.width || 'half', help_text: field.help_text || '', required: !!field.required }
+    : EMPTY_FIELD_FORM);
+  const [optionInput, setOptionInput] = useState('');
+  const [saving, setSaving] = useState(false);
+  const hasOptions = form.field_type === 'dropdown' || form.field_type === 'multiselect';
+  const removedOptions = field && hasOptions ? (field.options || []).filter(o => !form.options.includes(o)) : [];
+
+  const addOption = () => {
+    const o = optionInput.trim();
+    if (o && !form.options.includes(o)) setForm(f => ({ ...f, options: [...f.options, o] }));
+    setOptionInput('');
+  };
+
+  const save = async () => {
+    if (!form.label.trim()) return;
+    setSaving(true);
+    try {
+      const payload = { label: form.label.trim(), width: form.width, help_text: form.help_text, required: form.required };
+      if (!isBuiltin) { payload.field_type = form.field_type; payload.options = hasOptions ? form.options : []; }
+      if (isNew) await createCustomField(payload);
+      else await updateCustomField(field.id, payload);
+      toast.success(isNew ? 'Field added' : 'Field updated');
+      onSaved();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save field');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const label = (text) => <label className="block text-xs text-[#8a8680] mb-1 uppercase tracking-wide">{text}</label>;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-[#242424] border border-white/10 rounded-xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-[#c5c1b9]">{isNew ? 'New field' : `Edit "${field.label}"`}</h3>
+          <button onClick={onClose} className="text-[#8a8680] hover:text-[#c5c1b9] text-lg leading-none">✕</button>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <div>
+            {label('Label')}
+            <input className={inputClass} value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="e.g. Intro Message" autoFocus />
+          </div>
+
+          <div>
+            {label('Type')}
+            {isBuiltin ? (
+              <p className="text-sm text-[#8a8680]">{fieldTypeLabel(field.field_type)} <span className="text-xs">(built-in — type is fixed)</span></p>
+            ) : (
+              <select className={inputClass} value={form.field_type} onChange={e => setForm(f => ({ ...f, field_type: e.target.value }))}>
+                {CUSTOM_FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.icon}  {t.label}</option>)}
+              </select>
+            )}
+            {!isNew && !isBuiltin && field.value_count > 0 && (
+              <p className="text-xs text-[#8a8680] mt-1">{field.value_count} lead(s) have a value — only switches between text-like types are allowed.</p>
+            )}
+          </div>
+
+          {hasOptions && (
+            <div>
+              {label('Options')}
+              <div className="flex gap-2 mb-2">
+                <input className={inputClass} value={optionInput} onChange={e => setOptionInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addOption(); } }} placeholder="Type an option and press Enter" />
+                <Btn variant="primary" onClick={addOption}>Add</Btn>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {form.options.map(o => (
+                  <span key={o} className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs bg-[#575ECF]/20 text-[#a5aaee]">
+                    {o}
+                    <button type="button" onClick={() => setForm(f => ({ ...f, options: f.options.filter(x => x !== o) }))} className="text-[#8a8680] hover:text-[#ef4444]">×</button>
+                  </span>
+                ))}
+              </div>
+              {removedOptions.length > 0 && (
+                <p className="text-xs text-[#f59e0b] mt-2">Leads that already have {removedOptions.map(o => `"${o}"`).join(', ')} keep that value; it just can't be picked any more.</p>
+              )}
+            </div>
+          )}
+
+          <div>
+            {label('Help text (optional)')}
+            <input className={inputClass} value={form.help_text} onChange={e => setForm(f => ({ ...f, help_text: e.target.value }))} placeholder="Shown under the field" />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-6">
+            <div>
+              {label('Width')}
+              <div className="inline-flex rounded-lg border border-white/10 overflow-hidden">
+                {['half', 'full'].map(w => (
+                  <button key={w} type="button" onClick={() => setForm(f => ({ ...f, width: w }))}
+                    className={`px-3 py-1.5 text-xs ${form.width === w ? 'bg-[#575ECF] text-white' : 'text-[#8a8680] hover:bg-white/5'}`}>
+                    {w === 'half' ? 'Half' : 'Full'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className={`flex items-center gap-2 text-sm text-[#c5c1b9] ${field?.locked ? 'opacity-50' : 'cursor-pointer'}`}>
+              <input type="checkbox" checked={form.required} disabled={field?.locked}
+                onChange={e => setForm(f => ({ ...f, required: e.target.checked }))} className="accent-[#575ECF]" />
+              Required
+            </label>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <Btn variant="ghost" size="md" onClick={onClose}>Cancel</Btn>
+          <Btn variant="primary" size="md" onClick={save} disabled={!form.label.trim() || saving}>
+            {saving ? 'Saving…' : isNew ? 'Add field' : 'Save'}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LeadFieldsSection() {
+  const [fields, setFields] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(undefined); // undefined = closed, null = new, object = edit
+  const [dragId, setDragId] = useState(null);
+
+  const load = useCallback(() => {
+    return getFields({ all: '1' }).then(setFields).catch(() => toast.error('Failed to load fields')).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const visible = fields.filter(f => f.is_builtin || f.active);
+  const archived = fields.filter(f => !f.is_builtin && !f.active);
+
+  const saveOrder = async (ordered) => {
+    setFields([...ordered, ...archived]);
+    try {
+      await reorderFields([...ordered, ...archived].map(f => f.id));
+    } catch {
+      toast.error('Failed to save order');
+      load();
+    }
+  };
+
+  const move = (idx, delta) => {
+    const target = idx + delta;
+    if (target < 0 || target >= visible.length) return;
+    const next = [...visible];
+    [next[idx], next[target]] = [next[target], next[idx]];
+    saveOrder(next);
+  };
+
+  const dropOn = (targetId) => {
+    if (!dragId || dragId === targetId) return;
+    const next = visible.filter(f => f.id !== dragId);
+    const insertAt = next.findIndex(f => f.id === targetId);
+    next.splice(insertAt, 0, visible.find(f => f.id === dragId));
+    setDragId(null);
+    saveOrder(next);
+  };
+
+  const patch = async (field, data, message) => {
+    try {
+      await updateCustomField(field.id, data);
+      toast.success(message);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update field');
+    }
+  };
+
+  const deleteForever = async (field) => {
+    const n = field.value_count || 0;
+    if (!window.confirm(`Permanently delete "${field.label}"${n ? ` and the values on ${n} lead(s)` : ''}? This can't be undone.`)) return;
+    try {
+      await deleteCustomField(field.id);
+      toast.success('Field deleted');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete field');
+    }
+  };
+
+  return (
+    <div id="fields" className="bg-[#242424] border border-white/[0.08] rounded-xl p-6 scroll-mt-20">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
+        <h2 className="text-base font-semibold text-[#c5c1b9]">Lead Fields</h2>
+        <Btn variant="primary" onClick={() => setEditing(null)}>+ Add field</Btn>
+      </div>
+      <p className="text-xs text-[#8a8680] mb-5">
+        This list is the lead form, top to bottom, for everyone. Drag to reorder. Built-in fields can be renamed or hidden;
+        custom fields can be archived (their values are kept) and restored.
+      </p>
+
+      {loading ? (
+        <div className="flex justify-center py-6"><Spinner /></div>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {visible.map((f, idx) => (
+            <li
+              key={f.id}
+              draggable
+              onDragStart={() => setDragId(f.id)}
+              onDragOver={e => e.preventDefault()}
+              onDrop={() => dropOn(f.id)}
+              onDragEnd={() => setDragId(null)}
+              className={`flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 bg-[#2a2a2a] border ${dragId === f.id ? 'border-[#575ECF]' : 'border-transparent'} ${!f.active ? 'opacity-50' : ''}`}
+            >
+              <span className="cursor-grab text-[#555] select-none" title="Drag to reorder">⋮⋮</span>
+              <div className="flex flex-col">
+                <button onClick={() => move(idx, -1)} disabled={idx === 0} className="text-[#8a8680] hover:text-[#c5c1b9] disabled:opacity-20 text-[10px] leading-none" title="Move up">▲</button>
+                <button onClick={() => move(idx, 1)} disabled={idx === visible.length - 1} className="text-[#8a8680] hover:text-[#c5c1b9] disabled:opacity-20 text-[10px] leading-none" title="Move down">▼</button>
+              </div>
+              <div className="flex-1 min-w-[140px]">
+                <span className="text-sm text-[#c5c1b9] font-medium">{f.label}</span>
+                {f.required && <span className="text-[#ef4444] text-sm"> *</span>}
+                <span className="block text-[11px] text-[#8a8680]">
+                  {fieldTypeLabel(f.field_type)} · {f.width === 'full' ? 'Full width' : 'Half width'}
+                  {f.is_builtin ? ' · Built-in' : ''}{!f.active ? ' · Hidden' : ''}
+                </span>
+              </div>
+              <Btn variant="ghost" onClick={() => setEditing(f)}>Edit</Btn>
+              {f.is_builtin ? (
+                <Btn variant="ghost" disabled={f.locked} title={f.locked ? 'Always shown' : undefined}
+                  onClick={() => patch(f, { active: f.active ? 0 : 1 }, f.active ? `"${f.label}" hidden` : `"${f.label}" shown`)}>
+                  {f.active ? 'Hide' : 'Show'}
+                </Btn>
+              ) : (
+                <Btn variant="warning" onClick={() => patch(f, { active: 0 }, `"${f.label}" archived — values kept`)}>Archive</Btn>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {archived.length > 0 && (
+        <div className="mt-6">
+          <p className="text-xs font-medium text-[#8a8680] uppercase tracking-wide mb-2">Archived</p>
+          <ul className="flex flex-col gap-1.5">
+            {archived.map(f => (
+              <li key={f.id} className="flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 bg-[#1e1e1e]">
+                <div className="flex-1 min-w-[140px]">
+                  <span className="text-sm text-[#8a8680]">{f.label}</span>
+                  <span className="block text-[11px] text-[#555]">{fieldTypeLabel(f.field_type)} · {f.value_count || 0} lead(s) with a value</span>
+                </div>
+                <Btn variant="ghost" onClick={() => patch(f, { active: 1 }, `"${f.label}" restored`)}>Restore</Btn>
+                <Btn variant="danger" onClick={() => deleteForever(f)}>Delete forever</Btn>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {editing !== undefined && (
+        <FieldEditorModal
+          field={editing}
+          onClose={() => setEditing(undefined)}
+          onSaved={() => { setEditing(undefined); load(); }}
+        />
       )}
     </div>
   );
@@ -1016,6 +1336,13 @@ export default function OutreachAdmin() {
     fetchData();
   }, [fetchData]);
 
+  // Deep link from the lead drawer's "Edit fields" (#fields) once sections have rendered
+  useEffect(() => {
+    if (loading || !window.location.hash) return;
+    const t = setTimeout(() => document.querySelector(window.location.hash)?.scrollIntoView({ behavior: 'smooth' }), 300);
+    return () => clearTimeout(t);
+  }, [loading]);
+
   return (
     <div className="min-h-screen bg-[#1b1b1b] text-[#c5c1b9]">
       <div className="max-w-4xl mx-auto px-6 py-8">
@@ -1037,7 +1364,7 @@ export default function OutreachAdmin() {
             Outreach Admin
           </h1>
           <p className="text-sm text-[#8a8680] mt-1">
-            Manage specialists, industries, and system settings.
+            Manage specialists, industries, pipeline stages, lead fields and settings.
           </p>
         </div>
 
@@ -1068,6 +1395,7 @@ export default function OutreachAdmin() {
               stages={stages}
               setStages={setStages}
             />
+            <LeadFieldsSection />
             <SettingsSection
               settings={settings}
               setSettings={setSettings}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import Select from 'react-select'
 import toast from 'react-hot-toast'
@@ -12,16 +12,10 @@ import PipelineKanban from './components/PipelineKanban'
 import Dashboard from './components/Dashboard'
 import TouchpointQuickModal from './components/TouchpointQuickModal'
 import ResponseQuickModal from './components/ResponseQuickModal'
-
-function getTouchpointNumber(status) {
-  const m = status && status.match(/^Touchpoint (\d+)$/)
-  return m ? parseInt(m[1]) : null
-}
+import { touchpointNumberOf, needsResponse, isClosedStatus, touchpointSlots } from './stageTypes'
 
 const LS_SPECIALIST_KEY = 'outreach_specialist'
 const LS_VIEW_KEY = 'outreach_view'
-
-const NOT_OVERDUE_STATUSES = ['Closed / Booked as Client', 'Disqualified / Dead', 'Meeting Done - Not Interested', 'Not Interested', 'Not interested']
 
 const selectStyles = {
   control: (base, { isFocused }) => ({ ...base, backgroundColor: '#2a2a2a', borderColor: isFocused ? '#575ECF' : 'rgba(255,255,255,0.1)', boxShadow: 'none', '&:hover': { borderColor: '#575ECF' }, minHeight: '38px', fontSize: '13px' }),
@@ -46,7 +40,6 @@ export default function OutreachHome() {
   const [leads, setLeads] = useState([])
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 })
   const [loading, setLoading] = useState(true)
-  const [overdueCount, setOverdueCount] = useState(0)
   const [stages, setStages] = useState([])
   const [maxTouchpoints, setMaxTouchpoints] = useState(5)
   const [tpModal, setTpModal] = useState({ open: false, leadId: null, number: null, status: null, modalKey: 0 })
@@ -144,16 +137,18 @@ export default function OutreachHome() {
         if (requestId !== leadsRequestRef.current) return
         setLeads(data.data)
         setPagination({ page: data.page, total: data.total, totalPages: data.totalPages })
-        // Count overdue in current result set for badge
-        const today = todayLocal()
-        const overdue = data.data.filter(l => l.next_followup_date && l.next_followup_date < today && !NOT_OVERDUE_STATUSES.includes(l.status)).length
-        setOverdueCount(overdue)
       })
       .catch(() => { if (requestId === leadsRequestRef.current) toast.error('Failed to load leads') })
       .finally(() => { if (requestId === leadsRequestRef.current) setLoading(false) })
   }, [selectedSpecialistId, filters, page, viewMode])
 
   useEffect(() => { fetchLeads() }, [fetchLeads])
+
+  // Overdue follow-ups in the current result set, for the badge
+  const overdueCount = useMemo(() => {
+    const today = todayLocal()
+    return leads.filter(l => l.next_followup_date && l.next_followup_date < today && !isClosedStatus(stages, l.status)).length
+  }, [leads, stages])
 
   const handleSpecialistChange = (opt) => {
     const spec = opt?.value ? specialists.find(s => s.id === opt.value) : null
@@ -167,15 +162,13 @@ export default function OutreachHome() {
     localStorage.setItem(LS_VIEW_KEY, mode)
   }
 
-  const RESPONSE_REQUIRED_STATUSES = ['Interested', 'Not Interested', 'Not interested', 'Meeting Done - Not Interested']
-
   const handleStatusChange = async (leadId, newStatus) => {
-    const tpNum = getTouchpointNumber(newStatus)
+    const tpNum = touchpointNumberOf(stages, newStatus)
     if (tpNum !== null) {
       setTpModal({ open: true, leadId, number: tpNum, status: newStatus, modalKey: Date.now() })
       return
     }
-    if (RESPONSE_REQUIRED_STATUSES.includes(newStatus)) {
+    if (needsResponse(stages, newStatus)) {
       setResponseModal({ open: true, leadId, status: newStatus, modalKey: Date.now() })
       return
     }
@@ -467,6 +460,7 @@ export default function OutreachHome() {
                 onStatusChange={handleStatusChange}
                 showSpecialistColumn={showSpecialistColumn}
                 stages={stages}
+                maxTouchpoints={touchpointSlots(stages, maxTouchpoints)}
               />
             )}
           </>
@@ -495,7 +489,7 @@ export default function OutreachHome() {
           specialists={specialists}
           industries={industries}
           stages={stages}
-          maxTouchpoints={maxTouchpoints}
+          maxTouchpoints={touchpointSlots(stages, maxTouchpoints)}
         />
       )}
 

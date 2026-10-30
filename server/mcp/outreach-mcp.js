@@ -70,13 +70,22 @@ function buildServer(user) {
     return match.name;
   }
 
+  // The stage for touchpoint N is the Nth touchpoint-type stage, whatever it's named
+  async function touchpointStage(number) {
+    const stages = await api('GET', '/pipeline-stages');
+    const match = stages.find(s => s.touchpoint_number === number && s.active !== 0);
+    if (!match) throw new Error(`No pipeline stage is set up for touchpoint ${number}`);
+    return match.name;
+  }
+
   const server = new McpServer({ name: 'infinix-outreach-crm', version: '1.0.0' }, {
     instructions:
       `Outreach CRM for ${user.name} (${user.role === 'admin' ? 'admin — sees all leads' : 'team member — sees only their own leads'}). ` +
       'Call list_pipeline_stages / list_specialists / list_industries to get valid names and IDs before creating or moving leads. ' +
       'Use search_leads to find a lead ID by company, contact, email or phone. ' +
-      'Moving a lead to a "Touchpoint N" stage should go through log_touchpoint; moving it to Interested / Not Interested / ' +
-      'Meeting Done - Not Interested should go through log_response, so the message is recorded alongside the stage change.',
+      'Each stage has a type. Moving a lead to a "touchpoint" stage should go through log_touchpoint; moving it to an ' +
+      '"interested", "not_interested" or "meeting_lost" stage should go through log_response, so the message is recorded ' +
+      'alongside the stage change.',
   });
 
   const leadFields = {
@@ -106,7 +115,7 @@ function buildServer(user) {
     annotations: { readOnlyHint: true },
   }, tool(async () => (await api('GET', '/pipeline-stages'))
     .filter(s => s.active !== 0)
-    .map(s => ({ id: s.id, name: s.name, order: s.order_index }))));
+    .map(s => ({ id: s.id, name: s.name, order: s.order_index, type: s.stage_type, touchpoint_number: s.touchpoint_number || undefined }))));
 
   server.registerTool('list_specialists', {
     title: 'List specialists',
@@ -195,7 +204,7 @@ function buildServer(user) {
 
   server.registerTool('create_lead', {
     title: 'Create lead',
-    description: 'Create a new lead in the "New Lead" stage. Rejected if another lead already has the same email, phone or Facebook page.',
+    description: 'Create a new lead in the first "new" stage. Rejected if another lead already has the same email, phone or Facebook page.',
     inputSchema: {
       ...leadFields,
       company_name: z.string(),
@@ -229,7 +238,7 @@ function buildServer(user) {
   server.registerTool('move_lead_stage', {
     title: 'Move lead to stage',
     description: 'Change a lead\'s pipeline stage (recorded in status history). ' +
-      'Prefer log_touchpoint for Touchpoint stages and log_response for Interested / Not Interested stages.',
+      'Prefer log_touchpoint for touchpoint-type stages and log_response for interested / not_interested / meeting_lost stages.',
     inputSchema: {
       lead_id: z.number().int(),
       stage: z.string().describe('Exact stage name from list_pipeline_stages'),
@@ -246,7 +255,7 @@ function buildServer(user) {
 
   server.registerTool('log_touchpoint', {
     title: 'Log touchpoint',
-    description: 'Record an outreach touchpoint (creates or overwrites touchpoint N) and, by default, move the lead to the "Touchpoint N" stage.',
+    description: 'Record an outreach touchpoint (creates or overwrites touchpoint N) and, by default, move the lead to the stage for touchpoint N (see touchpoint_number in list_pipeline_stages).',
     inputSchema: {
       lead_id: z.number().int(),
       touchpoint_number: z.number().int().min(1),
@@ -260,6 +269,8 @@ function buildServer(user) {
     },
   }, tool(async a => {
     await loadLead(a.lead_id);
+    // Resolve the stage first so a missing stage doesn't leave a half-done write
+    const stage = a.move_to_stage !== false ? await touchpointStage(a.touchpoint_number) : null;
     const touchpoint = await api('PUT', `/leads/${a.lead_id}/touchpoints/${a.touchpoint_number}`, {
       body: {
         date: a.date || new Date().toISOString().slice(0, 10),
@@ -267,7 +278,7 @@ function buildServer(user) {
       },
     });
     const body = {};
-    if (a.move_to_stage !== false) body.status = await assertStage(`Touchpoint ${a.touchpoint_number}`);
+    if (stage) body.status = stage;
     if (a.next_followup_date !== undefined) body.next_followup_date = a.next_followup_date;
     let lead = null;
     if (Object.keys(body).length) lead = await api('PATCH', `/leads/${a.lead_id}`, { body: { ...body, performed_by } });

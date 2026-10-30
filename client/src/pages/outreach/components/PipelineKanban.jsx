@@ -1,25 +1,6 @@
 import { useState, useRef } from 'react'
 import { fmtDate as formatDate, todayLocal } from '../../../utils/dates'
-
-const DEFAULT_STATUS_COLORS = {
-  'New Lead':                        { bg: 'rgba(87,94,207,0.15)',  color: '#575ECF',  dot: '#575ECF'  },
-  'Touchpoint 1':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6',  dot: '#14b8a6'  },
-  'Touchpoint 2':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6',  dot: '#14b8a6'  },
-  'Touchpoint 3':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6',  dot: '#14b8a6'  },
-  'Touchpoint 4':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6',  dot: '#14b8a6'  },
-  'Touchpoint 5':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6',  dot: '#14b8a6'  },
-  'Contacted':                       { bg: 'rgba(138,134,128,0.15)', color: '#8a8680', dot: '#8a8680'  },
-  'Responded':                       { bg: 'rgba(59,130,246,0.15)',  color: '#3b82f6', dot: '#3b82f6'  },
-  'Interested':                      { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7', dot: '#a855f7'  },
-  'Appointment Booked':              { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b', dot: '#f59e0b'  },
-  'No Show':                         { bg: 'rgba(239,68,68,0.15)',   color: '#ef4444', dot: '#ef4444'  },
-  'Meeting Done - Not Interested':   { bg: 'rgba(107,114,128,0.15)', color: '#6b7280', dot: '#6b7280'  },
-  'Started Trial':                   { bg: 'rgba(6,182,212,0.15)',   color: '#06b6d4', dot: '#06b6d4'  },
-  'Closed / Booked as Client':       { bg: 'rgba(34,197,94,0.15)',   color: '#22c55e', dot: '#22c55e'  },
-  'Disqualified / Dead':             { bg: 'rgba(55,65,81,0.2)',     color: '#6b7280', dot: '#374151'  },
-}
-
-const FALLBACK_COLOR = { bg: 'rgba(138,134,128,0.15)', color: '#8a8680', dot: '#8a8680' }
+import { stageColor, isClosedStatus } from '../stageTypes'
 
 const CHANNEL_COLORS = {
   'LinkedIn': '#0a66c2', 'Email': '#575ECF', 'WhatsApp': '#25d366',
@@ -27,11 +8,9 @@ const CHANNEL_COLORS = {
   'Website Form': '#06b6d4', 'Other': '#6b7280',
 }
 
-const NOT_OVERDUE_STATUSES = ['Closed / Booked as Client', 'Disqualified / Dead', 'Meeting Done - Not Interested', 'Not Interested', 'Not interested']
-
-function isOverdue(lead) {
+function isOverdue(lead, stages) {
   if (!lead.next_followup_date) return false
-  if (NOT_OVERDUE_STATUSES.includes(lead.status)) return false
+  if (isClosedStatus(stages, lead.status)) return false
   return lead.next_followup_date < todayLocal()
 }
 
@@ -56,9 +35,9 @@ function ChannelPills({ channels }) {
   )
 }
 
-function KanbanCard({ lead, onLeadClick, showSpecialistColumn, maxTouchpoints }) {
+function KanbanCard({ lead, stages, onLeadClick, showSpecialistColumn, maxTouchpoints }) {
   const dragStarted = useRef(false)
-  const overdue = isOverdue(lead)
+  const overdue = isOverdue(lead, stages)
   const days = overdue ? daysOverdue(lead.next_followup_date) : 0
   const followupColor = !overdue ? '#c5c1b9' : days >= 3 ? '#ef4444' : '#f59e0b'
 
@@ -158,7 +137,7 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
     <div className="overflow-x-auto pb-4" style={{ minHeight: 400 }}>
       <div className="flex gap-3" style={{ minWidth: (stageNames.length + (otherLeads.length ? 1 : 0)) * 236 + 'px' }}>
         {stageNames.map(status => {
-          const sc = DEFAULT_STATUS_COLORS[status] || FALLBACK_COLOR
+          const sc = stageColor(stages, status)
           const colLeads = leadsByStatus[status] || []
           const isDragTarget = dragOverStatus === status
 
@@ -197,6 +176,7 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
                     <KanbanCard
                       key={lead.id}
                       lead={lead}
+                      stages={stages}
                       onLeadClick={onLeadClick}
                       showSpecialistColumn={showSpecialistColumn}
                       maxTouchpoints={maxTouchpoints}
@@ -214,7 +194,7 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
         })}
 
         {/* Leads whose stage no longer exists — open one to move it, or remap them in Admin */}
-        {!loading && otherLeads.length > 0 && (
+        {!loading && stages?.length > 0 && otherLeads.length > 0 && (
           <div
             className="flex-shrink-0 rounded-xl flex flex-col"
             style={{ width: 228, backgroundColor: '#1f1f1f', border: '1px dashed rgba(245,158,11,0.4)', minHeight: 200 }}
@@ -232,6 +212,7 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
                   <p className="text-[10px] px-1 mb-1 truncate" style={{ color: '#f59e0b' }}>{lead.status}</p>
                   <KanbanCard
                     lead={lead}
+                    stages={stages}
                     onLeadClick={onLeadClick}
                     showSpecialistColumn={showSpecialistColumn}
                     maxTouchpoints={maxTouchpoints}

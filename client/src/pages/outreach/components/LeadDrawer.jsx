@@ -10,488 +10,26 @@ import {
   createLead,
   createLeadResponse,
   deleteLeadResponse,
-  getCustomFields,
-  createCustomField,
+  getFields,
   updateCustomField,
-  deleteCustomField,
 } from '../../../utils/outreachApi'
 import TouchpointQuickModal from './TouchpointQuickModal'
 import ResponseQuickModal from './ResponseQuickModal'
 import { fmtDate, fmtDateTime, todayLocal } from '../../../utils/dates'
-import ImagePasteZone from '../../../components/ImagePasteZone'
-
-function getTouchpointNumber(status) {
-  const m = status && status.match(/^Touchpoint (\d+)$/)
-  return m ? parseInt(m[1]) : null
-}
-
-// Bare domains like "example.com" would otherwise resolve as a relative link
-function normalizeUrl(url) {
-  if (!url) return ''
-  const trimmed = url.trim()
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
-}
-
-const CUSTOM_FIELD_TYPES = [
-  { value: 'text', label: 'Text', icon: 'T' },
-  { value: 'link', label: 'Link', icon: '🔗' },
-  { value: 'date', label: 'Date', icon: '📅' },
-  { value: 'dropdown', label: 'Dropdown', icon: '▾' },
-  { value: 'image', label: 'Image', icon: '🖼' },
-]
-
-// Sizes a freshly-created field starts at before anyone drags it
-const CUSTOM_FIELD_DEFAULT_SIZE = {
-  text: { width: 260, height: 80 },
-  link: { width: 320, height: 42 },
-  date: { width: 200, height: 42 },
-  dropdown: { width: 260, height: 42 },
-  image: { width: 320, height: 220 },
-}
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const STATUS_COLORS = {
-  'New Lead':                        { bg: 'rgba(87,94,207,0.15)',  color: '#575ECF' },
-  'Touchpoint 1':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
-  'Touchpoint 2':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
-  'Touchpoint 3':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
-  'Touchpoint 4':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
-  'Touchpoint 5':                    { bg: 'rgba(20,184,166,0.15)', color: '#14b8a6' },
-  'Contacted':                       { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' },
-  'Responded':                       { bg: 'rgba(59,130,246,0.15)',  color: '#3b82f6' },
-  'Interested':                      { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7' },
-  'Appointment Booked':              { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b' },
-  'No Show':                         { bg: 'rgba(239,68,68,0.15)',   color: '#ef4444' },
-  'Meeting Done - Not Interested':   { bg: 'rgba(107,114,128,0.15)', color: '#6b7280' },
-  'Started Trial':                   { bg: 'rgba(6,182,212,0.15)',   color: '#06b6d4' },
-  'Closed / Booked as Client':       { bg: 'rgba(34,197,94,0.15)',   color: '#22c55e' },
-  'Disqualified / Dead':             { bg: 'rgba(55,65,81,0.2)',     color: '#6b7280' },
-}
+import LeadFields, { inputClass, selectStyles, isEmptyFieldValue } from './LeadFields'
+import { stageColor, touchpointNumberOf, touchpointStageName, needsResponse } from '../stageTypes'
 
 const CHANNELS = [
   'LinkedIn', 'Email', 'WhatsApp', 'Facebook',
   'Instagram', 'SMS', 'Website Form', 'Other',
 ]
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const inputClass =
-  'w-full rounded-lg px-3 py-2 text-sm focus:outline-none bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#575ECF] transition-colors'
-
-const selectStyles = {
-  control: (base, { isFocused }) => ({
-    ...base,
-    backgroundColor: '#2a2a2a',
-    borderColor: isFocused ? '#575ECF' : 'rgba(255,255,255,0.1)',
-    boxShadow: 'none',
-    minHeight: '36px',
-    fontSize: '13px',
-    '&:hover': { borderColor: isFocused ? '#575ECF' : 'rgba(255,255,255,0.2)' },
-  }),
-  menu: (base) => ({ ...base, backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', zIndex: 100 }),
-  menuList: (base) => ({ ...base, padding: '4px' }),
-  option: (base, { isFocused, isSelected }) => ({
-    ...base,
-    backgroundColor: isSelected ? '#575ECF' : isFocused ? 'rgba(87,94,207,0.15)' : 'transparent',
-    color: '#c5c1b9',
-    fontSize: '13px',
-    borderRadius: '6px',
-    cursor: 'pointer',
-  }),
-  singleValue: (base) => ({ ...base, color: '#c5c1b9' }),
-  placeholder: (base) => ({ ...base, color: '#8a8680' }),
-  input: (base) => ({ ...base, color: '#c5c1b9' }),
-  indicatorSeparator: () => ({ display: 'none' }),
-  dropdownIndicator: (base) => ({ ...base, color: '#8a8680', padding: '0 8px' }),
-  clearIndicator: (base) => ({ ...base, color: '#8a8680' }),
-  multiValue: (base) => ({ ...base, backgroundColor: 'rgba(87,94,207,0.25)', borderRadius: '4px' }),
-  multiValueLabel: (base) => ({ ...base, color: '#c5c1b9', fontSize: '12px', padding: '1px 4px' }),
-  multiValueRemove: (base) => ({ ...base, color: '#8a8680', borderRadius: '0 4px 4px 0', ':hover': { backgroundColor: 'rgba(239,68,68,0.2)', color: '#ef4444' } }),
-}
-
-// ─── Helper: SavedIndicator ────────────────────────────────────────────────────
-
-function SavedIndicator({ show }) {
-  if (!show) return null
-  return (
-    <span style={{ color: '#22c55e', fontSize: '11px', marginLeft: '6px', transition: 'opacity 0.3s' }}>
-      Saved ✓
-    </span>
-  )
-}
-
-// ─── Sub-component: LinkField (text input + open-in-new-tab icon) ───────────
-
-function LinkField({ label, value, savedFlag, placeholder, fullWidth = true, onCommit }) {
-  return (
-    <div style={fullWidth ? { gridColumn: '1 / -1' } : undefined}>
-      <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        {label} <SavedIndicator show={savedFlag} />
-      </label>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <input
-          key={value}
-          type="text"
-          className={inputClass}
-          defaultValue={value || ''}
-          onBlur={e => onCommit(e.target.value)}
-          placeholder={placeholder}
-          style={{ flex: 1 }}
-        />
-        {value && (
-          <a
-            href={normalizeUrl(value)}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={`Open ${label}`}
-            style={{ color: '#575ECF', fontSize: '16px', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}
-          >
-            ↗
-          </a>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Sub-component: CustomFieldValueInput ────────────────────────────────────
-
-function CustomFieldValueInput({ field, value, onCommit }) {
-  const { field_type, label, options = [] } = field
-
-  if (field_type === 'date') {
-    return (
-      <input
-        key={value}
-        type="date"
-        className={inputClass}
-        defaultValue={value ? value.slice(0, 10) : ''}
-        onBlur={e => onCommit(e.target.value || null)}
-        style={{ height: '100%', boxSizing: 'border-box' }}
-      />
-    )
-  }
-
-  if (field_type === 'dropdown') {
-    const opts = options.map(o => ({ value: o, label: o }))
-    return (
-      <Select
-        styles={{
-          ...selectStyles,
-          control: (base, state) => ({ ...selectStyles.control(base, state), height: '100%', minHeight: '38px' }),
-          menuPortal: base => ({ ...base, zIndex: 9999 }),
-        }}
-        menuPortalTarget={typeof document !== 'undefined' ? document.body : undefined}
-        options={opts}
-        value={opts.find(o => o.value === value) || null}
-        onChange={opt => onCommit(opt?.value || null)}
-        placeholder="Select…"
-        isClearable
-      />
-    )
-  }
-
-  if (field_type === 'image') {
-    return (
-      <ImagePasteZone
-        value={value || null}
-        onChange={v => onCommit(v)}
-        maxHeight={400}
-      />
-    )
-  }
-
-  if (field_type === 'link') {
-    return (
-      <LinkField
-        label={label}
-        value={value}
-        fullWidth={false}
-        placeholder="https://…"
-        onCommit={onCommit}
-      />
-    )
-  }
-
-  return (
-    <textarea
-      key={value}
-      className={inputClass}
-      defaultValue={value || ''}
-      onBlur={e => onCommit(e.target.value || null)}
-      placeholder="—"
-      style={{ width: '100%', height: '100%', boxSizing: 'border-box', resize: 'none' }}
-    />
-  )
-}
-
-// ─── Sub-component: ResizableFieldBox (native drag-to-resize, corner handle) ─
-
-function ResizableFieldBox({ field, onResizeEnd, children }) {
-  const ref = useRef(null)
-  const defaults = CUSTOM_FIELD_DEFAULT_SIZE[field.field_type] || CUSTOM_FIELD_DEFAULT_SIZE.text
-  const width = field.width_px || defaults.width
-  const height = field.height_px || defaults.height
-
-  const handleMouseUp = () => {
-    const el = ref.current
-    if (!el) return
-    const w = Math.round(el.offsetWidth)
-    const h = Math.round(el.offsetHeight)
-    if (w !== width || h !== height) onResizeEnd(w, h)
-  }
-
-  return (
-    <div
-      ref={ref}
-      onMouseUp={handleMouseUp}
-      title="Drag the bottom-right corner to resize"
-      style={{
-        width: `${width}px`,
-        height: `${height}px`,
-        minWidth: '140px',
-        minHeight: '38px',
-        maxWidth: '100%',
-        resize: 'both',
-        overflow: 'auto',
-        boxSizing: 'border-box',
-        border: '1px dashed rgba(255,255,255,0.1)',
-        borderRadius: '8px',
-        padding: '3px',
-      }}
-    >
-      {children}
-    </div>
-  )
-}
-
-// ─── Sub-component: CustomFieldsSection (render + save custom field values) ──
-
-function CustomFieldsSection({ fields, values, saved = {}, onSaveField, onManageClick, onResizeField }) {
-  return (
-    <div style={{ gridColumn: '1 / -1' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-        <span style={{ fontSize: '11px', color: '#8a8680', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-          Custom Fields
-        </span>
-        {onManageClick && (
-          <button
-            type="button"
-            onClick={onManageClick}
-            style={{
-              background: 'none', border: 'none', color: '#575ECF', cursor: 'pointer',
-              fontSize: '12px', fontWeight: 500, padding: '2px 0',
-            }}
-          >
-            ⚙ Manage Fields
-          </button>
-        )}
-      </div>
-
-      {fields.length === 0 && (
-        <div style={{ color: '#555', fontSize: '12px', fontStyle: 'italic', marginBottom: '8px' }}>
-          {onManageClick
-            ? 'No custom fields yet — click "Manage Fields" to add one (text, link, date, dropdown, or image).'
-            : 'No custom fields yet — an admin can add them.'}
-        </div>
-      )}
-
-      {fields.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-start' }}>
-          {fields.map(f => (
-            <div key={f.id}>
-              {f.field_type !== 'link' && (
-                <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  {f.label} <SavedIndicator show={saved[`custom_${f.field_key}`]} />
-                </label>
-              )}
-              <ResizableFieldBox field={f} onResizeEnd={(w, h) => onResizeField(f, w, h)}>
-                <CustomFieldValueInput
-                  field={f}
-                  value={values?.[f.field_key]}
-                  onCommit={val => onSaveField(f.field_key, val)}
-                />
-              </ResizableFieldBox>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px', marginBottom: '4px' }} />
-    </div>
-  )
-}
-
-// ─── Sub-component: ManageCustomFieldsModal ──────────────────────────────────
-
-function ManageCustomFieldsModal({ fields, onClose, onChanged }) {
-  const [list, setList] = useState(fields)
-  const [adding, setAdding] = useState(false)
-  const [editingId, setEditingId] = useState(null)
-  const [form, setForm] = useState({ label: '', field_type: 'text', options: [], width: 'half' })
-  const [optionInput, setOptionInput] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => { setList(fields) }, [fields])
-
-  const resetForm = () => { setForm({ label: '', field_type: 'text', options: [], width: 'half' }); setOptionInput(''); setAdding(false); setEditingId(null) }
-
-  const startEdit = (f) => {
-    setEditingId(f.id)
-    setForm({ label: f.label, field_type: f.field_type, options: f.options || [], width: f.width || 'half' })
-    setAdding(true)
-  }
-
-  const addOption = () => {
-    if (!optionInput.trim()) return
-    if (!form.options.includes(optionInput.trim())) setForm(p => ({ ...p, options: [...p.options, optionInput.trim()] }))
-    setOptionInput('')
-  }
-
-  const save = async () => {
-    if (!form.label.trim()) return
-    setSaving(true)
-    try {
-      if (editingId) {
-        const updated = await updateCustomField(editingId, form)
-        setList(prev => prev.map(f => f.id === editingId ? updated : f))
-        toast.success('Field updated')
-      } else {
-        const created = await createCustomField(form)
-        setList(prev => [...prev, created])
-        toast.success('Field added')
-      }
-      onChanged()
-      resetForm()
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save field')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const del = async (f) => {
-    if (!confirm(`Delete field "${f.label}"? All stored values will be lost.`)) return
-    try {
-      await deleteCustomField(f.id)
-      setList(prev => prev.filter(x => x.id !== f.id))
-      toast.success('Field deleted')
-      onChanged()
-    } catch {
-      toast.error('Failed to delete field')
-    }
-  }
-
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.7)' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '24px', width: '440px', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <h3 style={{ color: '#c5c1b9', fontSize: '16px', fontWeight: 600, margin: 0 }}>Manage Custom Fields</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8a8680', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
-        </div>
-
-        {list.length > 0 && (
-          <div style={{ marginBottom: '16px' }}>
-            {list.map(f => (
-              <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#2a2a2a', borderRadius: '8px', marginBottom: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                  <span style={{ fontSize: '14px', flexShrink: 0 }}>{CUSTOM_FIELD_TYPES.find(t => t.value === f.field_type)?.icon}</span>
-                  <span style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.label}</span>
-                  <span style={{ color: '#8a8680', fontSize: '11px', flexShrink: 0 }}>{CUSTOM_FIELD_TYPES.find(t => t.value === f.field_type)?.label}</span>
-                  <span style={{ color: '#555', fontSize: '10px', flexShrink: 0 }}>
-                    {Math.round(f.width_px || CUSTOM_FIELD_DEFAULT_SIZE[f.field_type]?.width || 260)}×{Math.round(f.height_px || CUSTOM_FIELD_DEFAULT_SIZE[f.field_type]?.height || 42)}px
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                  <button onClick={() => startEdit(f)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '4px 10px', color: '#c5c1b9', cursor: 'pointer', fontSize: '11px' }}>Edit</button>
-                  <button onClick={() => del(f)} style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '6px', padding: '4px 10px', color: '#ef4444', cursor: 'pointer', fontSize: '11px' }}>Delete</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!adding ? (
-          <button
-            onClick={() => setAdding(true)}
-            style={{ width: '100%', background: 'rgba(87,94,207,0.1)', border: '1px dashed rgba(87,94,207,0.4)', borderRadius: '8px', padding: '10px 0', color: '#575ECF', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}
-          >
-            + Add New Field
-          </button>
-        ) : (
-          <div style={{ background: '#1b1b1b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '16px' }}>
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Field Label</label>
-              <input className={inputClass} value={form.label} onChange={e => setForm(p => ({ ...p, label: e.target.value }))} placeholder="e.g. LinkedIn Bio" />
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Field Type</label>
-              <select
-                value={form.field_type}
-                onChange={e => setForm(p => ({ ...p, field_type: e.target.value, options: [] }))}
-                className={inputClass}
-                style={{ cursor: 'pointer' }}
-              >
-                {CUSTOM_FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.icon} {t.label}</option>)}
-              </select>
-            </div>
-
-            <p style={{ color: '#555', fontSize: '11px', margin: '0 0 10px' }}>
-              💡 Size isn't fixed — once added, drag the bottom-right corner of the field to resize it.
-            </p>
-
-            {form.field_type === 'dropdown' && (
-              <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Options</label>
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                  <input
-                    className={inputClass}
-                    value={optionInput}
-                    onChange={e => setOptionInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addOption() } }}
-                    placeholder="Type an option and press Enter"
-                    style={{ flex: 1 }}
-                  />
-                  <button type="button" onClick={addOption} style={{ background: '#575ECF', border: 'none', borderRadius: '8px', padding: '0 16px', color: '#fff', cursor: 'pointer' }}>Add</button>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {form.options.map(o => (
-                    <span key={o} style={{ background: 'rgba(87,94,207,0.2)', color: '#a5aaee', borderRadius: '20px', padding: '3px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {o}
-                      <button type="button" onClick={() => setForm(p => ({ ...p, options: p.options.filter(x => x !== o) }))} style={{ background: 'none', border: 'none', color: '#8a8680', cursor: 'pointer', padding: 0, fontSize: '14px', lineHeight: 1 }}>×</button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '14px' }}>
-              <button onClick={resetForm} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '7px', padding: '7px 14px', color: '#8a8680', cursor: 'pointer', fontSize: '13px' }}>Cancel</button>
-              <button
-                onClick={save}
-                disabled={!form.label.trim() || saving}
-                style={{ background: '#575ECF', border: 'none', borderRadius: '7px', padding: '7px 18px', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: (!form.label.trim() || saving) ? 0.6 : 1, fontSize: '13px' }}
-              >
-                {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Field'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // ─── Sub-component: StatusBadge with dropdown ────────────────────────────────
 
 function StatusBadge({ status, onChange, stages = [] }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
-  const colors = STATUS_COLORS[status] || { bg: 'rgba(138,134,128,0.15)', color: '#8a8680' }
+  const colors = stageColor(stages, status)
 
   useEffect(() => {
     if (!open) return
@@ -534,8 +72,9 @@ function StatusBadge({ status, onChange, stages = [] }) {
           minWidth: '240px',
           boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
         }}>
-          {stages.map(s => {
-            const c = STATUS_COLORS[s] || { color: '#8a8680' }
+          {stages.map(stage => {
+            const s = stage.name
+            const c = stageColor(stages, s)
             return (
               <button
                 key={s}
@@ -1014,6 +553,15 @@ function ResponsesSection({ leadId, initialResponses = [] }) {
   )
 }
 
+function FieldsLoadError({ onRetry }) {
+  return (
+    <div style={{ color: '#ef4444', fontSize: '13px' }}>
+      Couldn't load the lead form.{' '}
+      <button type="button" onClick={onRetry} style={{ color: '#575ECF', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Retry</button>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function LeadDrawer({
@@ -1039,51 +587,39 @@ export default function LeadDrawer({
   const [deleting, setDeleting] = useState(false)
   const [tpQuickModal, setTpQuickModal] = useState({ open: false, number: null, status: null, modalKey: 0 })
   const [responseModal, setResponseModal] = useState({ open: false, status: null, modalKey: 0 })
-  const [customFields, setCustomFields] = useState([])
-  const [manageFieldsOpen, setManageFieldsOpen] = useState(false)
+  // Form layout (built-in + custom fields, in admin-configured order); null until loaded
+  const [fields, setFields] = useState(null)
+  const [fieldsError, setFieldsError] = useState(false)
 
-  // Create form state
+  // Create form state: built-in values keyed like the lead columns, custom values nested
   const [createForm, setCreateForm] = useState({
-    company_name: '',
-    contact_name: '',
-    job_title: '',
-    website: '',
-    location: '',
-    email: '',
-    phone: '',
-    fb_page_url: '',
-    ig_url: '',
-    linkedin_url: '',
     specialist_ids: defaultSpecialistId ? [defaultSpecialistId] : [],
-    next_followup: '',
-    source_url: '',
-    source_image: null,
     custom_fields: {},
   })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState(null)
 
-  const saveCreateCustomField = (fieldKey, value) => {
-    setCreateForm(v => ({ ...v, custom_fields: { ...v.custom_fields, [fieldKey]: value } }))
+  const commitCreateField = (field, value) => {
+    setCreateError(null)
+    if (field.is_builtin) {
+      setCreateForm(v => ({ ...v, [field.field_key]: value }))
+    } else {
+      setCreateForm(v => ({ ...v, custom_fields: { ...v.custom_fields, [field.field_key]: value } }))
+    }
   }
 
-  // Fetch custom field definitions once
-  useEffect(() => {
-    getCustomFields().then(setCustomFields).catch(() => {})
-  }, [])
-
-  const refreshCustomFields = () => {
-    getCustomFields().then(setCustomFields).catch(() => {})
+  const loadFields = () => {
+    setFieldsError(false)
+    getFields().then(setFields).catch(() => setFieldsError(true))
   }
+  useEffect(loadFields, [])
 
-  // Field definitions (including saved sizes) are shared by everyone, so only admins persist them
+  // Field definitions are shared by everyone, so only admins can change them
   const canManageFields = isAdmin()
-  const resizeCustomField = (field, width_px, height_px) => {
-    setCustomFields(prev => prev.map(f => f.id === field.id ? { ...f, width_px, height_px } : f))
+  const resizeFieldHeight = (field, height_px) => {
+    setFields(prev => prev.map(f => f.id === field.id ? { ...f, height_px } : f))
     if (!canManageFields) return
-    updateCustomField(field.id, { width_px, height_px }).catch(() => {
-      toast.error('Failed to save field size')
-    })
+    updateCustomField(field.id, { height_px }).catch(() => toast.error('Failed to save field size'))
   }
 
   // Animate in
@@ -1140,20 +676,44 @@ export default function LeadDrawer({
       }))
       markSaved(`custom_${fieldKey}`)
       if (onLeadUpdated) onLeadUpdated(updated)
-    } catch {
-      toast.error('Failed to save')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save')
     }
+  }
+
+  const saveSpecialists = (ids) => {
+    const names = ids.map(id => specialists.find(s => s.id === id)?.name).filter(Boolean)
+    setLead(prev => ({
+      ...prev,
+      specialists: ids.map((id, i) => ({ id, name: names[i] })),
+      specialist_id: ids[0] || null,
+      specialist_name: names[0] || null,
+      specialist_names: names.join(', '),
+    }))
+    updateLead(leadId, { specialist_ids: ids, performed_by: getUser()?.name || null })
+      .then(updated => {
+        setLead(prev => ({ ...prev, ...updated }))
+        markSaved('specialist_ids')
+        if (onLeadUpdated) onLeadUpdated(updated)
+      })
+      .catch(err => toast.error(err.response?.data?.error || 'Failed to save specialists'))
+  }
+
+  const commitEditField = (field, value) => {
+    if (!field.is_builtin) return saveCustomField(field.field_key, value)
+    if (field.field_key === 'specialist_ids') return saveSpecialists(value)
+    return saveField(field.field_key, value === '' ? null : value)
   }
 
   // ── Status change ────────────────────────────────────────────────────────────
 
   const handleStatusChange = async (newStatus) => {
-    const tpNum = getTouchpointNumber(newStatus)
+    const tpNum = touchpointNumberOf(stages, newStatus)
     if (tpNum !== null) {
       setTpQuickModal({ open: true, number: tpNum, status: newStatus, modalKey: Date.now() })
       return
     }
-    if (['Interested', 'Not Interested', 'Not interested', 'Meeting Done - Not Interested'].includes(newStatus)) {
+    if (needsResponse(stages, newStatus)) {
       setResponseModal({ open: true, status: newStatus, modalKey: Date.now() })
       return
     }
@@ -1199,7 +759,11 @@ export default function LeadDrawer({
   }
 
   const handleTpStageChange = async (number) => {
-    const stageName = `Touchpoint ${number}`
+    const stageName = touchpointStageName(stages, number)
+    if (!stageName) {
+      toast.error(`No pipeline stage is set up for touchpoint ${number}`)
+      return
+    }
     try {
       const updated = await updateLead(leadId, { status: stageName, performed_by: getUser()?.name || null })
       setLead(prev => ({ ...prev, ...updated }))
@@ -1215,34 +779,23 @@ export default function LeadDrawer({
   const handleCreate = async (e) => {
     e.preventDefault()
     setCreateError(null)
-    if (!createForm.company_name.trim()) {
-      toast.error('Company name is required')
-      return
-    }
-    if (!createForm.specialist_ids.length) {
-      toast.error('Please assign at least one specialist')
-      return
+    for (const field of fields || []) {
+      const value = field.is_builtin ? createForm[field.field_key] : createForm.custom_fields[field.field_key]
+      if (field.required && isEmptyFieldValue(value)) {
+        toast.error(`${field.label} is required`)
+        return
+      }
     }
     setCreating(true)
     try {
-      const payload = {
-        company_name: createForm.company_name.trim(),
-        contact_name: createForm.contact_name || undefined,
-        job_title: createForm.job_title || undefined,
-        website: createForm.website || undefined,
-        location: createForm.location || undefined,
-        email: createForm.email || undefined,
-        phone: createForm.phone || undefined,
-        fb_page_url: createForm.fb_page_url || undefined,
-        ig_url: createForm.ig_url || undefined,
-        linkedin_url: createForm.linkedin_url || undefined,
-        specialist_ids: createForm.specialist_ids,
-        next_followup_date: createForm.next_followup || undefined,
-        source_url: createForm.source_url || undefined,
-        source_image: createForm.source_image || undefined,
-        custom_fields: Object.keys(createForm.custom_fields).length > 0 ? createForm.custom_fields : undefined,
-        performed_by: getUser()?.name || undefined,
+      const payload = { performed_by: getUser()?.name || undefined }
+      for (const field of fields || []) {
+        if (!field.is_builtin) continue
+        const value = createForm[field.field_key]
+        if (!isEmptyFieldValue(value)) payload[field.field_key] = typeof value === 'string' ? value.trim() : value
       }
+      const custom = Object.fromEntries(Object.entries(createForm.custom_fields).filter(([, v]) => !isEmptyFieldValue(v)))
+      if (Object.keys(custom).length > 0) payload.custom_fields = custom
       const newLead = await createLead(payload)
       toast.success('Lead created')
       onSaved()
@@ -1294,7 +847,6 @@ export default function LeadDrawer({
 
   // ── Derived select options ────────────────────────────────────────────────────
 
-  const specialistOptions = specialists.map(s => ({ value: s.id, label: s.name }))
 
   // ── Touchpoints ───────────────────────────────────────────────────────────────
 
@@ -1356,189 +908,23 @@ export default function LeadDrawer({
             <form onSubmit={handleCreate} style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-                {/* Custom Fields — top of the form */}
-                <CustomFieldsSection
-                  fields={customFields}
-                  values={createForm.custom_fields}
-                  onSaveField={saveCreateCustomField}
-                  onManageClick={canManageFields ? () => setManageFieldsOpen(true) : null}
-                  onResizeField={resizeCustomField}
-                />
-
-                {/* Company Name */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>
-                    Company Name <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={createForm.company_name}
-                    onChange={e => setCreateForm(v => ({ ...v, company_name: e.target.value }))}
-                    placeholder="Acme Corp"
-                    required
+                {fieldsError ? (
+                  <FieldsLoadError onRetry={loadFields} />
+                ) : !fields ? (
+                  <span style={{ color: '#8a8680', fontSize: '13px' }}>Loading form…</span>
+                ) : (
+                  <LeadFields
+                    fields={fields}
+                    values={createForm}
+                    customValues={createForm.custom_fields}
+                    onCommit={commitCreateField}
+                    live
+                    specialists={specialists}
+                    industries={industries}
+                    canManage={canManageFields}
+                    onResizeHeight={resizeFieldHeight}
                   />
-                </div>
-
-                {/* Website */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Website</label>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={createForm.website}
-                    onChange={e => setCreateForm(v => ({ ...v, website: e.target.value }))}
-                    placeholder="example.com or https://example.com"
-                  />
-                </div>
-
-                {/* Contact Name */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Contact Name</label>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={createForm.contact_name}
-                    onChange={e => setCreateForm(v => ({ ...v, contact_name: e.target.value }))}
-                    placeholder="Jane Smith"
-                  />
-                </div>
-
-                {/* Job Title */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Job Title</label>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={createForm.job_title}
-                    onChange={e => setCreateForm(v => ({ ...v, job_title: e.target.value }))}
-                    placeholder="CEO"
-                  />
-                </div>
-
-                {/* Location */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Location</label>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={createForm.location}
-                    onChange={e => setCreateForm(v => ({ ...v, location: e.target.value }))}
-                    placeholder="New York, NY"
-                  />
-                </div>
-
-                {/* Email */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Email</label>
-                  <input
-                    type="email"
-                    className={inputClass}
-                    value={createForm.email}
-                    onChange={e => { setCreateForm(v => ({ ...v, email: e.target.value })); setCreateError(null) }}
-                    placeholder="contact@example.com"
-                  />
-                </div>
-
-                {/* Phone */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Phone</label>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={createForm.phone}
-                    onChange={e => { setCreateForm(v => ({ ...v, phone: e.target.value })); setCreateError(null) }}
-                    placeholder="+1 (555) 000-0000"
-                  />
-                </div>
-
-                {/* FB Page URL */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Facebook Page URL</label>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={createForm.fb_page_url}
-                    onChange={e => { setCreateForm(v => ({ ...v, fb_page_url: e.target.value })); setCreateError(null) }}
-                    placeholder="https://facebook.com/…"
-                  />
-                </div>
-
-                {/* IG URL */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Instagram URL</label>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={createForm.ig_url}
-                    onChange={e => setCreateForm(v => ({ ...v, ig_url: e.target.value }))}
-                    placeholder="https://instagram.com/…"
-                  />
-                </div>
-
-                {/* LinkedIn URL */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>LinkedIn Profile</label>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={createForm.linkedin_url}
-                    onChange={e => setCreateForm(v => ({ ...v, linkedin_url: e.target.value }))}
-                    placeholder="https://linkedin.com/in/…"
-                  />
-                </div>
-
-                {/* Specialists — multi-select */}
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>
-                    Specialist(s) <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <Select
-                    isMulti
-                    styles={selectStyles}
-                    options={specialistOptions}
-                    value={specialistOptions.filter(o => createForm.specialist_ids.includes(o.value))}
-                    onChange={opts => setCreateForm(v => ({ ...v, specialist_ids: opts.map(o => o.value) }))}
-                    placeholder="Assign specialist(s)…"
-                    closeMenuOnSelect={false}
-                  />
-                </div>
-
-                {/* Next Follow-up */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>Next Follow-up</label>
-                  <input
-                    type="date"
-                    className={inputClass}
-                    value={createForm.next_followup}
-                    onChange={e => setCreateForm(v => ({ ...v, next_followup: e.target.value }))}
-                  />
-                </div>
-
-                {/* Source URL */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>
-                    Source URL <span style={{ color: '#555', fontWeight: 400 }}>(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={createForm.source_url}
-                    onChange={e => setCreateForm(v => ({ ...v, source_url: e.target.value }))}
-                    placeholder="LinkedIn profile, website, etc."
-                  />
-                </div>
-
-                {/* Source Image */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#8a8680', marginBottom: '6px', fontWeight: 500 }}>
-                    Source Image <span style={{ color: '#555', fontWeight: 400 }}>(optional)</span>
-                  </label>
-                  <ImagePasteZone
-                    value={createForm.source_image}
-                    onChange={v => setCreateForm(prev => ({ ...prev, source_image: v }))}
-                  />
-                </div>
+                )}
               </div>
 
               {/* Duplicate lead error — shown right above the submit button */}
@@ -1645,7 +1031,7 @@ export default function LeadDrawer({
 
                       {/* Status + meta */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
-                        <StatusBadge status={lead.status} onChange={handleStatusChange} stages={stages.length > 0 ? stages.map(s => s.name) : Object.keys(STATUS_COLORS)} />
+                        <StatusBadge status={lead.status} onChange={handleStatusChange} stages={stages} />
                         <span style={{ color: '#555', fontSize: '11px' }}>
                           Created {fmtDate(lead.created_at)}
                           {(lead.specialists?.length > 0
@@ -1697,233 +1083,23 @@ export default function LeadDrawer({
 
                   {/* ── DETAILS TAB ─────────────────────────────────────────── */}
                   <div style={{ display: activeTab === 'details' ? 'block' : 'none' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-
-                      {/* Custom Fields — top of the tab */}
-                      <CustomFieldsSection
-                        fields={customFields}
-                        values={lead.custom_fields}
+                    {fieldsError ? (
+                      <FieldsLoadError onRetry={loadFields} />
+                    ) : !fields ? (
+                      <span style={{ color: '#8a8680', fontSize: '13px' }}>Loading fields…</span>
+                    ) : (
+                      <LeadFields
+                        fields={fields}
+                        values={{ ...lead, specialist_ids: (lead.specialists || []).map(sp => sp.id) }}
+                        customValues={lead.custom_fields}
+                        onCommit={commitEditField}
                         saved={saved}
-                        onSaveField={saveCustomField}
-                        onManageClick={canManageFields ? () => setManageFieldsOpen(true) : null}
-                        onResizeField={resizeCustomField}
+                        specialists={specialists}
+                        industries={industries}
+                        canManage={canManageFields}
+                        onResizeHeight={resizeFieldHeight}
                       />
-
-                      {/* Company Name — full width */}
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Company Name <SavedIndicator show={saved.company_name} />
-                        </label>
-                        <input
-                          key={lead.company_name}
-                          type="text"
-                          className={inputClass}
-                          defaultValue={lead.company_name || ''}
-                          onBlur={e => {
-                            const v = e.target.value.trim()
-                            if (v && v !== lead.company_name) saveField('company_name', v)
-                          }}
-                          placeholder="—"
-                        />
-                      </div>
-
-                      {/* Contact Name */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Contact Name <SavedIndicator show={saved.contact_name} />
-                        </label>
-                        <input
-                          key={lead.contact_name}
-                          type="text"
-                          className={inputClass}
-                          defaultValue={lead.contact_name || ''}
-                          onBlur={e => saveField('contact_name', e.target.value)}
-                          placeholder="—"
-                        />
-                      </div>
-
-                      {/* Job Title */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Job Title <SavedIndicator show={saved.job_title} />
-                        </label>
-                        <input
-                          key={lead.job_title}
-                          type="text"
-                          className={inputClass}
-                          defaultValue={lead.job_title || ''}
-                          onBlur={e => saveField('job_title', e.target.value)}
-                          placeholder="—"
-                        />
-                      </div>
-
-                      {/* Website - full width */}
-                      <LinkField
-                        label="Website"
-                        value={lead.website}
-                        savedFlag={saved.website}
-                        placeholder="example.com or https://example.com"
-                        onCommit={val => {
-                          setLead(prev => ({ ...prev, website: val }))
-                          saveField('website', val)
-                        }}
-                      />
-
-                      {/* Location */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Location <SavedIndicator show={saved.location} />
-                        </label>
-                        <input
-                          key={lead.location}
-                          type="text"
-                          className={inputClass}
-                          defaultValue={lead.location || ''}
-                          onBlur={e => saveField('location', e.target.value)}
-                          placeholder="—"
-                        />
-                      </div>
-
-                      {/* Email */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Email <SavedIndicator show={saved.email} />
-                        </label>
-                        <input
-                          key={lead.email}
-                          type="email"
-                          className={inputClass}
-                          defaultValue={lead.email || ''}
-                          onBlur={e => saveField('email', e.target.value)}
-                          placeholder="—"
-                        />
-                      </div>
-
-                      {/* Phone */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Phone <SavedIndicator show={saved.phone} />
-                        </label>
-                        <input
-                          key={lead.phone}
-                          type="text"
-                          className={inputClass}
-                          defaultValue={lead.phone || ''}
-                          onBlur={e => saveField('phone', e.target.value)}
-                          placeholder="—"
-                        />
-                      </div>
-
-                      {/* Facebook Page URL */}
-                      <LinkField
-                        label="Facebook Page URL"
-                        value={lead.fb_page_url}
-                        savedFlag={saved.fb_page_url}
-                        placeholder="https://facebook.com/…"
-                        onCommit={val => {
-                          setLead(prev => ({ ...prev, fb_page_url: val }))
-                          saveField('fb_page_url', val || null)
-                        }}
-                      />
-
-                      {/* Instagram URL */}
-                      <LinkField
-                        label="Instagram URL"
-                        value={lead.ig_url}
-                        savedFlag={saved.ig_url}
-                        placeholder="https://instagram.com/…"
-                        onCommit={val => {
-                          setLead(prev => ({ ...prev, ig_url: val }))
-                          saveField('ig_url', val || null)
-                        }}
-                      />
-
-                      {/* LinkedIn Profile URL */}
-                      <LinkField
-                        label="LinkedIn Profile"
-                        value={lead.linkedin_url}
-                        savedFlag={saved.linkedin_url}
-                        placeholder="https://linkedin.com/in/…"
-                        onCommit={val => {
-                          setLead(prev => ({ ...prev, linkedin_url: val }))
-                          saveField('linkedin_url', val || null)
-                        }}
-                      />
-
-                      {/* Specialists — multi-select, full width */}
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Specialist(s) <SavedIndicator show={saved.specialists} />
-                        </label>
-                        <Select
-                          isMulti
-                          styles={selectStyles}
-                          options={specialistOptions}
-                          value={specialistOptions.filter(o => (lead.specialists || []).some(s => s.id === o.value))}
-                          onChange={opts => {
-                            const ids = opts.map(o => o.value)
-                            const newSpecs = opts.map(o => ({ id: o.value, name: o.label }))
-                            setLead(prev => ({
-                              ...prev,
-                              specialists: newSpecs,
-                              specialist_id: ids[0] || null,
-                              specialist_name: opts[0]?.label || null,
-                              specialist_names: opts.map(o => o.label).join(', '),
-                            }))
-                            updateLead(leadId, { specialist_ids: ids, performed_by: getUser()?.name || null })
-                              .then(updated => {
-                                setLead(prev => ({ ...prev, ...updated }))
-                                markSaved('specialists')
-                                if (onLeadUpdated) onLeadUpdated(updated)
-                              })
-                              .catch(() => toast.error('Failed to save specialists'))
-                          }}
-                          placeholder="Assign specialist(s)…"
-                          closeMenuOnSelect={false}
-                        />
-                      </div>
-
-                      {/* Next Follow-up */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Next Follow-up <SavedIndicator show={saved.next_followup_date} />
-                        </label>
-                        <input
-                          key={lead.next_followup_date}
-                          type="date"
-                          className={inputClass}
-                          defaultValue={lead.next_followup_date ? lead.next_followup_date.slice(0, 10) : ''}
-                          onBlur={e => saveField('next_followup_date', e.target.value || null)}
-                        />
-                      </div>
-
-                      {/* Source URL — full width */}
-                      <LinkField
-                        label="Source URL"
-                        value={lead.source_url}
-                        savedFlag={saved.source_url}
-                        placeholder="LinkedIn profile, website, etc."
-                        onCommit={val => {
-                          setLead(prev => ({ ...prev, source_url: val }))
-                          saveField('source_url', val || null)
-                        }}
-                      />
-
-                      {/* Source Image — full width */}
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Source Image <SavedIndicator show={saved.source_image} />
-                        </label>
-                        <ImagePasteZone
-                          value={lead.source_image || null}
-                          onChange={v => {
-                            setLead(prev => ({ ...prev, source_image: v }))
-                            saveField('source_image', v)
-                          }}
-                        />
-                      </div>
-
-                    </div>
+                    )}
                   </div>
 
                   {/* ── TOUCHPOINTS TAB ─────────────────────────────────────── */}
@@ -1988,8 +1164,8 @@ export default function LeadDrawer({
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                   {item.old_status && (
                                     <span style={{
-                                      backgroundColor: STATUS_COLORS[item.old_status]?.bg || 'rgba(138,134,128,0.15)',
-                                      color: STATUS_COLORS[item.old_status]?.color || '#8a8680',
+                                      backgroundColor: stageColor(stages, item.old_status).bg,
+                                      color: stageColor(stages, item.old_status).color,
                                       borderRadius: '12px',
                                       padding: '2px 8px',
                                       fontSize: '11px',
@@ -2000,8 +1176,8 @@ export default function LeadDrawer({
                                   )}
                                   {item.old_status && <span style={{ color: '#555', fontSize: '13px' }}>→</span>}
                                   <span style={{
-                                    backgroundColor: STATUS_COLORS[item.new_status]?.bg || 'rgba(138,134,128,0.15)',
-                                    color: STATUS_COLORS[item.new_status]?.color || '#8a8680',
+                                    backgroundColor: stageColor(stages, item.new_status).bg,
+                                    color: stageColor(stages, item.new_status).color,
                                     borderRadius: '12px',
                                     padding: '2px 8px',
                                     fontSize: '11px',
@@ -2168,14 +1344,6 @@ export default function LeadDrawer({
         </div>
       )}
 
-      {/* ── Manage Custom Fields Modal ────────────────────────────────────────── */}
-      {manageFieldsOpen && (
-        <ManageCustomFieldsModal
-          fields={customFields}
-          onClose={() => setManageFieldsOpen(false)}
-          onChanged={refreshCustomFields}
-        />
-      )}
     </>
   )
 }

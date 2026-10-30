@@ -16,6 +16,74 @@ const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// Default type for an outreach stage, inferred from the original seeded stage names
+function inferOutreachStageType(name) {
+  const n = (name || '').trim().toLowerCase();
+  if (n === 'new lead') return 'new';
+  if (/^touchpoint \d+$/.test(n)) return 'touchpoint';
+  const byName = {
+    'interested': 'interested',
+    'not interested': 'not_interested',
+    'appointment booked': 'booked',
+    'no show': 'no_show',
+    'meeting done - not interested': 'meeting_lost',
+    'started trial': 'trial',
+    'closed / booked as client': 'won',
+    'disqualified / dead': 'dead',
+  };
+  return byName[n] || 'in_progress';
+}
+
+// Built-in lead fields share outreach_custom_fields with custom ones (is_builtin = 1) so a
+// single ordered list controls the lead form. Their values stay in outreach_leads columns.
+const OUTREACH_BUILTIN_FIELDS = [
+  // [field_key, label, field_type, width]
+  ['company_name', 'Company Name', 'short_text', 'full'],
+  ['contact_name', 'Contact Name', 'short_text', 'half'],
+  ['job_title', 'Job Title', 'short_text', 'half'],
+  ['website', 'Website', 'link', 'full'],
+  ['industry_id', 'Industry', 'industry', 'half'],
+  ['location', 'Location', 'short_text', 'half'],
+  ['email', 'Email', 'email', 'half'],
+  ['phone', 'Phone', 'phone', 'half'],
+  ['fb_page_url', 'Facebook Page URL', 'link', 'full'],
+  ['ig_url', 'Instagram URL', 'link', 'full'],
+  ['linkedin_url', 'LinkedIn Profile', 'link', 'full'],
+  ['specialist_ids', 'Specialist(s)', 'specialists', 'full'],
+  ['next_followup_date', 'Next Follow-up', 'date', 'half'],
+  ['source_url', 'Source URL', 'link', 'full'],
+  ['source_image', 'Source Image', 'image', 'full'],
+];
+
+// Adds any built-in field row that's missing (idempotent), after the existing fields
+function seedOutreachBuiltinFields() {
+  try {
+    db.transaction(() => {
+      const firstRun = !db.prepare('SELECT 1 FROM outreach_custom_fields WHERE is_builtin = 1').get();
+      if (firstRun) {
+        // Custom fields were sized in pixels; wide ones become full-width in the new grid layout
+        db.exec("UPDATE outreach_custom_fields SET width = 'full' WHERE is_builtin = 0 AND width_px > 300");
+      }
+      const insert = db.prepare(`
+        INSERT INTO outreach_custom_fields (label, field_key, field_type, sort_order, width, is_builtin, required)
+        VALUES (?, ?, ?, ?, ?, 1, ?)
+      `);
+      OUTREACH_BUILTIN_FIELDS.forEach(([key, label, type, width]) => {
+        if (db.prepare('SELECT 1 FROM outreach_custom_fields WHERE field_key = ? AND is_builtin = 1').get(key)) return;
+        // A custom field already using this key keeps its values under a new key
+        const clash = db.prepare('SELECT id FROM outreach_custom_fields WHERE field_key = ?').get(key);
+        if (clash) {
+          db.prepare('UPDATE outreach_lead_custom_values SET field_key = ? WHERE field_key = ?').run(`${key}_custom`, key);
+          db.prepare('UPDATE outreach_custom_fields SET field_key = ? WHERE id = ?').run(`${key}_custom`, clash.id);
+        }
+        const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM outreach_custom_fields').get().m || 0;
+        const locked = key === 'company_name' || key === 'specialist_ids';
+        insert.run(label, key, type, maxOrder + 1, width, locked ? 1 : 0);
+      });
+    })();
+  } catch (e) { console.error('Built-in lead field seed failed', e); }
+}
+
 function initializeDatabase() {
   // Create tables
   db.exec(`
@@ -604,6 +672,10 @@ function initializeDatabase() {
     'ALTER TABLE linkedin_leads ADD COLUMN conversation_summary TEXT',
     'ALTER TABLE linkedin_lead_comments ADD COLUMN author_is_specialist INTEGER DEFAULT 0',
     'ALTER TABLE linkedin_leads ADD COLUMN connection_request_sent_at DATETIME',
+    'ALTER TABLE outreach_pipeline_stages ADD COLUMN stage_type TEXT',
+    'ALTER TABLE outreach_custom_fields ADD COLUMN is_builtin INTEGER DEFAULT 0',
+    'ALTER TABLE outreach_custom_fields ADD COLUMN help_text TEXT',
+    'ALTER TABLE outreach_custom_fields ADD COLUMN required INTEGER DEFAULT 0',
   ];
 
   // Explicit buyer-account assignment table
@@ -647,6 +719,13 @@ function initializeDatabase() {
   columnMigrations.forEach(sql => {
     try { db.exec(sql); } catch (e) { /* column already exists */ }
   });
+  // Outreach stage types drive metrics and stage behaviour — type untyped stages from their name
+  try {
+    const setType = db.prepare('UPDATE outreach_pipeline_stages SET stage_type = ? WHERE id = ?');
+    db.prepare('SELECT id, name FROM outreach_pipeline_stages WHERE stage_type IS NULL').all()
+      .forEach(stage => setType.run(inferOutreachStageType(stage.name), stage.id));
+  } catch (e) { console.error('Stage type backfill failed', e); }
+  seedOutreachBuiltinFields();
   // Ensure exactly one locked, un-deletable default LinkedIn stage exists — new leads
   // always land here. Re-creates it if it was deleted before this protection existed.
   try {
