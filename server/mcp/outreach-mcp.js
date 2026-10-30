@@ -15,6 +15,10 @@ const SECRET = process.env.JWT_SECRET || 'infinix_secret_key_v2';
 const PORT = process.env.PORT || 5001;
 const API_BASE = `http://127.0.0.1:${PORT}/api/outreach`;
 
+// Integer arguments also accept numeric strings: a client still holding an older copy of the
+// tool list sends params it doesn't know (e.g. a newly added source_id) as text.
+const intArg = () => z.coerce.number().int();
+
 const CHANNELS = ['LinkedIn', 'Email', 'WhatsApp', 'Facebook', 'Instagram', 'SMS', 'Website Form', 'Other'];
 
 // ─── REST bridge ──────────────────────────────────────────────────────────────
@@ -78,7 +82,7 @@ function buildServer(user) {
     return match.name;
   }
 
-  const server = new McpServer({ name: 'infinix-outreach-crm', version: '1.0.0' }, {
+  const server = new McpServer({ name: 'infinix-outreach-crm', version: '1.1.0' }, {
     instructions:
       `Outreach CRM for ${user.name} (${user.role === 'admin' ? 'admin — sees all leads' : 'team member — sees only their own leads'}). ` +
       'Call list_pipeline_stages / list_specialists / list_industries / list_lead_sources to get valid names and IDs before creating or moving leads. ' +
@@ -96,8 +100,8 @@ function buildServer(user) {
     phone: z.string().optional(),
     website: z.string().optional(),
     location: z.string().optional(),
-    industry_id: z.number().int().optional().describe('From list_industries'),
-    source_id: z.number().int().optional().describe('How the lead was acquired, from list_lead_sources'),
+    industry_id: intArg().optional().describe('From list_industries'),
+    source_id: intArg().optional().describe('How the lead was acquired, from list_lead_sources'),
     source_url: z.string().optional().describe('Where the lead was found, e.g. a Meta Ads Library link'),
     fb_page_url: z.string().optional(),
     ig_url: z.string().optional(),
@@ -164,16 +168,16 @@ function buildServer(user) {
     inputSchema: {
       search: z.string().optional(),
       statuses: z.array(z.string()).optional().describe('Filter to these pipeline stages'),
-      specialist_id: z.number().int().optional(),
-      industry_id: z.number().int().optional(),
-      source_id: z.number().int().optional().describe('From list_lead_sources'),
+      specialist_id: intArg().optional(),
+      industry_id: intArg().optional(),
+      source_id: intArg().optional().describe('From list_lead_sources'),
       followup_overdue: z.boolean().optional().describe('Only leads whose next follow-up date has passed'),
       created_from: z.string().optional().describe('YYYY-MM-DD, by lead created date'),
       created_to: z.string().optional().describe('YYYY-MM-DD, by lead created date'),
       sort_by: z.enum(['status_updated_at', 'created_at', 'company_name', 'contact_name', 'status', 'next_followup_date']).optional(),
       sort_dir: z.enum(['ASC', 'DESC']).optional(),
-      page: z.number().int().min(1).optional(),
-      limit: z.number().int().min(1).max(100).optional().describe('Default 25'),
+      page: intArg().min(1).optional(),
+      limit: intArg().min(1).max(100).optional().describe('Default 25'),
     },
     annotations: { readOnlyHint: true },
   }, tool(async a => {
@@ -209,7 +213,7 @@ function buildServer(user) {
   server.registerTool('get_lead', {
     title: 'Get lead details',
     description: 'Full lead record including touchpoints, status history, logged responses, specialists and custom fields.',
-    inputSchema: { lead_id: z.number().int() },
+    inputSchema: { lead_id: intArg() },
     annotations: { readOnlyHint: true },
   }, tool(async ({ lead_id }) => slimLead(await loadLead(lead_id))));
 
@@ -219,7 +223,7 @@ function buildServer(user) {
     inputSchema: {
       ...leadFields,
       company_name: z.string(),
-      specialist_ids: z.array(z.number().int()).min(1).optional()
+      specialist_ids: z.array(intArg()).min(1).optional()
         .describe('Assigned specialists (first is primary). Defaults to your own specialist record.'),
     },
   }, tool(async a => {
@@ -237,9 +241,9 @@ function buildServer(user) {
     description: 'Change lead fields (contact info, follow-up date, custom fields, assigned specialists). ' +
       'Only the fields you pass are changed. To change the stage use move_lead_stage, log_touchpoint or log_response.',
     inputSchema: {
-      lead_id: z.number().int(),
+      lead_id: intArg(),
       ...leadFields,
-      specialist_ids: z.array(z.number().int()).min(1).optional().describe('Replaces all assigned specialists'),
+      specialist_ids: z.array(intArg()).min(1).optional().describe('Replaces all assigned specialists'),
     },
   }, tool(async ({ lead_id, ...fields }) => {
     await loadLead(lead_id);
@@ -251,7 +255,7 @@ function buildServer(user) {
     description: 'Change a lead\'s pipeline stage (recorded in status history). ' +
       'Prefer log_touchpoint for touchpoint-type stages and log_response for interested / not_interested / meeting_lost stages.',
     inputSchema: {
-      lead_id: z.number().int(),
+      lead_id: intArg(),
       stage: z.string().describe('Exact stage name from list_pipeline_stages'),
       next_followup_date: z.string().optional().describe('YYYY-MM-DD'),
     },
@@ -268,8 +272,8 @@ function buildServer(user) {
     title: 'Log touchpoint',
     description: 'Record an outreach touchpoint (creates or overwrites touchpoint N) and, by default, move the lead to the stage for touchpoint N (see touchpoint_number in list_pipeline_stages).',
     inputSchema: {
-      lead_id: z.number().int(),
-      touchpoint_number: z.number().int().min(1),
+      lead_id: intArg(),
+      touchpoint_number: intArg().min(1),
       channel: z.enum(CHANNELS),
       date: z.string().optional().describe('YYYY-MM-DD, defaults to today'),
       message_body: z.string().optional(),
@@ -300,7 +304,7 @@ function buildServer(user) {
     title: 'Log lead response',
     description: 'Record a reply received from a lead and optionally move it to a new stage (e.g. Interested, Not Interested, Appointment Booked).',
     inputSchema: {
-      lead_id: z.number().int(),
+      lead_id: intArg(),
       channel: z.string().describe(`Where they replied, e.g. ${CHANNELS.join(', ')}`),
       message_body: z.string().describe('What the lead said'),
       date: z.string().optional().describe('YYYY-MM-DD, defaults to today'),
@@ -321,7 +325,7 @@ function buildServer(user) {
   server.registerTool('delete_lead', {
     title: 'Delete lead',
     description: 'Move a lead to the trash (it can be restored from the web app).',
-    inputSchema: { lead_id: z.number().int() },
+    inputSchema: { lead_id: intArg() },
     annotations: { destructiveHint: true },
   }, tool(async ({ lead_id }) => {
     const lead = await loadLead(lead_id);
@@ -338,7 +342,7 @@ function buildServer(user) {
     inputSchema: {
       date_from: z.string().optional().describe('YYYY-MM-DD'),
       date_to: z.string().optional().describe('YYYY-MM-DD'),
-      specialist_id: z.number().int().optional(),
+      specialist_id: intArg().optional(),
     },
     annotations: { readOnlyHint: true },
   }, tool(a => api('GET', '/dashboard', { query: a })));
@@ -346,7 +350,7 @@ function buildServer(user) {
   server.registerTool('get_overdue_followups', {
     title: 'Overdue follow-ups',
     description: 'Leads whose next follow-up date has passed and are not closed, dead or lost.',
-    inputSchema: { specialist_id: z.number().int().optional() },
+    inputSchema: { specialist_id: intArg().optional() },
     annotations: { readOnlyHint: true },
   }, tool(a => api('GET', '/overdue', { query: a })));
 
@@ -356,7 +360,7 @@ function buildServer(user) {
     inputSchema: {
       date_from: z.string().optional().describe('YYYY-MM-DD'),
       date_to: z.string().optional().describe('YYYY-MM-DD'),
-      specialist_id: z.number().int().optional(),
+      specialist_id: intArg().optional(),
     },
     annotations: { readOnlyHint: true },
   }, tool(a => api('GET', '/activity', { query: a })));
