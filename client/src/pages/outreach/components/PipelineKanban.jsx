@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { fmtDate as formatDate, todayLocal } from '../../../utils/dates'
 import { stageColor, isClosedStatus } from '../stageTypes'
+import TouchpointPeek from './TouchpointPeek'
 
 const CHANNEL_COLORS = {
   'LinkedIn': '#0a66c2', 'Email': '#575ECF', 'WhatsApp': '#25d366',
@@ -35,7 +36,7 @@ function ChannelPills({ channels }) {
   )
 }
 
-function KanbanCard({ lead, stages, onLeadClick, showSpecialistColumn, maxTouchpoints }) {
+function KanbanCard({ lead, stages, onLeadClick, onPeek, peekOpen, showSpecialistColumn, maxTouchpoints }) {
   const dragStarted = useRef(false)
   const overdue = isOverdue(lead, stages)
   const sourceColor = lead.source_color || null
@@ -76,9 +77,26 @@ function KanbanCard({ lead, stages, onLeadClick, showSpecialistColumn, maxTouchp
       )}
       <ChannelPills channels={lead.channels_used} />
       <div className="flex items-center justify-between mt-2">
-        <span className="text-xs" style={{ color: '#8a8680' }}>
+        {/* Opens a quick view of touchpoints, notes and replies without the drawer */}
+        <button
+          type="button"
+          data-peek-trigger
+          draggable={false}
+          onMouseDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); onPeek(lead, e.currentTarget.getBoundingClientRect()) }}
+          title="View touchpoints & notes"
+          aria-label={`View touchpoints and notes for ${lead.company_name}`}
+          aria-expanded={peekOpen}
+          className="inline-flex items-center gap-1 text-xs rounded px-1.5 py-0.5 -ml-1.5 transition-colors"
+          style={{ color: peekOpen ? '#c5c1b9' : '#8a8680', backgroundColor: peekOpen ? 'rgba(87,94,207,0.25)' : 'transparent' }}
+          onMouseEnter={e => { if (!peekOpen) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)' }}
+          onMouseLeave={e => { if (!peekOpen) e.currentTarget.style.backgroundColor = 'transparent' }}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.83L3 20l1.4-3.72A7.6 7.6 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
           {lead.touchpoint_count || 0}/{maxTouchpoints} TPs
-        </span>
+        </button>
         {lead.next_followup_date && (
           <span className="text-xs font-medium" style={{ color: followupColor }}>
             {overdue ? `${days}d overdue` : formatDate(lead.next_followup_date)}
@@ -110,6 +128,12 @@ const DEFAULT_STAGES = [
 
 export default function PipelineKanban({ leads, loading, onLeadClick, onStatusChange, showSpecialistColumn, stages, maxTouchpoints = 5 }) {
   const [dragOverStatus, setDragOverStatus] = useState(null)
+  const [peek, setPeek] = useState(null) // { lead, rect } for the open touchpoint quick view
+
+  const togglePeek = useCallback((lead, rect) => {
+    setPeek(prev => (prev?.lead.id === lead.id ? null : { lead, rect }))
+  }, [])
+  const closePeek = useCallback(() => setPeek(null), [])
 
   const stageNames = stages && stages.length > 0 ? stages.map(s => s.name) : DEFAULT_STAGES
 
@@ -190,6 +214,8 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
                       lead={lead}
                       stages={stages}
                       onLeadClick={onLeadClick}
+                      onPeek={togglePeek}
+                      peekOpen={peek?.lead.id === lead.id}
                       showSpecialistColumn={showSpecialistColumn}
                       maxTouchpoints={maxTouchpoints}
                     />
@@ -226,6 +252,8 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
                     lead={lead}
                     stages={stages}
                     onLeadClick={onLeadClick}
+                    onPeek={togglePeek}
+                    peekOpen={peek?.lead.id === lead.id}
                     showSpecialistColumn={showSpecialistColumn}
                     maxTouchpoints={maxTouchpoints}
                   />
@@ -235,6 +263,16 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
           </div>
         )}
       </div>
+
+      {peek && (
+        <TouchpointPeek
+          lead={peek.lead}
+          anchorRect={peek.rect}
+          channelColors={CHANNEL_COLORS}
+          onClose={closePeek}
+          onOpenLead={onLeadClick}
+        />
+      )}
     </div>
   )
 }

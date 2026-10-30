@@ -90,6 +90,7 @@ export const getSettings = () => api.get('/outreach/settings').then(r => r.data)
 export const updateSettings = (data) => api.patch('/outreach/settings', data).then(r => r.data)
 
 // Lead Responses
+export const getLeadResponses = (leadId) => api.get(`/outreach/leads/${leadId}/responses`).then(r => r.data)
 export const createLeadResponse = (leadId, data) => api.post(`/outreach/leads/${leadId}/responses`, data).then(r => r.data)
 export const deleteLeadResponse = (leadId, id) => api.delete(`/outreach/leads/${leadId}/responses/${id}`).then(r => r.data)
 
