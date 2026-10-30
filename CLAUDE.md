@@ -229,6 +229,13 @@ New built-in columns must also be added to `OUTREACH_BUILTIN_FIELDS` in `databas
 "Lead Source" field. List/detail responses include `source_name` + `source_color`; Kanban cards and table rows are
 tinted with it. Managed in Admin → Lead Sources (`/api/outreach/sources`); in-use sources can only be turned off.
 
+### Channels
+`outreach_channels` (name, colour, sort_order) — where a touchpoint or reply happened. Touchpoints and responses
+store the channel **by name**, so `PATCH /channels/:id` with a new name rewrites those rows; deleting a channel leaves
+logged rows with the old name. Anyone can add (type a new name in the channel picker); rename/recolour/delete are admin-only
+(✎ next to Channel in the drawer/quick modals, or Admin → Channels). Client: `pages/outreach/channels.js`
+(`useChannels`, `useChannelColors`) + `components/ChannelSelect.jsx` — never hardcode a channel list.
+
 ### Status Change Flow (OutreachHome.jsx)
 ```
 handleStatusChange(leadId, newStatus)

@@ -372,6 +372,15 @@ function initializeDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS outreach_channels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      color TEXT NOT NULL DEFAULT '#6b7280',
+      active INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS outreach_lead_custom_values (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_id INTEGER NOT NULL REFERENCES outreach_leads(id) ON DELETE CASCADE,
@@ -406,6 +415,22 @@ function initializeDatabase() {
       ['Referral', '#22c55e'],
     ].forEach(([name, color]) => insertSource.run(name, color));
     console.log('Seeded outreach lead sources');
+  }
+  // Seed outreach channels if empty: the defaults, plus any channel already used on a
+  // touchpoint or response (channels are stored by name on those rows)
+  const channelCount = db.prepare('SELECT COUNT(*) as cnt FROM outreach_channels').get();
+  if (channelCount.cnt === 0) {
+    const insertChannel = db.prepare('INSERT OR IGNORE INTO outreach_channels (name, color, sort_order) VALUES (?, ?, ?)');
+    const defaults = [
+      ['LinkedIn', '#0a66c2'], ['Email', '#575ECF'], ['WhatsApp', '#25d366'], ['Facebook', '#1877f2'],
+      ['Instagram', '#e1306c'], ['SMS', '#8a8680'], ['Website Form', '#06b6d4'], ['Other', '#6b7280'],
+    ];
+    defaults.forEach(([name, color], i) => insertChannel.run(name, color, i));
+    db.prepare(`
+      SELECT channel FROM outreach_touchpoints WHERE channel IS NOT NULL AND TRIM(channel) != ''
+      UNION SELECT channel FROM outreach_lead_responses WHERE channel IS NOT NULL AND TRIM(channel) != ''
+    `).all().forEach((row, i) => insertChannel.run(row.channel.trim(), '#6b7280', defaults.length + i));
+    console.log('Seeded outreach channels');
   }
   // Seed pipeline stages if empty
   const stageCount = db.prepare('SELECT COUNT(*) as cnt FROM outreach_pipeline_stages').get();

@@ -44,6 +44,12 @@ export const createSource = (data) => api.post('/outreach/sources', data).then(r
 export const updateSource = (id, data) => api.patch(`/outreach/sources/${id}`, data).then(r => r.data)
 export const deleteSource = (id) => api.delete(`/outreach/sources/${id}`).then(r => r.data)
 
+// Channels (where a touchpoint or reply happened — LinkedIn, Email, Phone call…)
+export const getChannels = () => api.get('/outreach/channels').then(r => r.data)
+export const createChannel = (data) => api.post('/outreach/channels', data).then(r => r.data)
+export const updateChannel = (id, data) => api.patch(`/outreach/channels/${id}`, data).then(r => r.data)
+export const deleteChannel = (id) => api.delete(`/outreach/channels/${id}`).then(r => r.data)
+
 // Leads
 export const getLeads = (params) => api.get('/outreach/leads', { params }).then(r => r.data)
 export const createLead = (data) => api.post('/outreach/leads', data).then(r => r.data)

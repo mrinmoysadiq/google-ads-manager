@@ -19,8 +19,6 @@ const API_BASE = `http://127.0.0.1:${PORT}/api/outreach`;
 // tool list sends params it doesn't know (e.g. a newly added source_id) as text.
 const intArg = () => z.coerce.number().int();
 
-const CHANNELS = ['LinkedIn', 'Email', 'WhatsApp', 'Facebook', 'Instagram', 'SMS', 'Website Form', 'Other'];
-
 // ─── REST bridge ──────────────────────────────────────────────────────────────
 
 function makeApi(user) {
@@ -71,6 +69,14 @@ function buildServer(user) {
     const stages = await api('GET', '/pipeline-stages');
     const match = stages.find(s => s.name.toLowerCase() === stage.trim().toLowerCase());
     if (!match) throw new Error(`Unknown stage "${stage}". Valid stages: ${stages.map(s => s.name).join(', ')}`);
+    return match.name;
+  }
+
+  // Channels are managed in the CRM; match case-insensitively and return the stored name
+  async function assertChannel(channel) {
+    const channels = (await api('GET', '/channels')).filter(c => c.active !== 0);
+    const match = channels.find(c => c.name.toLowerCase() === channel.trim().toLowerCase());
+    if (!match) throw new Error(`Unknown channel "${channel}". Valid channels: ${channels.map(c => c.name).join(', ')}`);
     return match.name;
   }
 
@@ -137,6 +143,14 @@ function buildServer(user) {
     annotations: { readOnlyHint: true },
   }, tool(async () => (await api('GET', '/sources'))
     .map(s => ({ id: s.id, name: s.name, active: s.active !== 0, leads: s.lead_count }))));
+
+  server.registerTool('list_channels', {
+    title: 'List channels',
+    description: 'Outreach channels a touchpoint or reply can be logged on (e.g. LinkedIn, Email, WhatsApp).',
+    inputSchema: {},
+    annotations: { readOnlyHint: true },
+  }, tool(async () => (await api('GET', '/channels'))
+    .filter(c => c.active !== 0).map(c => c.name)));
 
   server.registerTool('list_industries', {
     title: 'List industries',
@@ -274,7 +288,7 @@ function buildServer(user) {
     inputSchema: {
       lead_id: intArg(),
       touchpoint_number: intArg().min(1),
-      channel: z.enum(CHANNELS),
+      channel: z.string().describe('Channel name from list_channels'),
       date: z.string().optional().describe('YYYY-MM-DD, defaults to today'),
       message_body: z.string().optional(),
       loom_url: z.string().optional(),
@@ -284,12 +298,13 @@ function buildServer(user) {
     },
   }, tool(async a => {
     await loadLead(a.lead_id);
+    const channel = await assertChannel(a.channel);
     // Resolve the stage first so a missing stage doesn't leave a half-done write
     const stage = a.move_to_stage !== false ? await touchpointStage(a.touchpoint_number) : null;
     const touchpoint = await api('PUT', `/leads/${a.lead_id}/touchpoints/${a.touchpoint_number}`, {
       body: {
         date: a.date || new Date().toISOString().slice(0, 10),
-        channel: a.channel, message_body: a.message_body, loom_url: a.loom_url, notes: a.notes,
+        channel, message_body: a.message_body, loom_url: a.loom_url, notes: a.notes,
       },
     });
     const body = {};
@@ -305,7 +320,7 @@ function buildServer(user) {
     description: 'Record a reply received from a lead and optionally move it to a new stage (e.g. Interested, Not Interested, Appointment Booked).',
     inputSchema: {
       lead_id: intArg(),
-      channel: z.string().describe(`Where they replied, e.g. ${CHANNELS.join(', ')}`),
+      channel: z.string().describe('Where they replied — a channel name from list_channels'),
       message_body: z.string().describe('What the lead said'),
       date: z.string().optional().describe('YYYY-MM-DD, defaults to today'),
       notes: z.string().optional(),
@@ -313,9 +328,10 @@ function buildServer(user) {
     },
   }, tool(async a => {
     await loadLead(a.lead_id);
+    const channel = await assertChannel(a.channel);
     const status = a.new_stage ? await assertStage(a.new_stage) : null;
     const response = await api('POST', `/leads/${a.lead_id}/responses`, {
-      body: { date: a.date || new Date().toISOString().slice(0, 10), channel: a.channel, message_body: a.message_body, notes: a.notes },
+      body: { date: a.date || new Date().toISOString().slice(0, 10), channel, message_body: a.message_body, notes: a.notes },
     });
     let lead = null;
     if (status) lead = await api('PATCH', `/leads/${a.lead_id}`, { body: { status, performed_by } });

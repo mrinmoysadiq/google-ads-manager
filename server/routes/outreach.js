@@ -345,6 +345,83 @@ router.delete('/sources/:id', requireAdmin, (req, res) => {
   }
 });
 
+// ─── CHANNELS ─────────────────────────────────────────────────────────────────
+// Where a touchpoint or reply happened (LinkedIn, Email, Phone call…). Touchpoints and
+// responses store the channel by name, so a rename rewrites those rows too. Anyone can
+// add a channel from the lead form; renaming and deleting are admin-only.
+
+const CHANNEL_SELECT = `
+  SELECT ch.*,
+    (SELECT COUNT(*) FROM outreach_touchpoints t WHERE t.channel = ch.name) +
+    (SELECT COUNT(*) FROM outreach_lead_responses r WHERE r.channel = ch.name) as usage_count
+  FROM outreach_channels ch
+`;
+
+router.get('/channels', (req, res) => {
+  try {
+    res.json(db.prepare(`${CHANNEL_SELECT} ORDER BY ch.sort_order ASC, ch.id ASC`).all());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch channels' });
+  }
+});
+
+router.post('/channels', (req, res) => {
+  try {
+    const name = (req.body.name || '').trim();
+    const color = req.body.color || '#6b7280';
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+    if (!HEX_COLOR.test(color)) return res.status(400).json({ error: 'Colour must be a hex value like #3b82f6' });
+    const { next } = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 as next FROM outreach_channels').get();
+    const result = db.prepare('INSERT INTO outreach_channels (name, color, sort_order) VALUES (?, ?, ?)').run(name, color, next);
+    res.status(201).json(db.prepare(`${CHANNEL_SELECT} WHERE ch.id = ?`).get(result.lastInsertRowid));
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE')) return res.status(409).json({ error: 'A channel with this name already exists' });
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create channel' });
+  }
+});
+
+router.patch('/channels/:id', requireAdmin, (req, res) => {
+  try {
+    const channel = db.prepare('SELECT * FROM outreach_channels WHERE id = ?').get(req.params.id);
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    const name = req.body.name !== undefined ? String(req.body.name).trim() : undefined;
+    const { color, active } = req.body;
+    if (name === '') return res.status(400).json({ error: 'Name is required' });
+    if (color !== undefined && !HEX_COLOR.test(color)) return res.status(400).json({ error: 'Colour must be a hex value like #3b82f6' });
+
+    db.transaction(() => {
+      db.prepare(`
+        UPDATE outreach_channels SET
+          name = COALESCE(?, name), color = COALESCE(?, color), active = COALESCE(?, active)
+        WHERE id = ?
+      `).run(name || null, color || null, active !== undefined ? (active ? 1 : 0) : null, channel.id);
+      if (name && name !== channel.name) {
+        db.prepare('UPDATE outreach_touchpoints SET channel = ? WHERE channel = ?').run(name, channel.name);
+        db.prepare('UPDATE outreach_lead_responses SET channel = ? WHERE channel = ?').run(name, channel.name);
+      }
+    })();
+    res.json(db.prepare(`${CHANNEL_SELECT} WHERE ch.id = ?`).get(channel.id));
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE')) return res.status(409).json({ error: 'A channel with this name already exists' });
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update channel' });
+  }
+});
+
+// Touchpoints and replies already logged with this channel keep its name as text
+router.delete('/channels/:id', requireAdmin, (req, res) => {
+  try {
+    const result = db.prepare('DELETE FROM outreach_channels WHERE id = ?').run(req.params.id);
+    if (result.changes === 0) return res.status(404).json({ error: 'Channel not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete channel' });
+  }
+});
+
 // ─── LEADS ────────────────────────────────────────────────────────────────────
 
 router.get('/leads', (req, res) => {

@@ -8,6 +8,7 @@ import {
 import { fmtDate, fmtDateTime } from '../../../utils/dates';
 import { isAdmin } from '../../../utils/auth';
 import { stageColor } from '../stageTypes';
+import { useChannelColors, DEFAULT_CHANNEL_COLOR } from '../channels';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -24,11 +25,6 @@ const FUNNEL_STAGES = [
   { key: 'closed',          label: 'Closed', color: '#22c55e' },
 ];
 
-const CHANNEL_COLORS = {
-  LinkedIn: '#0a66c2', Email: '#575ECF', WhatsApp: '#25d366',
-  Facebook: '#1877f2', Instagram: '#e1306c', SMS: '#8a8680',
-  'Website Form': '#06b6d4', Other: '#6b7280',
-};
 
 const DATE_RANGE_OPTIONS = [
   { value: 'today',     label: 'Today' },
@@ -644,6 +640,7 @@ function CardModal({ card, allStatuses, onClose, onSave, onDelete }) {
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard({ specialistId, specialists, onLeadClick, refreshKey }) {
+  const channelColors = useChannelColors();
   const [dateRange, setDateRange] = useState('alltime');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -974,7 +971,7 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {sortedChannels.map(ch => {
-                    const color = CHANNEL_COLORS[ch.channel] || CHANNEL_COLORS.Other;
+                    const color = channelColors[ch.channel] || DEFAULT_CHANNEL_COLOR;
                     const barPct = maxChannelCount > 0 ? Math.max((ch.count / maxChannelCount) * 100, 2) : 2;
                     return (
                       <div key={ch.channel} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

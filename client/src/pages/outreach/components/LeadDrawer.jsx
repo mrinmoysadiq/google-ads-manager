@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import Select from 'react-select'
 import { getUser, isAdmin } from '../../../utils/auth'
 import {
   getLead,
@@ -16,13 +15,10 @@ import {
 import TouchpointQuickModal from './TouchpointQuickModal'
 import ResponseQuickModal from './ResponseQuickModal'
 import { fmtDate, fmtDateTime, todayLocal } from '../../../utils/dates'
-import LeadFields, { inputClass, selectStyles, isEmptyFieldValue } from './LeadFields'
+import LeadFields, { inputClass, isEmptyFieldValue } from './LeadFields'
 import { stageColor, touchpointNumberOf, touchpointStageName, needsResponse } from '../stageTypes'
+import ChannelSelect from './ChannelSelect'
 
-const CHANNELS = [
-  'LinkedIn', 'Email', 'WhatsApp', 'Facebook',
-  'Instagram', 'SMS', 'Website Form', 'Other',
-]
 
 // ─── Sub-component: StatusBadge with dropdown ────────────────────────────────
 
@@ -120,9 +116,12 @@ function TouchpointSection({ leadId, number, initialData, defaultOpen, onStageCh
   const [saving, setSaving] = useState(false)
   const [savedOk, setSavedOk] = useState(false)
   const [errors, setErrors] = useState({})
+  const setChannel = useCallback(channel => {
+    setFields(v => ({ ...v, channel }))
+    if (channel) setErrors(v => (v.channel ? { ...v, channel: false } : v))
+  }, [])
 
   const hasData = initialData?.date || initialData?.channel || initialData?.message_body
-  const channelOptions = CHANNELS.map(c => ({ value: c, label: c }))
 
   const summary = hasData
     ? [initialData.date && fmtDate(initialData.date), initialData.channel,
@@ -225,22 +224,10 @@ function TouchpointSection({ leadId, number, initialData, defaultOpen, onStageCh
             <label style={labelStyle(errors.channel)}>
               Channel <span style={{ color: '#ef4444' }}>*</span>
             </label>
-            <Select
-              styles={{
-                ...selectStyles,
-                control: (base, state) => ({
-                  ...selectStyles.control(base, state),
-                  borderColor: errors.channel ? '#ef4444' : state.isFocused ? '#575ECF' : 'rgba(255,255,255,0.1)',
-                }),
-              }}
-              options={channelOptions}
-              value={fields.channel ? { value: fields.channel, label: fields.channel } : null}
-              onChange={opt => {
-                setFields(v => ({ ...v, channel: opt?.value || '' }))
-                if (errors.channel) setErrors(v => ({ ...v, channel: false }))
-              }}
-              placeholder="Select channel…"
-              isClearable
+            <ChannelSelect
+              value={fields.channel}
+              error={!!errors.channel}
+              onChange={setChannel}
             />
           </div>
 
@@ -353,7 +340,10 @@ function ResponsesSection({ leadId, initialResponses = [] }) {
   const [form, setForm] = useState({ date: today, channel: '', message_body: '', notes: '' })
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
-  const channelOptions = CHANNELS.map(c => ({ value: c, label: c }))
+  const setChannel = useCallback(channel => {
+    setForm(v => ({ ...v, channel }))
+    if (channel) setErrors(v => (v.channel ? { ...v, channel: false } : v))
+  }, [])
 
   const labelStyle = (hasError) => ({
     display: 'block', fontSize: '11px', marginBottom: '4px',
@@ -413,22 +403,10 @@ function ResponsesSection({ leadId, initialResponses = [] }) {
             <label style={labelStyle(errors.channel)}>
               Channel <span style={{ color: '#ef4444' }}>*</span>
             </label>
-            <Select
-              styles={{
-                ...selectStyles,
-                control: (base, state) => ({
-                  ...selectStyles.control(base, state),
-                  borderColor: errors.channel ? '#ef4444' : state.isFocused ? '#575ECF' : 'rgba(255,255,255,0.1)',
-                }),
-              }}
-              options={channelOptions}
-              value={form.channel ? { value: form.channel, label: form.channel } : null}
-              onChange={opt => {
-                setForm(v => ({ ...v, channel: opt?.value || '' }))
-                if (errors.channel) setErrors(v => ({ ...v, channel: false }))
-              }}
-              placeholder="Select channel…"
-              isClearable
+            <ChannelSelect
+              value={form.channel}
+              error={!!errors.channel}
+              onChange={setChannel}
             />
           </div>
           <div>

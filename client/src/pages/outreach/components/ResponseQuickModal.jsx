@@ -1,40 +1,10 @@
-import { useState } from 'react'
-import Select from 'react-select'
+import { useState, useCallback } from 'react'
+import ChannelSelect from './ChannelSelect'
 import toast from 'react-hot-toast'
 import { todayLocal } from '../../../utils/dates'
 
-const CHANNELS = ['LinkedIn', 'Email', 'WhatsApp', 'Facebook', 'Instagram', 'SMS', 'Website Form', 'Other']
-
 const inputClass =
   'w-full rounded-lg px-3 py-2 text-sm focus:outline-none bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#575ECF] transition-colors'
-
-const selectStyles = {
-  control: (base, { isFocused }) => ({
-    ...base,
-    backgroundColor: '#2a2a2a',
-    borderColor: isFocused ? '#575ECF' : 'rgba(255,255,255,0.1)',
-    boxShadow: 'none',
-    minHeight: '36px',
-    fontSize: '13px',
-    '&:hover': { borderColor: isFocused ? '#575ECF' : 'rgba(255,255,255,0.2)' },
-  }),
-  menu: (base) => ({ ...base, backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', zIndex: 9999 }),
-  menuList: (base) => ({ ...base, padding: '4px' }),
-  option: (base, { isFocused, isSelected }) => ({
-    ...base,
-    backgroundColor: isSelected ? '#575ECF' : isFocused ? 'rgba(87,94,207,0.15)' : 'transparent',
-    color: '#c5c1b9',
-    fontSize: '13px',
-    borderRadius: '6px',
-    cursor: 'pointer',
-  }),
-  singleValue: (base) => ({ ...base, color: '#c5c1b9' }),
-  placeholder: (base) => ({ ...base, color: '#8a8680' }),
-  input: (base) => ({ ...base, color: '#c5c1b9' }),
-  indicatorSeparator: () => ({ display: 'none' }),
-  dropdownIndicator: (base) => ({ ...base, color: '#8a8680', padding: '0 8px' }),
-  clearIndicator: (base) => ({ ...base, color: '#8a8680' }),
-}
 
 // Called with a fresh key each open so form state always resets
 export default function ResponseQuickModal({ newStatus, onSave, onClose }) {
@@ -48,7 +18,10 @@ export default function ResponseQuickModal({ newStatus, onSave, onClose }) {
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
 
-  const channelOptions = CHANNELS.map(c => ({ value: c, label: c }))
+  const setChannel = useCallback(channel => {
+    setFields(v => ({ ...v, channel }))
+    if (channel) setErrors(v => (v.channel ? { ...v, channel: false } : v))
+  }, [])
 
   const labelStyle = (hasError) => ({
     display: 'block',
@@ -141,22 +114,10 @@ export default function ResponseQuickModal({ newStatus, onSave, onClose }) {
             <label style={labelStyle(errors.channel)}>
               Channel <span style={{ color: '#ef4444' }}>*</span>
             </label>
-            <Select
-              styles={{
-                ...selectStyles,
-                control: (base, state) => ({
-                  ...selectStyles.control(base, state),
-                  borderColor: errors.channel ? '#ef4444' : state.isFocused ? '#575ECF' : 'rgba(255,255,255,0.1)',
-                }),
-              }}
-              options={channelOptions}
-              value={fields.channel ? { value: fields.channel, label: fields.channel } : null}
-              onChange={opt => {
-                setFields(v => ({ ...v, channel: opt?.value || '' }))
-                if (errors.channel) setErrors(v => ({ ...v, channel: false }))
-              }}
-              placeholder="Select channel…"
-              isClearable
+            <ChannelSelect
+              value={fields.channel}
+              error={!!errors.channel}
+              onChange={setChannel}
             />
           </div>
 

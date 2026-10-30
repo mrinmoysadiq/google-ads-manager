@@ -2,12 +2,8 @@ import { useState, useRef, useCallback } from 'react'
 import { fmtDate as formatDate, todayLocal } from '../../../utils/dates'
 import { stageColor, isClosedStatus } from '../stageTypes'
 import TouchpointPeek from './TouchpointPeek'
+import { useChannelColors, DEFAULT_CHANNEL_COLOR } from '../channels'
 
-const CHANNEL_COLORS = {
-  'LinkedIn': '#0a66c2', 'Email': '#575ECF', 'WhatsApp': '#25d366',
-  'Facebook': '#1877f2', 'Instagram': '#e1306c', 'SMS': '#8a8680',
-  'Website Form': '#06b6d4', 'Other': '#6b7280',
-}
 
 function isOverdue(lead, stages) {
   if (!lead.next_followup_date) return false
@@ -21,11 +17,12 @@ function daysOverdue(dateStr) {
 
 
 function ChannelPills({ channels }) {
+  const channelColors = useChannelColors()
   if (!channels || channels.length === 0) return null
   return (
     <div className="flex gap-1 flex-wrap mt-1.5">
       {channels.slice(0, 3).map(ch => (
-        <span key={ch} className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: `${CHANNEL_COLORS[ch] || '#6b7280'}22`, color: CHANNEL_COLORS[ch] || '#6b7280' }}>
+        <span key={ch} className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: `${channelColors[ch] || DEFAULT_CHANNEL_COLOR}22`, color: channelColors[ch] || DEFAULT_CHANNEL_COLOR }}>
           {ch}
         </span>
       ))}
@@ -83,7 +80,7 @@ function KanbanCard({ lead, stages, onLeadClick, onPeek, peekOpen, showSpecialis
           data-peek-trigger
           draggable={false}
           onMouseDown={e => e.stopPropagation()}
-          onClick={e => { e.stopPropagation(); onPeek(lead, e.currentTarget.getBoundingClientRect()) }}
+          onClick={e => { e.stopPropagation(); onPeek(lead, e.currentTarget) }}
           title="View touchpoints & notes"
           aria-label={`View touchpoints and notes for ${lead.company_name}`}
           aria-expanded={peekOpen}
@@ -128,10 +125,11 @@ const DEFAULT_STAGES = [
 
 export default function PipelineKanban({ leads, loading, onLeadClick, onStatusChange, showSpecialistColumn, stages, maxTouchpoints = 5 }) {
   const [dragOverStatus, setDragOverStatus] = useState(null)
-  const [peek, setPeek] = useState(null) // { lead, rect } for the open touchpoint quick view
+  const [peek, setPeek] = useState(null) // { lead, anchor } for the open touchpoint quick view
+  const channelColors = useChannelColors()
 
-  const togglePeek = useCallback((lead, rect) => {
-    setPeek(prev => (prev?.lead.id === lead.id ? null : { lead, rect }))
+  const togglePeek = useCallback((lead, anchor) => {
+    setPeek(prev => (prev?.lead.id === lead.id ? null : { lead, anchor }))
   }, [])
   const closePeek = useCallback(() => setPeek(null), [])
 
@@ -267,8 +265,8 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
       {peek && (
         <TouchpointPeek
           lead={peek.lead}
-          anchorRect={peek.rect}
-          channelColors={CHANNEL_COLORS}
+          anchor={peek.anchor}
+          channelColors={channelColors}
           onClose={closePeek}
           onOpenLead={onLeadClick}
         />

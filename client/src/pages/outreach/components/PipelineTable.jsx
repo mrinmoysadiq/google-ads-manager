@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Select from 'react-select';
 import { fmtDate as formatDate } from '../../../utils/dates';
 import { stageColor, isClosedStatus } from '../stageTypes';
+import { useChannelColors, DEFAULT_CHANNEL_COLOR } from '../channels';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -14,16 +15,6 @@ const DEFAULT_STAGES = [
   'Closed / Booked as Client', 'Disqualified / Dead',
 ];
 
-const CHANNEL_COLORS = {
-  'LinkedIn':     '#0a66c2',
-  'Email':        '#575ECF',
-  'WhatsApp':     '#25d366',
-  'Facebook':     '#1877f2',
-  'Instagram':    '#e1306c',
-  'SMS':          '#8a8680',
-  'Website Form': '#06b6d4',
-  'Other':        '#6b7280',
-};
 
 function SourceLabel({ name, color }) {
   return (
@@ -95,13 +86,14 @@ const selectStyles = {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ChannelPills({ channels }) {
+  const channelColors = useChannelColors();
   if (!channels || channels.length === 0) return <span style={{ color: '#8a8680' }}>—</span>;
   const visible = channels.slice(0, 3);
   const extra = channels.length - 3;
   return (
     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
       {visible.map((ch) => {
-        const color = CHANNEL_COLORS[ch] || CHANNEL_COLORS['Other'];
+        const color = channelColors[ch] || DEFAULT_CHANNEL_COLOR;
         return (
           <span
             key={ch}

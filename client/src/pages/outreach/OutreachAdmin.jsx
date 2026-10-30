@@ -33,6 +33,7 @@ import {
 } from '../../utils/outreachApi';
 import { STAGE_TYPES, stageTypeMeta } from './stageTypes';
 import { CUSTOM_FIELD_TYPES, fieldTypeLabel } from './components/LeadFields';
+import { ChannelList } from './components/ChannelManager';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -644,6 +645,19 @@ function ColorSwatch({ value, onChange, title = 'Change colour' }) {
     <label className="relative inline-block w-6 h-6 rounded-md cursor-pointer shrink-0 border border-white/20" style={{ backgroundColor: value }} title={title}>
       <input type="color" value={value} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
     </label>
+  );
+}
+
+function ChannelsSection() {
+  return (
+    <div className="bg-[#242424] border border-white/[0.08] rounded-xl p-6">
+      <h2 className="text-base font-semibold text-[#c5c1b9] mb-1">Channels</h2>
+      <p className="text-xs text-[#8a8680] mb-5">
+        Where touchpoints and replies happen. Renaming a channel updates every touchpoint and reply logged on it;
+        deleting one keeps the name on what's already logged. Also editable from the lead drawer (✎ next to Channel).
+      </p>
+      <ChannelList />
+    </div>
   );
 }
 
@@ -1546,6 +1560,7 @@ export default function OutreachAdmin() {
               setIndustries={setIndustries}
             />
             <LeadSourcesSection />
+            <ChannelsSection />
             <PipelineStagesSection
               stages={stages}
               setStages={setStages}
