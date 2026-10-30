@@ -268,12 +268,89 @@ router.delete('/industries/:id', requireAdmin, (req, res) => {
   }
 });
 
+// ─── LEAD SOURCES ─────────────────────────────────────────────────────────────
+// Where a lead came from (manual, cold email, Facebook ads…). Each has a colour that
+// tints the lead's pipeline card.
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+function sourceExists(id) {
+  return !!db.prepare('SELECT 1 FROM outreach_lead_sources WHERE id = ?').get(id);
+}
+
+router.get('/sources', (req, res) => {
+  try {
+    const sources = db.prepare(`
+      SELECT src.*,
+        (SELECT COUNT(*) FROM outreach_leads l WHERE l.source_id = src.id AND l.deleted_at IS NULL) as lead_count
+      FROM outreach_lead_sources src
+      ORDER BY src.name COLLATE NOCASE ASC
+    `).all();
+    res.json(sources);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch lead sources' });
+  }
+});
+
+router.post('/sources', requireAdmin, (req, res) => {
+  try {
+    const { name, color = '#8a8680' } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
+    if (!HEX_COLOR.test(color)) return res.status(400).json({ error: 'Colour must be a hex value like #3b82f6' });
+    const result = db.prepare('INSERT INTO outreach_lead_sources (name, color) VALUES (?, ?)').run(name.trim(), color);
+    res.status(201).json({ ...db.prepare('SELECT * FROM outreach_lead_sources WHERE id = ?').get(result.lastInsertRowid), lead_count: 0 });
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE')) return res.status(409).json({ error: 'A source with this name already exists' });
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create lead source' });
+  }
+});
+
+router.patch('/sources/:id', requireAdmin, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, color, active } = req.body;
+    if (!sourceExists(id)) return res.status(404).json({ error: 'Source not found' });
+    if (color !== undefined && !HEX_COLOR.test(color)) return res.status(400).json({ error: 'Colour must be a hex value like #3b82f6' });
+    db.prepare(`
+      UPDATE outreach_lead_sources SET
+        name = COALESCE(?, name), color = COALESCE(?, color), active = COALESCE(?, active)
+      WHERE id = ?
+    `).run(name && name.trim() ? name.trim() : null, color || null, active !== undefined ? (active ? 1 : 0) : null, id);
+    res.json(db.prepare(`
+      SELECT src.*, (SELECT COUNT(*) FROM outreach_leads l WHERE l.source_id = src.id AND l.deleted_at IS NULL) as lead_count
+      FROM outreach_lead_sources src WHERE id = ?
+    `).get(id));
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE')) return res.status(409).json({ error: 'A source with this name already exists' });
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update lead source' });
+  }
+});
+
+// Only unused sources can be deleted (trashed leads count) — otherwise turn them off
+router.delete('/sources/:id', requireAdmin, (req, res) => {
+  try {
+    const { id } = req.params;
+    const used = db.prepare('SELECT COUNT(*) as cnt FROM outreach_leads WHERE source_id = ?').get(id).cnt;
+    if (used > 0) {
+      return res.status(409).json({ error: `${used} lead(s) use this source — turn it off instead, or move those leads first` });
+    }
+    db.prepare('DELETE FROM outreach_lead_sources WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete lead source' });
+  }
+});
+
 // ─── LEADS ────────────────────────────────────────────────────────────────────
 
 router.get('/leads', (req, res) => {
   try {
     let {
-      specialist_id, status, industry_id, search,
+      specialist_id, status, industry_id, source_id, search,
       followup_overdue, date_from, date_to,
       page = 1, limit = 25,
       sort_by = 'created_at', sort_dir = 'DESC',
@@ -307,6 +384,8 @@ router.get('/leads', (req, res) => {
       }
     }
     if (industry_id) { conditions.push('l.industry_id = ?'); params.push(industry_id); }
+    if (source_id === 'none') conditions.push('l.source_id IS NULL');
+    else if (source_id) { conditions.push('l.source_id = ?'); params.push(source_id); }
     if (search) {
       conditions.push('(l.company_name LIKE ? OR l.contact_name LIKE ? OR l.email LIKE ? OR l.phone LIKE ? OR l.location LIKE ? OR l.job_title LIKE ? OR l.website LIKE ?)');
       const s = `%${search}%`;
@@ -328,7 +407,7 @@ router.get('/leads', (req, res) => {
       company_name: 'l.company_name', contact_name: 'l.contact_name', status: 'l.status',
       next_followup_date: 'l.next_followup_date', created_at: 'l.created_at',
       status_updated_at: 'l.status_updated_at', industry_name: 'industry_name',
-      specialist_name: 'specialist_name', touchpoint_count: 'touchpoint_count',
+      specialist_name: 'specialist_name', source_name: 'source_name', touchpoint_count: 'touchpoint_count',
       last_touchpoint_date: 'last_touchpoint_date',
     };
     const safeSortBy = sortColumns[sort_by] || 'l.created_at';
@@ -340,11 +419,12 @@ router.get('/leads', (req, res) => {
     const leads = db.prepare(`
       SELECT
         l.id, l.specialist_id, l.company_name, l.contact_name, l.job_title,
-        l.website, l.industry_id, l.location, l.status, l.next_followup_date,
+        l.website, l.industry_id, l.source_id, l.location, l.status, l.next_followup_date,
         l.source_url, l.email, l.phone, l.fb_page_url, l.ig_url,
         l.created_at, l.status_updated_at,
         s.name as specialist_name,
         i.name as industry_name,
+        src.name as source_name, src.color as source_color,
         (SELECT GROUP_CONCAT(s2.name, ', ') FROM outreach_lead_specialists ols2
          JOIN outreach_specialists s2 ON s2.id = ols2.specialist_id
          WHERE ols2.lead_id = l.id ORDER BY s2.name ASC) as specialist_names,
@@ -355,6 +435,7 @@ router.get('/leads', (req, res) => {
       FROM outreach_leads l
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
       LEFT JOIN outreach_industries i ON i.id = l.industry_id
+      LEFT JOIN outreach_lead_sources src ON src.id = l.source_id
       ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortDir}, l.id DESC
       LIMIT ? OFFSET ?
@@ -397,7 +478,7 @@ router.post('/leads', (req, res) => {
     const {
       specialist_ids, specialist_id: single_specialist_id,
       company_name, contact_name, job_title,
-      website, industry_id, location,
+      website, industry_id, source_id, location,
       next_followup_date, next_followup,
       source_url, source_image, email, phone, fb_page_url, ig_url, linkedin_url,
       custom_fields,
@@ -420,6 +501,8 @@ router.post('/leads', (req, res) => {
     const missing = missingRequiredField(req.body, false);
     if (missing) return res.status(400).json({ error: missing });
 
+    if (source_id && !sourceExists(source_id)) return res.status(400).json({ error: 'Unknown lead source' });
+
     const dup = findDuplicateLead({ email, phone, fb_page_url });
     if (dup) return res.status(409).json({ error: duplicateErrorMessage(dup) });
 
@@ -427,8 +510,8 @@ router.post('/leads', (req, res) => {
     const leadId = db.transaction(() => {
       const result = db.prepare(`
         INSERT INTO outreach_leads
-          (specialist_id, company_name, contact_name, job_title, website, industry_id, location, next_followup_date, source_url, source_image, email, phone, fb_page_url, ig_url, linkedin_url, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (specialist_id, company_name, contact_name, job_title, website, industry_id, source_id, location, next_followup_date, source_url, source_image, email, phone, fb_page_url, ig_url, linkedin_url, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         specIds[0],
         company_name.trim(),
@@ -436,6 +519,7 @@ router.post('/leads', (req, res) => {
         job_title || null,
         website || null,
         industry_id || null,
+        source_id || null,
         location || null,
         followupDate,
         source_url || null,
@@ -466,10 +550,12 @@ router.post('/leads', (req, res) => {
     })();
 
     const created = db.prepare(`
-      SELECT l.*, s.name as specialist_name, i.name as industry_name
+      SELECT l.*, s.name as specialist_name, i.name as industry_name,
+        src.name as source_name, src.color as source_color
       FROM outreach_leads l
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
       LEFT JOIN outreach_industries i ON i.id = l.industry_id
+      LEFT JOIN outreach_lead_sources src ON src.id = l.source_id
       WHERE l.id = ?
     `).get(leadId);
     const specialists = db.prepare(`
@@ -491,10 +577,12 @@ router.get('/leads/:id', (req, res) => {
   try {
     const { id } = req.params;
     const lead = db.prepare(`
-      SELECT l.*, s.name as specialist_name, i.name as industry_name
+      SELECT l.*, s.name as specialist_name, i.name as industry_name,
+        src.name as source_name, src.color as source_color
       FROM outreach_leads l
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
       LEFT JOIN outreach_industries i ON i.id = l.industry_id
+      LEFT JOIN outreach_lead_sources src ON src.id = l.source_id
       WHERE l.id = ?
     `).get(id);
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
@@ -548,7 +636,7 @@ router.patch('/leads/:id', (req, res) => {
 
     const {
       specialist_id, specialist_ids, company_name, contact_name, job_title,
-      website, industry_id, location, status,
+      website, industry_id, source_id, location, status,
       next_followup_date, next_followup,
       source_url, source_image, email, phone, fb_page_url, ig_url, linkedin_url,
       custom_fields,
@@ -568,6 +656,7 @@ router.patch('/leads/:id', (req, res) => {
     }
     const missing = missingRequiredField(req.body, true);
     if (missing) return res.status(400).json({ error: missing });
+    if (source_id && !sourceExists(source_id)) return res.status(400).json({ error: 'Unknown lead source' });
 
     const dup = findDuplicateLead({
       email: email !== undefined ? email : existing.email,
@@ -586,6 +675,7 @@ router.patch('/leads/:id', (req, res) => {
           job_title = ?,
           website = ?,
           industry_id = ?,
+          source_id = ?,
           location = ?,
           status = COALESCE(?, status),
           next_followup_date = ?,
@@ -605,6 +695,7 @@ router.patch('/leads/:id', (req, res) => {
         job_title !== undefined ? (job_title || null) : existing.job_title,
         website !== undefined ? (website || null) : existing.website,
         industry_id !== undefined ? (industry_id || null) : existing.industry_id,
+        source_id !== undefined ? (source_id || null) : existing.source_id,
         location !== undefined ? (location || null) : existing.location,
         status || null,
         followupValue !== undefined ? followupValue : existing.next_followup_date,
@@ -642,10 +733,12 @@ router.patch('/leads/:id', (req, res) => {
     })();
 
     const updated = db.prepare(`
-      SELECT l.*, s.name as specialist_name, i.name as industry_name
+      SELECT l.*, s.name as specialist_name, i.name as industry_name,
+        src.name as source_name, src.color as source_color
       FROM outreach_leads l
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
       LEFT JOIN outreach_industries i ON i.id = l.industry_id
+      LEFT JOIN outreach_lead_sources src ON src.id = l.source_id
       WHERE l.id = ?
     `).get(id);
     const updatedSpecialists = db.prepare(`
@@ -1090,7 +1183,7 @@ router.get('/dashboard', (req, res) => {
         no_shows: 0, closed: 0, started_trial: 0, disqualified: 0, meetings_happened: 0,
         response_rate: 0, interested_rate: 0, appointment_rate: 0, no_show_rate: 0, closed_rate: 0,
         avg_touchpoints_before_response: 0, overdue_followups: 0,
-        by_status: {}, by_channel: {}, by_specialist: [] });
+        by_status: {}, by_channel: {}, by_specialist: [], by_source: [] });
     }
     if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
     // ────────────────────────────────────────────────────────────────────────
@@ -1108,9 +1201,11 @@ router.get('/dashboard', (req, res) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const leads = db.prepare(`
-      SELECT l.id, l.status, l.specialist_id, l.next_followup_date, s.name as specialist_name
+      SELECT l.id, l.status, l.specialist_id, l.next_followup_date, s.name as specialist_name,
+        src.name as source_name, src.color as source_color
       FROM outreach_leads l
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
+      LEFT JOIN outreach_lead_sources src ON src.id = l.source_id
       ${whereClause}
     `).all(...params);
 
@@ -1213,6 +1308,19 @@ router.get('/dashboard', (req, res) => {
     }
     const by_specialist = Object.values(specialistMap).sort((a, b) => b.total - a.total);
 
+    // by_source — volume and outcomes per lead source
+    const sourceMap = {};
+    leads.forEach(l => {
+      const name = l.source_name || 'No source';
+      if (!sourceMap[name]) sourceMap[name] = { name, color: l.source_color || '#555555', total: 0, responded: 0, booked: 0, closed: 0 };
+      const row = sourceMap[name];
+      row.total++;
+      if (RESPONDED_CURRENT.includes(l.status)) row.responded++;
+      if (APPOINTMENT_CURRENT.includes(l.status)) row.booked++;
+      if (WON.includes(l.status)) row.closed++;
+    });
+    const by_source = Object.values(sourceMap).sort((a, b) => b.total - a.total);
+
     res.json({
       total_leads, total_contacted: total_leads,
       responded, response_rate,
@@ -1222,7 +1330,7 @@ router.get('/dashboard', (req, res) => {
       meetings_happened, closed, closed_rate,
       started_trial, disqualified,
       avg_touchpoints_before_response, overdue_followups,
-      by_status, by_channel, by_specialist,
+      by_status, by_channel, by_specialist, by_source,
     });
   } catch (err) {
     console.error(err);
@@ -1469,10 +1577,12 @@ router.get('/export/csv', (req, res) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const leads = db.prepare(`
-      SELECT l.*, s.name as specialist_name, i.name as industry_name
+      SELECT l.*, s.name as specialist_name, i.name as industry_name,
+        src.name as source_name, src.color as source_color
       FROM outreach_leads l
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
       LEFT JOIN outreach_industries i ON i.id = l.industry_id
+      LEFT JOIN outreach_lead_sources src ON src.id = l.source_id
       ${whereClause}
       ORDER BY l.created_at DESC
     `).all(...params);
@@ -1497,6 +1607,7 @@ router.get('/export/csv', (req, res) => {
         'Job Title': l.job_title || '',
         Website: l.website || '',
         Industry: l.industry_name || '',
+        Source: l.source_name || '',
         Location: l.location || '',
         Status: l.status,
         Specialist: l.specialist_name || '',
@@ -1543,10 +1654,12 @@ router.get('/export/pdf', (req, res) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const leads = db.prepare(`
-      SELECT l.*, s.name as specialist_name, i.name as industry_name
+      SELECT l.*, s.name as specialist_name, i.name as industry_name,
+        src.name as source_name, src.color as source_color
       FROM outreach_leads l
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
       LEFT JOIN outreach_industries i ON i.id = l.industry_id
+      LEFT JOIN outreach_lead_sources src ON src.id = l.source_id
       ${whereClause} ORDER BY l.created_at DESC
     `).all(...params);
 

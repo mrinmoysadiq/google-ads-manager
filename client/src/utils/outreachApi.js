@@ -38,6 +38,12 @@ export const createIndustry = (data) => api.post('/outreach/industries', data).t
 export const updateIndustry = (id, data) => api.patch(`/outreach/industries/${id}`, data).then(r => r.data)
 export const deleteIndustry = (id) => api.delete(`/outreach/industries/${id}`).then(r => r.data)
 
+// Lead sources (where a lead came from — colours its pipeline card)
+export const getSources = () => api.get('/outreach/sources').then(r => r.data)
+export const createSource = (data) => api.post('/outreach/sources', data).then(r => r.data)
+export const updateSource = (id, data) => api.patch(`/outreach/sources/${id}`, data).then(r => r.data)
+export const deleteSource = (id) => api.delete(`/outreach/sources/${id}`).then(r => r.data)
+
 // Leads
 export const getLeads = (params) => api.get('/outreach/leads', { params }).then(r => r.data)
 export const createLead = (data) => api.post('/outreach/leads', data).then(r => r.data)

@@ -224,6 +224,11 @@ and custom fields (values in `outreach_lead_custom_values`) in one ordered list.
 required, hide (built-ins) / archive (custom, values kept). `company_name` and `specialist_ids` are locked.
 New built-in columns must also be added to `OUTREACH_BUILTIN_FIELDS` in `database.js`.
 
+### Lead Sources
+`outreach_lead_sources` (name, colour, active) — where a lead came from. `outreach_leads.source_id` → built-in
+"Lead Source" field. List/detail responses include `source_name` + `source_color`; Kanban cards and table rows are
+tinted with it. Managed in Admin → Lead Sources (`/api/outreach/sources`); in-use sources can only be turned off.
+
 ### Status Change Flow (OutreachHome.jsx)
 ```
 handleStatusChange(leadId, newStatus)

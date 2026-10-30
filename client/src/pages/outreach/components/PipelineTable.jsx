@@ -25,6 +25,15 @@ const CHANNEL_COLORS = {
   'Other':        '#6b7280',
 };
 
+function SourceLabel({ name, color }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: color, flexShrink: 0 }} />
+      {name}
+    </span>
+  );
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getFollowupColor(dateStr, status, stages) {
@@ -250,6 +259,7 @@ export default function PipelineTable({
   onStatusChange,
   specialists = [],
   industries = [],
+  sources = [],
   stages = [],
   showSpecialistColumn = false,
 }) {
@@ -273,11 +283,17 @@ export default function PipelineTable({
   const selectedStatuses = (filters.status ? filters.status.split(',') : [])
     .map((s) => ({ value: s, label: s }));
   const selectedIndustry = industryOptions.find((o) => String(o.value) === String(filters.industry_id)) || null;
+  const sourceOptions = [
+    ...sources.map((src) => ({ value: src.id, label: src.name, color: src.color })),
+    { value: 'none', label: 'No source', color: '#555555' },
+  ];
+  const selectedSource = sourceOptions.find((o) => String(o.value) === String(filters.source_id)) || null;
 
   const hasActiveFilters =
     filters.search ||
     filters.status ||
     filters.industry_id ||
+    filters.source_id ||
     filters.date_from ||
     filters.date_to ||
     filters.followup_overdue;
@@ -286,6 +302,7 @@ export default function PipelineTable({
     onFiltersChange?.({
       status: '',
       industry_id: '',
+      source_id: '',
       search: '',
       followup_overdue: false,
       date_from: '',
@@ -299,6 +316,7 @@ export default function PipelineTable({
   const columns = [
     { key: 'index',            label: '#',              sortable: false, width: 40 },
     { key: 'company_name',     label: 'Company',        sortable: true,  width: 160 },
+    { key: 'source_name',      label: 'Source',         sortable: true,  width: 130 },
     { key: 'contact_name',     label: 'Contact',        sortable: true,  width: 140 },
     { key: 'job_title',        label: 'Job Title',      sortable: false, width: 130 },
     { key: 'industry_name',    label: 'Industry',       sortable: true,  width: 110 },
@@ -385,6 +403,21 @@ export default function PipelineTable({
             styles={selectStyles}
             onChange={(opt) =>
               onFiltersChange?.({ ...filters, industry_id: opt ? opt.value : '', page: 1 })
+            }
+          />
+        </div>
+
+        {/* Lead source */}
+        <div style={{ minWidth: 160 }}>
+          <Select
+            isClearable
+            placeholder="All sources"
+            options={sourceOptions}
+            value={selectedSource}
+            styles={selectStyles}
+            formatOptionLabel={(o) => <SourceLabel name={o.label} color={o.color} />}
+            onChange={(opt) =>
+              onFiltersChange?.({ ...filters, source_id: opt ? opt.value : '', page: 1 })
             }
           />
         </div>
@@ -525,8 +558,8 @@ export default function PipelineTable({
                     onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(87,94,207,0.06)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = rowStyle(idx).background)}
                   >
-                    {/* # */}
-                    <td style={{ ...tdStyle, color: '#8a8680', fontSize: 12 }}>{rowNum}</td>
+                    {/* # — left edge coloured by lead source */}
+                    <td style={{ ...tdStyle, color: '#8a8680', fontSize: 12, boxShadow: lead.source_color ? `inset 3px 0 0 ${lead.source_color}` : undefined }}>{rowNum}</td>
 
                     {/* Company */}
                     <td style={{ ...tdStyle, fontWeight: 600, color: '#e8e5df' }}>
@@ -541,6 +574,24 @@ export default function PipelineTable({
                       >
                         {lead.company_name || '—'}
                       </div>
+                    </td>
+
+                    {/* Source */}
+                    <td style={tdStyle}>
+                      {lead.source_name ? (
+                        <span
+                          style={{
+                            display: 'inline-block', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                            backgroundColor: `${lead.source_color}26`, color: lead.source_color,
+                          }}
+                          title={lead.source_name}
+                        >
+                          {lead.source_name}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#555' }}>—</span>
+                      )}
                     </td>
 
                     {/* Contact */}

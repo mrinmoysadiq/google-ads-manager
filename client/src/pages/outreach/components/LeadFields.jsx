@@ -56,7 +56,7 @@ export const CUSTOM_FIELD_TYPES = [
   { value: 'image',       label: 'Image',        icon: '🖼' },
 ]
 
-const BUILTIN_TYPE_LABELS = { industry: 'Industry list', specialists: 'Specialists' }
+const BUILTIN_TYPE_LABELS = { industry: 'Industry list', source: 'Lead source list', specialists: 'Specialists' }
 
 export function fieldTypeLabel(type) {
   return CUSTOM_FIELD_TYPES.find(t => t.value === type)?.label || BUILTIN_TYPE_LABELS[type] || type
@@ -113,7 +113,7 @@ const labelStyle = { display: 'block', fontSize: '11px', color: '#8a8680', margi
 
 // `live` (create form): commit on every change. Otherwise (edit): commit on blur/select,
 // only when the value actually changed. Required fields refuse to be cleared in edit mode.
-function FieldControl({ field, value, onCommit, live, specialists, industries, onResizeHeight }) {
+function FieldControl({ field, value, onCommit, live, specialists, industries, sources, onResizeHeight }) {
   const [nonce, setNonce] = useState(0)
   const textareaRef = useRef(null)
   const { field_type: type, field_key: key } = field
@@ -270,6 +270,30 @@ function FieldControl({ field, value, onCommit, live, specialists, industries, o
       )
     }
 
+    case 'source': {
+      const opts = sources
+        .filter(src => src.active || src.id === value)
+        .map(src => ({ value: src.id, label: src.name, color: src.color }))
+      return (
+        <Select
+          key={nonce}
+          styles={selectStyles}
+          menuPortalTarget={document.body}
+          options={opts}
+          value={opts.find(o => o.value === value) || null}
+          onChange={opt => commit(opt?.value || null)}
+          formatOptionLabel={o => (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: o.color, flexShrink: 0 }} />
+              {o.label}
+            </span>
+          )}
+          placeholder="Where did this lead come from?"
+          isClearable
+        />
+      )
+    }
+
     case 'specialists': {
       const opts = specialists.map(s => ({ value: s.id, label: s.name }))
       const ids = Array.isArray(value) ? value : []
@@ -300,7 +324,7 @@ function FieldControl({ field, value, onCommit, live, specialists, industries, o
 // `customValues` holds custom field values. `onCommit(field, value)` saves one field.
 export default function LeadFields({
   fields, values, customValues, onCommit, live = false, saved = {},
-  specialists = [], industries = [], canManage = false, onResizeHeight,
+  specialists = [], industries = [], sources = [], canManage = false, onResizeHeight,
 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -326,6 +350,7 @@ export default function LeadFields({
               live={live}
               specialists={specialists}
               industries={industries}
+              sources={sources}
               onCommit={v => onCommit(field, v)}
               onResizeHeight={onResizeHeight ? h => onResizeHeight(field, h) : undefined}
             />

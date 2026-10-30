@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { useDebounce } from '../../hooks/useDebounce'
 import { getUser, isAdmin } from '../../utils/auth'
 import { todayLocal } from '../../utils/dates'
-import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, upsertTouchpoint, createLeadResponse } from '../../utils/outreachApi'
+import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, getSources, upsertTouchpoint, createLeadResponse } from '../../utils/outreachApi'
 import LeadDrawer from './components/LeadDrawer'
 import PipelineTable from './components/PipelineTable'
 import PipelineKanban from './components/PipelineKanban'
@@ -31,6 +31,7 @@ export default function OutreachHome() {
   const [viewMode, setViewMode] = useState(() => localStorage.getItem(LS_VIEW_KEY) || 'kanban')
   const [specialists, setSpecialists] = useState([])
   const [industries, setIndustries] = useState([])
+  const [sources, setSources] = useState([])
   // Restore the saved specialist synchronously so the first lead fetch is already filtered
   // (avoids flashing every specialist's leads while metadata loads)
   const [selectedSpecialistId, setSelectedSpecialistId] = useState(() => {
@@ -52,7 +53,7 @@ export default function OutreachHome() {
 
   // Pipeline filters — default sort by most-recently-updated so moved leads surface to top
   const [filters, setFilters] = useState({
-    status: '', industry_id: '', search: '', followup_overdue: false,
+    status: '', industry_id: '', source_id: '', search: '', followup_overdue: false,
     date_from: '', date_to: '', sort_by: 'status_updated_at', sort_dir: 'DESC',
   })
   const [page, setPage] = useState(1)
@@ -78,6 +79,7 @@ export default function OutreachHome() {
   useEffect(() => {
     const appUser = getUser()
     const userIsAdmin = isAdmin()
+    getSources().then(setSources).catch(() => {})
     Promise.all([getSpecialists(), getIndustries(), getPipelineStages(), getSettings()])
       .then(async ([specs, inds, stgs, settings]) => {
         const activeSpecs = specs.filter(s => s.active)
@@ -127,6 +129,7 @@ export default function OutreachHome() {
     if (selectedSpecialistId) params.specialist_id = selectedSpecialistId
     if (filters.status) params.status = filters.status
     if (filters.industry_id) params.industry_id = filters.industry_id
+    if (filters.source_id) params.source_id = filters.source_id
     if (filters.search) params.search = filters.search
     if (filters.followup_overdue) params.followup_overdue = 'true'
     if (filters.date_from) params.date_from = filters.date_from
@@ -449,6 +452,7 @@ export default function OutreachHome() {
                 onStatusChange={handleStatusChange}
                 specialists={specialists}
                 industries={industries}
+                sources={sources}
                 stages={stages}
                 showSpecialistColumn={showSpecialistColumn}
               />
@@ -488,6 +492,7 @@ export default function OutreachHome() {
           onLeadUpdated={handleLeadUpdated}
           specialists={specialists}
           industries={industries}
+          sources={sources}
           stages={stages}
           maxTouchpoints={touchpointSlots(stages, maxTouchpoints)}
         />

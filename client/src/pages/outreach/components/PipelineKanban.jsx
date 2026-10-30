@@ -38,6 +38,7 @@ function ChannelPills({ channels }) {
 function KanbanCard({ lead, stages, onLeadClick, showSpecialistColumn, maxTouchpoints }) {
   const dragStarted = useRef(false)
   const overdue = isOverdue(lead, stages)
+  const sourceColor = lead.source_color || null
   const days = overdue ? daysOverdue(lead.next_followup_date) : 0
   const followupColor = !overdue ? '#c5c1b9' : days >= 3 ? '#ef4444' : '#f59e0b'
 
@@ -52,10 +53,21 @@ function KanbanCard({ lead, stages, onLeadClick, showSpecialistColumn, maxTouchp
       onDragEnd={() => { setTimeout(() => { dragStarted.current = false }, 100) }}
       onClick={() => { if (!dragStarted.current) onLeadClick(lead.id) }}
       className="rounded-lg p-3 cursor-pointer select-none"
-      style={{ backgroundColor: '#2a2a2a', border: '1px solid rgba(255,255,255,0.06)' }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)'; e.currentTarget.style.backgroundColor = '#313131' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.backgroundColor = '#2a2a2a' }}
+      style={{
+        backgroundColor: '#2a2a2a',
+        // Tinted by lead source: a wash of the source colour plus a solid left edge
+        backgroundImage: sourceColor ? `linear-gradient(${sourceColor}1f, ${sourceColor}1f)` : undefined,
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderLeft: `3px solid ${sourceColor || 'rgba(255,255,255,0.06)'}`,
+      }}
+      onMouseEnter={e => { e.currentTarget.style.borderTopColor = e.currentTarget.style.borderRightColor = e.currentTarget.style.borderBottomColor = 'rgba(255,255,255,0.14)'; e.currentTarget.style.backgroundColor = '#313131' }}
+      onMouseLeave={e => { e.currentTarget.style.borderTopColor = e.currentTarget.style.borderRightColor = e.currentTarget.style.borderBottomColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.backgroundColor = '#2a2a2a' }}
     >
+      {lead.source_name && (
+        <span className="inline-block text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color: sourceColor }}>
+          {lead.source_name}
+        </span>
+      )}
       <p className="text-sm font-semibold text-white leading-snug">{lead.company_name}</p>
       {(lead.contact_name || lead.job_title) && (
         <p className="text-xs mt-0.5" style={{ color: '#8a8680' }}>

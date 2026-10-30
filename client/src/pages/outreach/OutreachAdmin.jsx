@@ -23,6 +23,10 @@ import {
   permanentDeleteLead,
   getFields,
   reorderFields,
+  getSources,
+  createSource,
+  updateSource,
+  deleteSource,
   createCustomField,
   updateCustomField,
   deleteCustomField,
@@ -622,6 +626,156 @@ function IndustriesSection({ industries, setIndustries }) {
               >
                 Delete
               </Btn>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── Section: Lead Sources ────────────────────────────────────────────────────
+
+const SOURCE_PALETTE = ['#3b82f6', '#1877f2', '#a855f7', '#f59e0b', '#22c55e', '#ef4444', '#06b6d4', '#ec4899', '#f97316', '#14b8a6', '#8a8680'];
+
+// Colour swatch that opens the native colour picker
+function ColorSwatch({ value, onChange, title = 'Change colour' }) {
+  return (
+    <label className="relative inline-block w-6 h-6 rounded-md cursor-pointer shrink-0 border border-white/20" style={{ backgroundColor: value }} title={title}>
+      <input type="color" value={value} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+    </label>
+  );
+}
+
+function LeadSourcesSection() {
+  const [sources, setSources] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [addName, setAddName] = useState('');
+  const [addColor, setAddColor] = useState(SOURCE_PALETTE[0]);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  const load = useCallback(() => {
+    getSources().then(setSources).catch(() => toast.error('Failed to load lead sources')).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const handleAdd = async () => {
+    if (!addName.trim()) return;
+    try {
+      const created = await createSource({ name: addName.trim(), color: addColor });
+      setSources(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setAddName('');
+      setAddColor(SOURCE_PALETTE[(sources.length + 1) % SOURCE_PALETTE.length]);
+      toast.success('Source added');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to add source');
+    }
+  };
+
+  const update = async (source, data, message) => {
+    const prev = sources;
+    setSources(list => list.map(x => (x.id === source.id ? { ...x, ...data } : x)));
+    try {
+      const updated = await updateSource(source.id, data);
+      setSources(list => list.map(x => (x.id === source.id ? updated : x)));
+      if (message) toast.success(message);
+    } catch (err) {
+      setSources(prev);
+      toast.error(err.response?.data?.error || 'Failed to update source');
+    }
+  };
+
+  // The native colour input fires on every drag step — save once the user settles
+  const colorTimers = React.useRef({});
+  const changeColor = (source, color) => {
+    setSources(list => list.map(x => (x.id === source.id ? { ...x, color } : x)));
+    clearTimeout(colorTimers.current[source.id]);
+    colorTimers.current[source.id] = setTimeout(() => update(source, { color }), 400);
+  };
+
+  const commitRename = (source) => {
+    const name = renameValue.trim();
+    setRenamingId(null);
+    if (name && name !== source.name) update(source, { name }, 'Source renamed');
+  };
+
+  const handleDelete = async (source) => {
+    if (!window.confirm(`Delete source "${source.name}"?`)) return;
+    try {
+      await deleteSource(source.id);
+      setSources(list => list.filter(x => x.id !== source.id));
+      toast.success('Source deleted');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete source', { duration: 6000 });
+    }
+  };
+
+  return (
+    <div className="bg-[#242424] border border-white/[0.08] rounded-xl p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+        <h2 className="text-base font-semibold text-[#c5c1b9]">Lead Sources</h2>
+        <div className="flex items-center gap-2">
+          <ColorSwatch value={addColor} onChange={setAddColor} title="Colour for the new source" />
+          <input
+            className={inputClass + ' !w-48'}
+            placeholder="New source…"
+            value={addName}
+            onChange={e => setAddName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAdd()}
+          />
+          <Btn variant="primary" onClick={handleAdd} disabled={!addName.trim()}>+ Add</Btn>
+        </div>
+      </div>
+      <p className="text-xs text-[#8a8680] mb-5">
+        Where leads come from. Each lead's pipeline card and table row is coloured by its source.
+        Click a swatch to change the colour, a name to rename it. Sources in use can't be deleted — turn them off instead.
+      </p>
+
+      {loading ? (
+        <div className="flex justify-center py-6"><Spinner /></div>
+      ) : sources.length === 0 ? (
+        <p className="text-sm text-[#8a8680] py-4 text-center">No sources yet. Add one above.</p>
+      ) : (
+        <ul className="divide-y divide-white/[0.04]">
+          {sources.map(source => (
+            <li key={source.id} className={`flex items-center gap-3 py-2.5 px-1 ${!source.active ? 'opacity-40' : ''}`}>
+              <ColorSwatch value={source.color} onChange={c => changeColor(source, c)} />
+              <div className="flex-1 min-w-0">
+                {renamingId === source.id ? (
+                  <input
+                    className={inputClass}
+                    value={renameValue}
+                    autoFocus
+                    onChange={e => setRenameValue(e.target.value)}
+                    onBlur={() => commitRename(source)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') commitRename(source);
+                      if (e.key === 'Escape') setRenamingId(null);
+                    }}
+                  />
+                ) : (
+                  <button
+                    className="text-sm text-left truncate max-w-full font-medium hover:brightness-125"
+                    style={{ color: source.color }}
+                    title="Click to rename"
+                    onClick={() => { setRenamingId(source.id); setRenameValue(source.name); }}
+                  >
+                    {source.name}
+                  </button>
+                )}
+              </div>
+              <span className="text-xs text-[#8a8680] shrink-0">{source.lead_count} lead{source.lead_count === 1 ? '' : 's'}</span>
+              <button
+                onClick={() => update(source, { active: source.active ? 0 : 1 }, `${source.name} turned ${source.active ? 'off' : 'on'}`)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${source.active ? 'bg-[#575ECF]' : 'bg-white/10'}`}
+                role="switch"
+                aria-checked={!!source.active}
+                title={source.active ? 'Turn off (hidden from the lead form; existing leads keep it)' : 'Turn on'}
+              >
+                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${source.active ? 'translate-x-4' : 'translate-x-0'}`} />
+              </button>
+              <Btn variant="danger" onClick={() => handleDelete(source)} title="Delete source">Delete</Btn>
             </li>
           ))}
         </ul>
@@ -1364,7 +1518,7 @@ export default function OutreachAdmin() {
             Outreach Admin
           </h1>
           <p className="text-sm text-[#8a8680] mt-1">
-            Manage specialists, industries, pipeline stages, lead fields and settings.
+            Manage specialists, industries, lead sources, pipeline stages, lead fields and settings.
           </p>
         </div>
 
@@ -1391,6 +1545,7 @@ export default function OutreachAdmin() {
               industries={industries}
               setIndustries={setIndustries}
             />
+            <LeadSourcesSection />
             <PipelineStagesSection
               stages={stages}
               setStages={setStages}

@@ -824,6 +824,7 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
   const totalLeads = m.total_leads || 0;
   const byChannel = m.by_channel ? Object.entries(m.by_channel).map(([ch, cnt]) => ({ channel: ch, count: cnt })) : [];
   const bySpecialist = m.by_specialist || [];
+  const bySource = m.by_source || [];
   const sortedChannels = [...byChannel].sort((a, b) => (b.count || 0) - (a.count || 0));
   const maxChannelCount = sortedChannels.length > 0 ? sortedChannels[0].count : 1;
 
@@ -1018,6 +1019,48 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
                           <td style={{ ...mutedText, padding: '8px 12px', textAlign: 'right' }}>{sp.booked || 0}</td>
                           <td style={{ ...mutedText, padding: '8px 12px', textAlign: 'right' }}>{sp.closed || 0}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', color: '#22c55e', fontWeight: 600 }}>{closedRate}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Lead Sources ──────────────────────────────────────────── */}
+          {bySource.length > 0 && (
+            <div className="rounded-xl p-6" style={{ ...cardStyle, marginBottom: 24 }}>
+              <h3 style={{ ...primaryText, fontWeight: 600, fontSize: '0.9rem', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                By Lead Source
+              </h3>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr>
+                      {['Source', 'Leads', 'Responded', 'Response Rate', 'Booked', 'Closed'].map(col => (
+                        <th key={col} style={{ ...mutedText, textAlign: col === 'Source' ? 'left' : 'right', padding: '6px 12px', fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bySource.map(src => {
+                      const rate = src.total > 0 ? ((src.responded / src.total) * 100).toFixed(1) + '%' : '0%';
+                      return (
+                        <tr key={src.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <td style={{ padding: '8px 12px' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#c5c1b9' }}>
+                              <span style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: src.color, flexShrink: 0 }} />
+                              {src.name}
+                            </span>
+                          </td>
+                          <td style={{ ...mutedText, padding: '8px 12px', textAlign: 'right' }}>{src.total}</td>
+                          <td style={{ ...mutedText, padding: '8px 12px', textAlign: 'right' }}>{src.responded}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#3b82f6', fontWeight: 600 }}>{rate}</td>
+                          <td style={{ ...mutedText, padding: '8px 12px', textAlign: 'right' }}>{src.booked}</td>
+                          <td style={{ ...mutedText, padding: '8px 12px', textAlign: 'right' }}>{src.closed}</td>
                         </tr>
                       );
                     })}

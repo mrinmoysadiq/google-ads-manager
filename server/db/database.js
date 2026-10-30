@@ -39,6 +39,7 @@ function inferOutreachStageType(name) {
 const OUTREACH_BUILTIN_FIELDS = [
   // [field_key, label, field_type, width]
   ['company_name', 'Company Name', 'short_text', 'full'],
+  ['source_id', 'Lead Source', 'source', 'half'],
   ['contact_name', 'Contact Name', 'short_text', 'half'],
   ['job_title', 'Job Title', 'short_text', 'half'],
   ['website', 'Website', 'link', 'full'],
@@ -76,9 +77,18 @@ function seedOutreachBuiltinFields() {
           db.prepare('UPDATE outreach_lead_custom_values SET field_key = ? WHERE field_key = ?').run(`${key}_custom`, key);
           db.prepare('UPDATE outreach_custom_fields SET field_key = ? WHERE id = ?').run(`${key}_custom`, clash.id);
         }
-        const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM outreach_custom_fields').get().m || 0;
+        // Place it right after the built-in that precedes it in the list (or at the end)
+        const prevKey = OUTREACH_BUILTIN_FIELDS[OUTREACH_BUILTIN_FIELDS.findIndex(([k]) => k === key) - 1]?.[0];
+        const prev = prevKey && db.prepare('SELECT sort_order FROM outreach_custom_fields WHERE field_key = ? AND is_builtin = 1').get(prevKey);
+        let order;
+        if (prev) {
+          db.prepare('UPDATE outreach_custom_fields SET sort_order = sort_order + 1 WHERE sort_order > ?').run(prev.sort_order);
+          order = prev.sort_order + 1;
+        } else {
+          order = (db.prepare('SELECT MAX(sort_order) as m FROM outreach_custom_fields').get().m || 0) + 1;
+        }
         const locked = key === 'company_name' || key === 'specialist_ids';
-        insert.run(label, key, type, maxOrder + 1, width, locked ? 1 : 0);
+        insert.run(label, key, type, order, width, locked ? 1 : 0);
       });
     })();
   } catch (e) { console.error('Built-in lead field seed failed', e); }
@@ -354,6 +364,14 @@ function initializeDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS outreach_lead_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      color TEXT NOT NULL DEFAULT '#8a8680',
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS outreach_lead_custom_values (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_id INTEGER NOT NULL REFERENCES outreach_leads(id) ON DELETE CASCADE,
@@ -374,6 +392,20 @@ function initializeDatabase() {
       'Fitness & Wellness', 'Education', 'Automotive', 'Other'
     ].forEach(name => insertIndustry.run(name));
     console.log('Seeded outreach industries');
+  }
+  // Seed lead sources if empty (where a lead came from — colours its pipeline card)
+  const sourceCount = db.prepare('SELECT COUNT(*) as cnt FROM outreach_lead_sources').get();
+  if (sourceCount.cnt === 0) {
+    const insertSource = db.prepare('INSERT INTO outreach_lead_sources (name, color) VALUES (?, ?)');
+    [
+      ['Manual', '#8a8680'],
+      ['Cold Email Responder', '#3b82f6'],
+      ['Facebook Ads', '#06b6d4'],
+      ['Facebook Ads Library', '#a855f7'],
+      ['Cold Call', '#f59e0b'],
+      ['Referral', '#22c55e'],
+    ].forEach(([name, color]) => insertSource.run(name, color));
+    console.log('Seeded outreach lead sources');
   }
   // Seed pipeline stages if empty
   const stageCount = db.prepare('SELECT COUNT(*) as cnt FROM outreach_pipeline_stages').get();
@@ -676,6 +708,7 @@ function initializeDatabase() {
     'ALTER TABLE outreach_custom_fields ADD COLUMN is_builtin INTEGER DEFAULT 0',
     'ALTER TABLE outreach_custom_fields ADD COLUMN help_text TEXT',
     'ALTER TABLE outreach_custom_fields ADD COLUMN required INTEGER DEFAULT 0',
+    'ALTER TABLE outreach_leads ADD COLUMN source_id INTEGER REFERENCES outreach_lead_sources(id)',
   ];
 
   // Explicit buyer-account assignment table

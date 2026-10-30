@@ -81,7 +81,7 @@ function buildServer(user) {
   const server = new McpServer({ name: 'infinix-outreach-crm', version: '1.0.0' }, {
     instructions:
       `Outreach CRM for ${user.name} (${user.role === 'admin' ? 'admin — sees all leads' : 'team member — sees only their own leads'}). ` +
-      'Call list_pipeline_stages / list_specialists / list_industries to get valid names and IDs before creating or moving leads. ' +
+      'Call list_pipeline_stages / list_specialists / list_industries / list_lead_sources to get valid names and IDs before creating or moving leads. ' +
       'Use search_leads to find a lead ID by company, contact, email or phone. ' +
       'Each stage has a type. Moving a lead to a "touchpoint" stage should go through log_touchpoint; moving it to an ' +
       '"interested", "not_interested" or "meeting_lost" stage should go through log_response, so the message is recorded ' +
@@ -97,6 +97,7 @@ function buildServer(user) {
     website: z.string().optional(),
     location: z.string().optional(),
     industry_id: z.number().int().optional().describe('From list_industries'),
+    source_id: z.number().int().optional().describe('How the lead was acquired, from list_lead_sources'),
     source_url: z.string().optional().describe('Where the lead was found, e.g. a Meta Ads Library link'),
     fb_page_url: z.string().optional(),
     ig_url: z.string().optional(),
@@ -124,6 +125,14 @@ function buildServer(user) {
     annotations: { readOnlyHint: true },
   }, tool(async () => (await api('GET', '/specialists'))
     .map(s => ({ id: s.id, name: s.name, active: !!s.active, manager: s.manager_name || null }))));
+
+  server.registerTool('list_lead_sources', {
+    title: 'List lead sources',
+    description: 'How leads were acquired (e.g. Manual, Cold Email Responder, Facebook Ads, Referral) with their IDs.',
+    inputSchema: {},
+    annotations: { readOnlyHint: true },
+  }, tool(async () => (await api('GET', '/sources'))
+    .map(s => ({ id: s.id, name: s.name, active: s.active !== 0, leads: s.lead_count }))));
 
   server.registerTool('list_industries', {
     title: 'List industries',
@@ -157,6 +166,7 @@ function buildServer(user) {
       statuses: z.array(z.string()).optional().describe('Filter to these pipeline stages'),
       specialist_id: z.number().int().optional(),
       industry_id: z.number().int().optional(),
+      source_id: z.number().int().optional().describe('From list_lead_sources'),
       followup_overdue: z.boolean().optional().describe('Only leads whose next follow-up date has passed'),
       created_from: z.string().optional().describe('YYYY-MM-DD, by lead created date'),
       created_to: z.string().optional().describe('YYYY-MM-DD, by lead created date'),
@@ -173,6 +183,7 @@ function buildServer(user) {
         status: a.statuses?.join(','),
         specialist_id: a.specialist_id,
         industry_id: a.industry_id,
+        source_id: a.source_id,
         followup_overdue: a.followup_overdue ? 'true' : undefined,
         date_from: a.created_from,
         date_to: a.created_to,
@@ -187,7 +198,7 @@ function buildServer(user) {
       leads: r.data.map(l => ({
         id: l.id, company_name: l.company_name, contact_name: l.contact_name, status: l.status,
         email: l.email, phone: l.phone, website: l.website, location: l.location,
-        industry: l.industry_name, specialists: l.specialist_names,
+        industry: l.industry_name, source: l.source_name, specialists: l.specialist_names,
         next_followup_date: l.next_followup_date, touchpoint_count: l.touchpoint_count,
         last_touchpoint_date: l.last_touchpoint_date, channels_used: l.channels_used,
         status_updated_at: l.status_updated_at, created_at: l.created_at,

@@ -573,6 +573,7 @@ export default function LeadDrawer({
   onLeadUpdated,
   specialists = [],
   industries = [],
+  sources = [],
   stages = [],
   maxTouchpoints = 5,
 }) {
@@ -921,6 +922,7 @@ export default function LeadDrawer({
                     live
                     specialists={specialists}
                     industries={industries}
+                    sources={sources}
                     canManage={canManageFields}
                     onResizeHeight={resizeFieldHeight}
                   />
@@ -1096,6 +1098,7 @@ export default function LeadDrawer({
                         saved={saved}
                         specialists={specialists}
                         industries={industries}
+                        sources={sources}
                         canManage={canManageFields}
                         onResizeHeight={resizeFieldHeight}
                       />
