@@ -88,7 +88,7 @@ export default function Navbar() {
           <div className="flex items-center gap-1">
             {isAudit && <>{navLink('/changelog', 'Change Log')}{navLink('/admin', 'Admin')}</>}
             {isLearning && navLink('/learning/admin', 'Admin')}
-            {isOutreach && navLink('/outreach/admin', 'Admin', '#e05d0a')}
+            {isOutreach && user?.role === 'admin' && navLink('/outreach/admin', 'Admin', '#e05d0a')}
             {isLinkedIn && navLink('/outreach/linkedin/admin', 'Admin', '#0a66c2')}
             {isFacebook && navLink('/facebook/admin', 'Admin', '#1877f2')}
             {isTracking && navLink('/tracking/admin', 'Admin', '#65db38')}

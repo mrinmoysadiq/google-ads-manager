@@ -22,6 +22,34 @@ function resolveSpecialistForUser(reqUser) {
   return spec ? spec.id : -1; // -1 = no specialist found → return no leads
 }
 
+// Every outreach route requires a valid login; the app_users row is kept on req.user
+router.use((req, res, next) => {
+  const user = getRequestUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  req.user = user;
+  next();
+});
+
+// Configuration routes (stages, fields, cards, settings, trash) are admin-only
+function requireAdmin(req, res, next) {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  next();
+}
+
+// Non-admins may only touch leads they are assigned to. Sends the error response and
+// returns false when access is denied.
+function checkLeadAccess(req, res, leadId) {
+  const lead = db.prepare('SELECT id FROM outreach_leads WHERE id = ?').get(leadId);
+  if (!lead) { res.status(404).json({ error: 'Lead not found' }); return false; }
+  const specId = resolveSpecialistForUser(req.user);
+  if (specId === null) return true;
+  const assigned = specId !== -1 && db.prepare(
+    'SELECT 1 FROM outreach_lead_specialists WHERE lead_id = ? AND specialist_id = ?'
+  ).get(leadId, specId);
+  if (!assigned) { res.status(403).json({ error: 'Access denied' }); return false; }
+  return true;
+}
+
 const STATUSES = [
   'New Lead',
   'Touchpoint 1', 'Touchpoint 2', 'Touchpoint 3', 'Touchpoint 4', 'Touchpoint 5',
@@ -52,7 +80,10 @@ const APPOINTMENT_OR_BEYOND = [
   'Started Trial', 'Closed / Booked as Client',
 ];
 
-const NOT_OVERDUE_STATUSES = ['Closed / Booked as Client', 'Disqualified / Dead', 'Meeting Done - Not Interested'];
+const NOT_OVERDUE_STATUSES = [
+  'Closed / Booked as Client', 'Disqualified / Dead', 'Meeting Done - Not Interested',
+  'Not Interested', 'Not interested',
+];
 
 // ─── Duplicate lead detection (by email / phone / Facebook page) ────────────────
 
@@ -115,6 +146,10 @@ router.post('/specialists', (req, res) => {
   try {
     const { name, manager_id } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
+    // Non-admins may only create their own specialist record (done automatically on first visit)
+    if (req.user.role !== 'admin' && name.trim().toLowerCase() !== (req.user.name || '').trim().toLowerCase()) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
     const result = db.prepare(
       'INSERT INTO outreach_specialists (name, manager_id) VALUES (?, ?)'
     ).run(name.trim(), manager_id || null);
@@ -129,7 +164,7 @@ router.post('/specialists', (req, res) => {
   }
 });
 
-router.patch('/specialists/:id', (req, res) => {
+router.patch('/specialists/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const { name, manager_id, active } = req.body;
@@ -189,7 +224,7 @@ router.post('/industries', (req, res) => {
   }
 });
 
-router.patch('/industries/:id', (req, res) => {
+router.patch('/industries/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const { name, active } = req.body;
@@ -203,7 +238,7 @@ router.patch('/industries/:id', (req, res) => {
   }
 });
 
-router.delete('/industries/:id', (req, res) => {
+router.delete('/industries/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const used = db.prepare('SELECT COUNT(*) as cnt FROM outreach_leads WHERE industry_id = ?').get(id);
@@ -230,7 +265,7 @@ router.get('/leads', (req, res) => {
     } = req.query;
 
     // ── Server-side access enforcement ──────────────────────────────────────
-    const reqUser = getRequestUser(req);
+    const reqUser = req.user;
     const enforcedSpecId = resolveSpecialistForUser(reqUser);
     if (enforcedSpecId === -1) {
       // Non-admin with no specialist record — return empty
@@ -273,8 +308,15 @@ router.get('/leads', (req, res) => {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const allowedSort = ['company_name', 'contact_name', 'status', 'next_followup_date', 'created_at', 'status_updated_at'];
-    const safeSortBy = allowedSort.includes(sort_by) ? `l.${sort_by}` : 'l.created_at';
+    // Maps every sortable table column to its SQL expression (some are SELECT aliases)
+    const sortColumns = {
+      company_name: 'l.company_name', contact_name: 'l.contact_name', status: 'l.status',
+      next_followup_date: 'l.next_followup_date', created_at: 'l.created_at',
+      status_updated_at: 'l.status_updated_at', industry_name: 'industry_name',
+      specialist_name: 'specialist_name', touchpoint_count: 'touchpoint_count',
+      last_touchpoint_date: 'last_touchpoint_date',
+    };
+    const safeSortBy = sortColumns[sort_by] || 'l.created_at';
     const safeSortDir = sort_dir === 'ASC' ? 'ASC' : 'DESC';
 
     const total = db.prepare(`SELECT COUNT(*) as cnt FROM outreach_leads l ${whereClause}`).get(...params).cnt;
@@ -299,7 +341,7 @@ router.get('/leads', (req, res) => {
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
       LEFT JOIN outreach_industries i ON i.id = l.industry_id
       ${whereClause}
-      ORDER BY ${safeSortBy} ${safeSortDir}
+      ORDER BY ${safeSortBy} ${safeSortDir}, l.id DESC
       LIMIT ? OFFSET ?
     `).all(...params, parseInt(limit), offset);
 
@@ -350,52 +392,59 @@ router.post('/leads', (req, res) => {
 
     // Normalize specialist_ids — accept array or single id
     const specIds = Array.isArray(specialist_ids) && specialist_ids.length > 0
-      ? specialist_ids
+      ? [...specialist_ids]
       : (single_specialist_id ? [single_specialist_id] : []);
+
+    // Non-admins always stay assigned to leads they create, otherwise they'd lose access to them
+    const ownSpecId = resolveSpecialistForUser(req.user);
+    if (ownSpecId === -1) return res.status(403).json({ error: 'No specialist profile is linked to your account' });
+    if (ownSpecId !== null && !specIds.map(Number).includes(ownSpecId)) specIds.unshift(ownSpecId);
+
     if (!specIds.length) return res.status(400).json({ error: 'At least one specialist is required' });
     if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'company_name is required' });
 
     const dup = findDuplicateLead({ email, phone, fb_page_url });
     if (dup) return res.status(409).json({ error: duplicateErrorMessage(dup) });
 
-    const result = db.prepare(`
-      INSERT INTO outreach_leads
-        (specialist_id, company_name, contact_name, job_title, website, industry_id, location, next_followup_date, source_url, source_image, email, phone, fb_page_url, ig_url, linkedin_url)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      specIds[0],
-      company_name.trim(),
-      contact_name || null,
-      job_title || null,
-      website || null,
-      industry_id || null,
-      location || null,
-      followupDate,
-      source_url || null,
-      source_image || null,
-      email || null,
-      phone || null,
-      fb_page_url || null,
-      ig_url || null,
-      linkedin_url || null,
-    );
+    const leadId = db.transaction(() => {
+      const result = db.prepare(`
+        INSERT INTO outreach_leads
+          (specialist_id, company_name, contact_name, job_title, website, industry_id, location, next_followup_date, source_url, source_image, email, phone, fb_page_url, ig_url, linkedin_url, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'New Lead')
+      `).run(
+        specIds[0],
+        company_name.trim(),
+        contact_name || null,
+        job_title || null,
+        website || null,
+        industry_id || null,
+        location || null,
+        followupDate,
+        source_url || null,
+        source_image || null,
+        email || null,
+        phone || null,
+        fb_page_url || null,
+        ig_url || null,
+        linkedin_url || null,
+      );
 
-    const leadId = result.lastInsertRowid;
+      const id = result.lastInsertRowid;
 
-    if (custom_fields && typeof custom_fields === 'object') {
-      const upsertVal = db.prepare('INSERT INTO outreach_lead_custom_values (lead_id, field_key, value) VALUES (?, ?, ?) ON CONFLICT(lead_id, field_key) DO UPDATE SET value = excluded.value');
-      Object.entries(custom_fields).forEach(([key, val]) => upsertVal.run(leadId, key, val ?? null));
-    }
+      if (custom_fields && typeof custom_fields === 'object') {
+        const upsertVal = db.prepare('INSERT INTO outreach_lead_custom_values (lead_id, field_key, value) VALUES (?, ?, ?) ON CONFLICT(lead_id, field_key) DO UPDATE SET value = excluded.value');
+        Object.entries(custom_fields).forEach(([key, val]) => upsertVal.run(id, key, val ?? null));
+      }
 
-    // Insert all specialists into junction table
-    const insertSpec = db.prepare('INSERT OR IGNORE INTO outreach_lead_specialists (lead_id, specialist_id) VALUES (?, ?)');
-    for (const sid of specIds) { insertSpec.run(leadId, sid); }
+      // Insert all specialists into junction table
+      const insertSpec = db.prepare('INSERT OR IGNORE INTO outreach_lead_specialists (lead_id, specialist_id) VALUES (?, ?)');
+      for (const sid of specIds) { insertSpec.run(id, sid); }
 
-    // Seed status history entry
-    db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status, performed_by) VALUES (?, ?, ?, ?)')
-      .run(leadId, null, 'New Lead', performed_by || null);
-    // Set initial status to 'New Lead'
-    db.prepare("UPDATE outreach_leads SET status = 'New Lead' WHERE id = ?").run(leadId);
+      // Seed status history entry
+      db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status, performed_by) VALUES (?, ?, ?, ?)')
+        .run(id, null, 'New Lead', performed_by || null);
+      return id;
+    })();
 
     const created = db.prepare(`
       SELECT l.*, s.name as specialist_name, i.name as industry_name
@@ -432,7 +481,7 @@ router.get('/leads/:id', (req, res) => {
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
     // ── Server-side access enforcement ──────────────────────────────────────
-    const reqUser = getRequestUser(req);
+    const reqUser = req.user;
     const enforcedSpecId = resolveSpecialistForUser(reqUser);
     if (enforcedSpecId === -1) return res.status(403).json({ error: 'Access denied' });
     if (enforcedSpecId !== null) {
@@ -475,8 +524,8 @@ router.get('/leads/:id', (req, res) => {
 router.patch('/leads/:id', (req, res) => {
   try {
     const { id } = req.params;
+    if (!checkLeadAccess(req, res, id)) return;
     const existing = db.prepare('SELECT * FROM outreach_leads WHERE id = ?').get(id);
-    if (!existing) return res.status(404).json({ error: 'Lead not found' });
 
     const {
       specialist_id, specialist_ids, company_name, contact_name, job_title,
@@ -492,6 +541,9 @@ router.patch('/leads/:id', (req, res) => {
     const followupValue = hasFollowupField ? (next_followup_date || next_followup || null) : undefined;
 
     const statusChanged = status && status !== existing.status;
+    if (Array.isArray(specialist_ids) && specialist_ids.length === 0) {
+      return res.status(400).json({ error: 'At least one specialist is required' });
+    }
 
     const dup = findDuplicateLead({
       email: email !== undefined ? email : existing.email,
@@ -501,67 +553,69 @@ router.patch('/leads/:id', (req, res) => {
     });
     if (dup) return res.status(409).json({ error: duplicateErrorMessage(dup) });
 
-    db.prepare(`
-      UPDATE outreach_leads SET
-        specialist_id = COALESCE(?, specialist_id),
-        company_name = COALESCE(?, company_name),
-        contact_name = ?,
-        job_title = ?,
-        website = ?,
-        industry_id = ?,
-        location = ?,
-        status = COALESCE(?, status),
-        next_followup_date = ?,
-        source_url = ?,
-        source_image = ?,
-        email = ?,
-        phone = ?,
-        fb_page_url = ?,
-        ig_url = ?,
-        linkedin_url = ?,
-        status_updated_at = CASE WHEN ? IS NOT NULL AND ? != status THEN CURRENT_TIMESTAMP ELSE status_updated_at END
-      WHERE id = ?
-    `).run(
-      specialist_id || null,
-      company_name || null,
-      contact_name !== undefined ? (contact_name || null) : existing.contact_name,
-      job_title !== undefined ? (job_title || null) : existing.job_title,
-      website !== undefined ? (website || null) : existing.website,
-      industry_id !== undefined ? (industry_id || null) : existing.industry_id,
-      location !== undefined ? (location || null) : existing.location,
-      status || null,
-      followupValue !== undefined ? followupValue : existing.next_followup_date,
-      source_url !== undefined ? (source_url || null) : existing.source_url,
-      source_image !== undefined ? (source_image || null) : existing.source_image,
-      email !== undefined ? (email || null) : existing.email,
-      phone !== undefined ? (phone || null) : existing.phone,
-      fb_page_url !== undefined ? (fb_page_url || null) : existing.fb_page_url,
-      ig_url !== undefined ? (ig_url || null) : existing.ig_url,
-      linkedin_url !== undefined ? (linkedin_url || null) : existing.linkedin_url,
-      status || null, status || null,
-      id,
-    );
+    db.transaction(() => {
+      db.prepare(`
+        UPDATE outreach_leads SET
+          specialist_id = COALESCE(?, specialist_id),
+          company_name = COALESCE(?, company_name),
+          contact_name = ?,
+          job_title = ?,
+          website = ?,
+          industry_id = ?,
+          location = ?,
+          status = COALESCE(?, status),
+          next_followup_date = ?,
+          source_url = ?,
+          source_image = ?,
+          email = ?,
+          phone = ?,
+          fb_page_url = ?,
+          ig_url = ?,
+          linkedin_url = ?,
+          status_updated_at = CASE WHEN ? IS NOT NULL AND ? != status THEN CURRENT_TIMESTAMP ELSE status_updated_at END
+        WHERE id = ?
+      `).run(
+        specialist_id || null,
+        company_name || null,
+        contact_name !== undefined ? (contact_name || null) : existing.contact_name,
+        job_title !== undefined ? (job_title || null) : existing.job_title,
+        website !== undefined ? (website || null) : existing.website,
+        industry_id !== undefined ? (industry_id || null) : existing.industry_id,
+        location !== undefined ? (location || null) : existing.location,
+        status || null,
+        followupValue !== undefined ? followupValue : existing.next_followup_date,
+        source_url !== undefined ? (source_url || null) : existing.source_url,
+        source_image !== undefined ? (source_image || null) : existing.source_image,
+        email !== undefined ? (email || null) : existing.email,
+        phone !== undefined ? (phone || null) : existing.phone,
+        fb_page_url !== undefined ? (fb_page_url || null) : existing.fb_page_url,
+        ig_url !== undefined ? (ig_url || null) : existing.ig_url,
+        linkedin_url !== undefined ? (linkedin_url || null) : existing.linkedin_url,
+        status || null, status || null,
+        id,
+      );
 
-    if (statusChanged) {
-      db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status, performed_by) VALUES (?, ?, ?, ?)')
-        .run(id, existing.status, status, performed_by || null);
-    }
-
-    if (custom_fields && typeof custom_fields === 'object') {
-      const upsertVal = db.prepare('INSERT INTO outreach_lead_custom_values (lead_id, field_key, value) VALUES (?, ?, ?) ON CONFLICT(lead_id, field_key) DO UPDATE SET value = excluded.value');
-      Object.entries(custom_fields).forEach(([key, val]) => upsertVal.run(id, key, val ?? null));
-    }
-
-    // Update specialist assignments if specialist_ids array provided
-    if (Array.isArray(specialist_ids)) {
-      db.prepare('DELETE FROM outreach_lead_specialists WHERE lead_id = ?').run(id);
-      const insertSpec = db.prepare('INSERT OR IGNORE INTO outreach_lead_specialists (lead_id, specialist_id) VALUES (?, ?)');
-      for (const sid of specialist_ids) { insertSpec.run(id, sid); }
-      // Update primary specialist_id
-      if (specialist_ids.length > 0) {
-        db.prepare('UPDATE outreach_leads SET specialist_id = ? WHERE id = ?').run(specialist_ids[0], id);
+      if (statusChanged) {
+        db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status, performed_by) VALUES (?, ?, ?, ?)')
+          .run(id, existing.status, status, performed_by || null);
       }
-    }
+
+      if (custom_fields && typeof custom_fields === 'object') {
+        const upsertVal = db.prepare('INSERT INTO outreach_lead_custom_values (lead_id, field_key, value) VALUES (?, ?, ?) ON CONFLICT(lead_id, field_key) DO UPDATE SET value = excluded.value');
+        Object.entries(custom_fields).forEach(([key, val]) => upsertVal.run(id, key, val ?? null));
+      }
+
+      // Update specialist assignments if specialist_ids array provided
+      if (Array.isArray(specialist_ids)) {
+        db.prepare('DELETE FROM outreach_lead_specialists WHERE lead_id = ?').run(id);
+        const insertSpec = db.prepare('INSERT OR IGNORE INTO outreach_lead_specialists (lead_id, specialist_id) VALUES (?, ?)');
+        for (const sid of specialist_ids) { insertSpec.run(id, sid); }
+        // Update primary specialist_id
+        if (specialist_ids.length > 0) {
+          db.prepare('UPDATE outreach_leads SET specialist_id = ? WHERE id = ?').run(specialist_ids[0], id);
+        }
+      }
+    })();
 
     const updated = db.prepare(`
       SELECT l.*, s.name as specialist_name, i.name as industry_name
@@ -595,8 +649,7 @@ router.patch('/leads/:id', (req, res) => {
 router.delete('/leads/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const existing = db.prepare('SELECT id FROM outreach_leads WHERE id = ?').get(id);
-    if (!existing) return res.status(404).json({ error: 'Lead not found' });
+    if (!checkLeadAccess(req, res, id)) return;
     db.prepare("UPDATE outreach_leads SET deleted_at = datetime('now') WHERE id = ?").run(id);
     res.json({ success: true });
   } catch (err) {
@@ -605,7 +658,7 @@ router.delete('/leads/:id', (req, res) => {
   }
 });
 
-router.get('/trash', (req, res) => {
+router.get('/trash', requireAdmin, (req, res) => {
   try {
     const leads = db.prepare(`
       SELECT l.id, l.company_name, l.contact_name, l.status, l.deleted_at,
@@ -621,7 +674,7 @@ router.get('/trash', (req, res) => {
   }
 });
 
-router.post('/trash/restore/:id', (req, res) => {
+router.post('/trash/restore/:id', requireAdmin, (req, res) => {
   try {
     db.prepare('UPDATE outreach_leads SET deleted_at = NULL WHERE id = ?').run(req.params.id);
     res.json({ success: true });
@@ -631,14 +684,17 @@ router.post('/trash/restore/:id', (req, res) => {
   }
 });
 
-router.delete('/trash/permanent/:id', (req, res) => {
+router.delete('/trash/permanent/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
-    db.prepare('DELETE FROM outreach_lead_specialists WHERE lead_id = ?').run(id);
-    db.prepare('DELETE FROM outreach_touchpoints WHERE lead_id = ?').run(id);
-    db.prepare('DELETE FROM outreach_status_history WHERE lead_id = ?').run(id);
-    db.prepare('DELETE FROM outreach_lead_responses WHERE lead_id = ?').run(id);
-    db.prepare('DELETE FROM outreach_leads WHERE id = ?').run(id);
+    db.transaction(() => {
+      db.prepare('DELETE FROM outreach_lead_specialists WHERE lead_id = ?').run(id);
+      db.prepare('DELETE FROM outreach_touchpoints WHERE lead_id = ?').run(id);
+      db.prepare('DELETE FROM outreach_status_history WHERE lead_id = ?').run(id);
+      db.prepare('DELETE FROM outreach_lead_responses WHERE lead_id = ?').run(id);
+      db.prepare('DELETE FROM outreach_lead_custom_values WHERE lead_id = ?').run(id);
+      db.prepare('DELETE FROM outreach_leads WHERE id = ?').run(id);
+    })();
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -651,6 +707,7 @@ router.delete('/trash/permanent/:id', (req, res) => {
 router.get('/leads/:leadId/touchpoints', (req, res) => {
   try {
     const { leadId } = req.params;
+    if (!checkLeadAccess(req, res, leadId)) return;
     const touchpoints = db.prepare(
       'SELECT * FROM outreach_touchpoints WHERE lead_id = ? ORDER BY touchpoint_number ASC'
     ).all(leadId);
@@ -664,6 +721,7 @@ router.get('/leads/:leadId/touchpoints', (req, res) => {
 router.put('/leads/:leadId/touchpoints/:number', (req, res) => {
   try {
     const { leadId, number } = req.params;
+    if (!checkLeadAccess(req, res, leadId)) return;
     const { date, channel, message_body, loom_url, notes } = req.body;
     const num = parseInt(number);
     const maxTp = getMaxTouchpoints();
@@ -712,7 +770,7 @@ router.get('/custom-fields', (req, res) => {
   }
 });
 
-router.post('/custom-fields', (req, res) => {
+router.post('/custom-fields', requireAdmin, (req, res) => {
   try {
     const { label, field_type = 'text', options = [], width = 'half' } = req.body;
     if (!label || !label.trim()) return res.status(400).json({ error: 'Label is required' });
@@ -732,7 +790,7 @@ router.post('/custom-fields', (req, res) => {
   }
 });
 
-router.patch('/custom-fields/:id', (req, res) => {
+router.patch('/custom-fields/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const { label, field_type, sort_order, active, options, width, width_px, height_px } = req.body;
@@ -767,7 +825,7 @@ router.patch('/custom-fields/:id', (req, res) => {
   }
 });
 
-router.delete('/custom-fields/:id', (req, res) => {
+router.delete('/custom-fields/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const existing = db.prepare('SELECT * FROM outreach_custom_fields WHERE id = ?').get(id);
@@ -813,7 +871,7 @@ router.get('/dashboard/cards', (req, res) => {
   }
 });
 
-router.post('/dashboard/cards', (req, res) => {
+router.post('/dashboard/cards', requireAdmin, (req, res) => {
   try {
     const { label, card_type = 'count', numerator_statuses = [], denominator = 'total', color = '#575ECF', sort_order = 0 } = req.body;
     if (!label || !label.trim()) return res.status(400).json({ error: 'Label is required' });
@@ -828,7 +886,7 @@ router.post('/dashboard/cards', (req, res) => {
   }
 });
 
-router.patch('/dashboard/cards/:id', (req, res) => {
+router.patch('/dashboard/cards/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const existing = db.prepare('SELECT * FROM outreach_dashboard_cards WHERE id = ?').get(id);
@@ -860,7 +918,7 @@ router.patch('/dashboard/cards/:id', (req, res) => {
   }
 });
 
-router.delete('/dashboard/cards/:id', (req, res) => {
+router.delete('/dashboard/cards/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     db.prepare('DELETE FROM outreach_dashboard_cards WHERE id = ?').run(id);
@@ -878,7 +936,7 @@ router.get('/dashboard', (req, res) => {
     let { specialist_id, date_from, date_to } = req.query;
 
     // ── Server-side access enforcement ──────────────────────────────────────
-    const reqUser = getRequestUser(req);
+    const reqUser = req.user;
     const enforcedSpecId = resolveSpecialistForUser(reqUser);
     if (enforcedSpecId === -1) {
       return res.json({ total_leads: 0, responded: 0, interested: 0, appointments_booked: 0,
@@ -890,7 +948,7 @@ router.get('/dashboard', (req, res) => {
     if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
     // ────────────────────────────────────────────────────────────────────────
 
-    const conditions = [];
+    const conditions = ['l.deleted_at IS NULL'];
     const params = [];
 
     if (specialist_id) {
@@ -1028,7 +1086,7 @@ router.get('/activity', (req, res) => {
   try {
     let { date_from, date_to, specialist_id } = req.query;
 
-    const reqUser = getRequestUser(req);
+    const reqUser = req.user;
     const enforcedSpecId = resolveSpecialistForUser(reqUser);
     if (enforcedSpecId === -1) {
       return res.json({
@@ -1044,7 +1102,7 @@ router.get('/activity', (req, res) => {
     const to   = date_to   || yest;
 
     // ── 1. New leads created ─────────────────────────────────────────────────
-    const nlCond   = ['date(l.created_at) >= ?', 'date(l.created_at) <= ?'];
+    const nlCond   = ['l.deleted_at IS NULL', 'date(l.created_at) >= ?', 'date(l.created_at) <= ?'];
     const nlParams = [from, to];
     if (specialist_id) { nlCond.push('l.specialist_id = ?'); nlParams.push(specialist_id); }
 
@@ -1061,7 +1119,7 @@ router.get('/activity', (req, res) => {
     const new_leads_total = newLeadsBySpec.reduce((sum, r) => sum + r.count, 0);
 
     // ── 2. Stage moves from status_history ───────────────────────────────────
-    const mvCond   = ['date(sh.changed_at) >= ?', 'date(sh.changed_at) <= ?'];
+    const mvCond   = ['l.deleted_at IS NULL', 'date(sh.changed_at) >= ?', 'date(sh.changed_at) <= ?'];
     const mvParams = [from, to];
     if (specialist_id) { mvCond.push('l.specialist_id = ?'); mvParams.push(specialist_id); }
 
@@ -1130,7 +1188,7 @@ router.get('/activity/leads', (req, res) => {
   try {
     let { date_from, date_to, filter_type, stage, specialist_name, distinct_leads } = req.query;
 
-    const reqUser = getRequestUser(req);
+    const reqUser = req.user;
     const enforcedSpecId = resolveSpecialistForUser(reqUser);
     if (enforcedSpecId === -1) return res.json([]);
 
@@ -1140,7 +1198,7 @@ router.get('/activity/leads', (req, res) => {
 
     // ── New leads created ────────────────────────────────────────────────────
     if (filter_type === 'new_leads') {
-      const cond   = ['date(l.created_at) >= ?', 'date(l.created_at) <= ?'];
+      const cond   = ['l.deleted_at IS NULL', 'date(l.created_at) >= ?', 'date(l.created_at) <= ?'];
       const params = [from, to];
       if (specialist_name) { cond.push('s.name = ?'); params.push(specialist_name); }
       if (enforcedSpecId !== null) { cond.push('l.specialist_id = ?'); params.push(enforcedSpecId); }
@@ -1157,7 +1215,7 @@ router.get('/activity/leads', (req, res) => {
     }
 
     // ── Stage moves (default) ────────────────────────────────────────────────
-    const cond   = ['date(sh.changed_at) >= ?', 'date(sh.changed_at) <= ?'];
+    const cond   = ['l.deleted_at IS NULL', 'date(sh.changed_at) >= ?', 'date(sh.changed_at) <= ?'];
     const params = [from, to];
     if (stage)            { cond.push('sh.new_status = ?');  params.push(stage); }
     if (specialist_name)  { cond.push('s.name = ?');          params.push(specialist_name); }
@@ -1205,14 +1263,18 @@ router.get('/activity/leads', (req, res) => {
 router.get('/overdue', (req, res) => {
   try {
     let { specialist_id } = req.query;
-    const reqUser = getRequestUser(req);
+    const reqUser = req.user;
     const enforcedSpecId = resolveSpecialistForUser(reqUser);
     if (enforcedSpecId === -1) return res.json([]);
     if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
 
     const today = new Date().toISOString().slice(0, 10);
-    const conditions = [`l.next_followup_date < ?`, `l.status NOT IN ('Closed / Booked as Client','Disqualified / Dead','Meeting Done - Not Interested')`];
-    const params = [today];
+    const conditions = [
+      'l.deleted_at IS NULL',
+      'l.next_followup_date < ?',
+      `l.status NOT IN (${NOT_OVERDUE_STATUSES.map(() => '?').join(',')})`,
+    ];
+    const params = [today, ...NOT_OVERDUE_STATUSES];
     if (specialist_id) {
       conditions.push('EXISTS (SELECT 1 FROM outreach_lead_specialists ols WHERE ols.lead_id = l.id AND ols.specialist_id = ?)');
       params.push(specialist_id);
@@ -1236,10 +1298,16 @@ router.get('/overdue', (req, res) => {
 
 router.get('/export/csv', (req, res) => {
   try {
-    const { specialist_id, date_from, date_to, status } = req.query;
-    const conditions = [];
+    let { specialist_id, date_from, date_to, status } = req.query;
+    const enforcedSpecId = resolveSpecialistForUser(req.user);
+    if (enforcedSpecId === -1) return res.status(204).send();
+    if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
+    const conditions = ['l.deleted_at IS NULL'];
     const params = [];
-    if (specialist_id) { conditions.push('l.specialist_id = ?'); params.push(specialist_id); }
+    if (specialist_id) {
+      conditions.push('EXISTS (SELECT 1 FROM outreach_lead_specialists ols WHERE ols.lead_id = l.id AND ols.specialist_id = ?)');
+      params.push(specialist_id);
+    }
     if (status) {
       const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
       if (statuses.length > 0) {
@@ -1311,10 +1379,16 @@ router.get('/export/csv', (req, res) => {
 
 router.get('/export/pdf', (req, res) => {
   try {
-    const { specialist_id, date_from, date_to } = req.query;
-    const conditions = [];
+    let { specialist_id, date_from, date_to } = req.query;
+    const enforcedSpecId = resolveSpecialistForUser(req.user);
+    if (enforcedSpecId === -1) specialist_id = '-1';
+    else if (enforcedSpecId !== null) specialist_id = String(enforcedSpecId);
+    const conditions = ['l.deleted_at IS NULL'];
     const params = [];
-    if (specialist_id) { conditions.push('l.specialist_id = ?'); params.push(specialist_id); }
+    if (specialist_id) {
+      conditions.push('EXISTS (SELECT 1 FROM outreach_lead_specialists ols WHERE ols.lead_id = l.id AND ols.specialist_id = ?)');
+      params.push(specialist_id);
+    }
     if (date_from) { conditions.push("date(l.created_at) >= ?"); params.push(date_from); }
     if (date_to) { conditions.push("date(l.created_at) <= ?"); params.push(date_to); }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -1372,7 +1446,7 @@ router.get('/pipeline-stages', (req, res) => {
   }
 });
 
-router.post('/pipeline-stages', (req, res) => {
+router.post('/pipeline-stages', requireAdmin, (req, res) => {
   try {
     const { name } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
@@ -1390,24 +1464,84 @@ router.post('/pipeline-stages', (req, res) => {
   }
 });
 
-router.patch('/pipeline-stages/:id', (req, res) => {
+// Lead status, status history and dashboard cards store stage *names*, so a rename has to
+// carry them along — otherwise leads are left in a stage that no longer exists.
+function renameStageReferences(oldName, newName) {
+  db.prepare('UPDATE outreach_leads SET status = ? WHERE status = ?').run(newName, oldName);
+  db.prepare('UPDATE outreach_status_history SET new_status = ? WHERE new_status = ?').run(newName, oldName);
+  db.prepare('UPDATE outreach_status_history SET old_status = ? WHERE old_status = ?').run(newName, oldName);
+  const swap = list => list.map(s => (s === oldName ? newName : s));
+  const updateCard = db.prepare('UPDATE outreach_dashboard_cards SET numerator_statuses = ?, denominator = ? WHERE id = ?');
+  db.prepare('SELECT * FROM outreach_dashboard_cards').all().map(parseCard).forEach(card => {
+    const numerator = swap(card.numerator_statuses);
+    const denominator = Array.isArray(card.denominator) ? swap(card.denominator) : card.denominator;
+    updateCard.run(JSON.stringify(numerator), serializeDenominator(denominator), card.id);
+  });
+}
+
+// Statuses that leads are sitting in but that have no active stage (renamed/deleted before
+// renames carried leads along, or deactivated). These leads don't show on the Kanban board.
+router.get('/pipeline-stages/orphaned', requireAdmin, (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT l.status, COUNT(*) as count, MAX(ps.id IS NOT NULL) as inactive_stage
+      FROM outreach_leads l
+      LEFT JOIN outreach_pipeline_stages ps ON ps.name = l.status
+      WHERE l.deleted_at IS NULL AND (ps.id IS NULL OR ps.active = 0)
+      GROUP BY l.status
+      ORDER BY count DESC
+    `).all();
+    res.json(rows.map(r => ({ status: r.status, count: r.count, inactive_stage: !!r.inactive_stage })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch orphaned stages' });
+  }
+});
+
+// Moves every lead in status `from` into the existing stage `to`, logging it in status history
+router.post('/pipeline-stages/remap', requireAdmin, (req, res) => {
+  try {
+    const { from, to } = req.body;
+    if (!from || !to || from === to) return res.status(400).json({ error: 'Pick a different target stage' });
+    const target = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE name = ? AND active = 1').get(to);
+    if (!target) return res.status(400).json({ error: 'Target stage not found or inactive' });
+
+    const moved = db.transaction(() => {
+      const ids = db.prepare('SELECT id FROM outreach_leads WHERE status = ?').all(from).map(r => r.id);
+      const logMove = db.prepare('INSERT INTO outreach_status_history (lead_id, old_status, new_status, performed_by) VALUES (?, ?, ?, ?)');
+      ids.forEach(leadId => logMove.run(leadId, from, to, `${req.user.name} (stage cleanup)`));
+      db.prepare('UPDATE outreach_leads SET status = ? WHERE status = ?').run(to, from);
+      return ids.length;
+    })();
+    res.json({ moved });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to move leads' });
+  }
+});
+
+router.patch('/pipeline-stages/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const { name, order_index, active } = req.body;
     const existing = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Stage not found' });
-    db.prepare(`
-      UPDATE outreach_pipeline_stages SET
-        name = COALESCE(?, name),
-        order_index = COALESCE(?, order_index),
-        active = COALESCE(?, active)
-      WHERE id = ?
-    `).run(
-      name !== undefined ? (name || null) : null,
-      order_index !== undefined ? order_index : null,
-      active !== undefined ? active : null,
-      id
-    );
+    const newName = typeof name === 'string' && name.trim() ? name.trim() : null;
+    db.transaction(() => {
+      db.prepare(`
+        UPDATE outreach_pipeline_stages SET
+          name = COALESCE(?, name),
+          order_index = COALESCE(?, order_index),
+          active = COALESCE(?, active)
+        WHERE id = ?
+      `).run(
+        newName,
+        order_index !== undefined ? order_index : null,
+        active !== undefined ? active : null,
+        id
+      );
+      if (newName && newName !== existing.name) renameStageReferences(existing.name, newName);
+    })();
     const updated = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE id = ?').get(id);
     res.json(updated);
   } catch (err) {
@@ -1419,7 +1553,7 @@ router.patch('/pipeline-stages/:id', (req, res) => {
   }
 });
 
-router.delete('/pipeline-stages/:id', (req, res) => {
+router.delete('/pipeline-stages/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const stage = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE id = ?').get(id);
@@ -1450,7 +1584,7 @@ router.get('/settings', (req, res) => {
   }
 });
 
-router.patch('/settings', (req, res) => {
+router.patch('/settings', requireAdmin, (req, res) => {
   try {
     const updates = req.body;
     const stmt = db.prepare('INSERT OR REPLACE INTO outreach_settings (key, value) VALUES (?, ?)');
@@ -1470,6 +1604,7 @@ router.patch('/settings', (req, res) => {
 router.get('/leads/:leadId/responses', (req, res) => {
   try {
     const { leadId } = req.params;
+    if (!checkLeadAccess(req, res, leadId)) return;
     const responses = db.prepare(
       'SELECT * FROM outreach_lead_responses WHERE lead_id = ? ORDER BY created_at DESC'
     ).all(leadId);
@@ -1486,8 +1621,7 @@ router.post('/leads/:leadId/responses', (req, res) => {
     const { date, channel, message_body, notes } = req.body;
     if (!channel || !channel.trim()) return res.status(400).json({ error: 'Channel is required' });
     if (!message_body || !message_body.trim()) return res.status(400).json({ error: 'Message body is required' });
-    const lead = db.prepare('SELECT id FROM outreach_leads WHERE id = ?').get(leadId);
-    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    if (!checkLeadAccess(req, res, leadId)) return;
     const result = db.prepare(
       'INSERT INTO outreach_lead_responses (lead_id, date, channel, message_body, notes) VALUES (?, ?, ?, ?, ?)'
     ).run(leadId, date || null, channel.trim(), message_body.trim(), notes || null);
@@ -1502,6 +1636,7 @@ router.post('/leads/:leadId/responses', (req, res) => {
 router.delete('/leads/:leadId/responses/:id', (req, res) => {
   try {
     const { leadId, id } = req.params;
+    if (!checkLeadAccess(req, res, leadId)) return;
     const existing = db.prepare('SELECT id FROM outreach_lead_responses WHERE id = ? AND lead_id = ?').get(id, leadId);
     if (!existing) return res.status(404).json({ error: 'Response not found' });
     db.prepare('DELETE FROM outreach_lead_responses WHERE id = ?').run(id);

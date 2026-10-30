@@ -14,6 +14,8 @@ import {
   createPipelineStage,
   updatePipelineStage,
   deletePipelineStage,
+  getOrphanedStages,
+  remapStage,
   getSettings,
   updateSettings,
   getTrashLeads,
@@ -623,11 +625,84 @@ function IndustriesSection({ industries, setIndustries }) {
 
 // ─── Section: Pipeline Stages ─────────────────────────────────────────────────
 
+// Leads sitting in a status with no active stage are invisible on the Kanban board —
+// this lists them and moves each group into a real stage.
+function OrphanedStagesPanel({ stages, orphans, onRemapped }) {
+  const [targets, setTargets] = useState({});
+  const [moving, setMoving] = useState(null);
+
+  if (orphans.length === 0) return null;
+
+  const stageOptions = stages
+    .filter((s) => s.active)
+    .sort((a, b) => a.order_index - b.order_index)
+    .map((s) => ({ value: s.name, label: s.name }));
+
+  const move = async (orphan) => {
+    const to = targets[orphan.status];
+    if (!to) return;
+    setMoving(orphan.status);
+    try {
+      const { moved } = await remapStage(orphan.status, to);
+      toast.success(`Moved ${moved} lead${moved === 1 ? '' : 's'} to "${to}"`);
+      onRemapped();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to move leads');
+    } finally {
+      setMoving(null);
+    }
+  };
+
+  return (
+    <div className="mb-5 rounded-lg p-4" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.3)' }}>
+      <p className="text-sm font-medium text-[#f59e0b] mb-1">⚠ Leads in stages that no longer exist</p>
+      <p className="text-xs text-[#8a8680] mb-3">
+        These leads don't appear in a pipeline column. Pick a stage for each group and move them.
+      </p>
+      <ul className="flex flex-col gap-2">
+        {orphans.map((o) => (
+          <li key={o.status} className="flex flex-wrap items-center gap-3">
+            <span className="text-sm text-[#c5c1b9] flex-1 min-w-[140px]">
+              {o.status}
+              <span className="text-xs text-[#8a8680] ml-2">
+                {o.count} lead{o.count === 1 ? '' : 's'}{o.inactive_stage ? ' · stage is inactive' : ''}
+              </span>
+            </span>
+            <div className="w-56">
+              <Select
+                styles={selectStyles}
+                placeholder="Move to…"
+                options={stageOptions}
+                value={stageOptions.find((opt) => opt.value === targets[o.status]) || null}
+                onChange={(opt) => setTargets((t) => ({ ...t, [o.status]: opt?.value }))}
+              />
+            </div>
+            <Btn
+              variant="primary"
+              onClick={() => move(o)}
+              disabled={!targets[o.status] || moving === o.status}
+            >
+              {moving === o.status ? 'Moving…' : 'Move'}
+            </Btn>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function PipelineStagesSection({ stages, setStages }) {
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
+  const [orphans, setOrphans] = useState([]);
+
+  const refreshOrphans = useCallback(() => {
+    getOrphanedStages().then(setOrphans).catch(() => {});
+  }, []);
+
+  useEffect(() => { refreshOrphans(); }, [refreshOrphans]);
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
@@ -653,7 +728,8 @@ function PipelineStagesSection({ stages, setStages }) {
       const updated = await updatePipelineStage(stage.id, { name: editName.trim() });
       setStages(prev => prev.map(s => s.id === stage.id ? updated : s));
       setEditingId(null);
-      toast.success('Stage renamed');
+      refreshOrphans();
+      toast.success('Stage renamed — leads in it moved along');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to rename stage');
     }
@@ -663,12 +739,14 @@ function PipelineStagesSection({ stages, setStages }) {
     try {
       const updated = await updatePipelineStage(stage.id, { active: stage.active ? 0 : 1 });
       setStages(prev => prev.map(s => s.id === stage.id ? updated : s));
+      refreshOrphans();
     } catch {
       toast.error('Failed to update stage');
     }
   };
 
   const handleDelete = async (stage) => {
+    if (!window.confirm(`Delete stage "${stage.name}"?`)) return;
     try {
       await deletePipelineStage(stage.id);
       setStages(prev => prev.filter(s => s.id !== stage.id));
@@ -700,7 +778,9 @@ function PipelineStagesSection({ stages, setStages }) {
   return (
     <div className="bg-[#242424] border border-white/[0.08] rounded-xl p-6">
       <h2 className="text-base font-semibold text-[#c5c1b9] mb-1">Pipeline Stages</h2>
-      <p className="text-xs text-[#8a8680] mb-5">Manage the stages in your pipeline. Stages in use cannot be deleted.</p>
+      <p className="text-xs text-[#8a8680] mb-5">Manage the stages in your pipeline. Stages in use cannot be deleted. Renaming a stage moves its leads along.</p>
+
+      <OrphanedStagesPanel stages={stages} orphans={orphans} onRemapped={refreshOrphans} />
 
       {/* Add new stage */}
       <div className="flex gap-2 mb-5">

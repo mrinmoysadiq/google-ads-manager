@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import toast from 'react-hot-toast'
 import Select from 'react-select'
-import { getUser } from '../../../utils/auth'
+import { getUser, isAdmin } from '../../../utils/auth'
 import {
   getLead,
   updateLead,
@@ -275,21 +275,25 @@ function CustomFieldsSection({ fields, values, saved = {}, onSaveField, onManage
         <span style={{ fontSize: '11px', color: '#8a8680', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
           Custom Fields
         </span>
-        <button
-          type="button"
-          onClick={onManageClick}
-          style={{
-            background: 'none', border: 'none', color: '#575ECF', cursor: 'pointer',
-            fontSize: '12px', fontWeight: 500, padding: '2px 0',
-          }}
-        >
-          ⚙ Manage Fields
-        </button>
+        {onManageClick && (
+          <button
+            type="button"
+            onClick={onManageClick}
+            style={{
+              background: 'none', border: 'none', color: '#575ECF', cursor: 'pointer',
+              fontSize: '12px', fontWeight: 500, padding: '2px 0',
+            }}
+          >
+            ⚙ Manage Fields
+          </button>
+        )}
       </div>
 
       {fields.length === 0 && (
         <div style={{ color: '#555', fontSize: '12px', fontStyle: 'italic', marginBottom: '8px' }}>
-          No custom fields yet — click "Manage Fields" to add one (text, link, date, dropdown, or image).
+          {onManageClick
+            ? 'No custom fields yet — click "Manage Fields" to add one (text, link, date, dropdown, or image).'
+            : 'No custom fields yet — an admin can add them.'}
         </div>
       )}
 
@@ -1072,8 +1076,11 @@ export default function LeadDrawer({
     getCustomFields().then(setCustomFields).catch(() => {})
   }
 
+  // Field definitions (including saved sizes) are shared by everyone, so only admins persist them
+  const canManageFields = isAdmin()
   const resizeCustomField = (field, width_px, height_px) => {
     setCustomFields(prev => prev.map(f => f.id === field.id ? { ...f, width_px, height_px } : f))
+    if (!canManageFields) return
     updateCustomField(field.id, { width_px, height_px }).catch(() => {
       toast.error('Failed to save field size')
     })
@@ -1354,7 +1361,7 @@ export default function LeadDrawer({
                   fields={customFields}
                   values={createForm.custom_fields}
                   onSaveField={saveCreateCustomField}
-                  onManageClick={() => setManageFieldsOpen(true)}
+                  onManageClick={canManageFields ? () => setManageFieldsOpen(true) : null}
                   onResizeField={resizeCustomField}
                 />
 
@@ -1698,7 +1705,7 @@ export default function LeadDrawer({
                         values={lead.custom_fields}
                         saved={saved}
                         onSaveField={saveCustomField}
-                        onManageClick={() => setManageFieldsOpen(true)}
+                        onManageClick={canManageFields ? () => setManageFieldsOpen(true) : null}
                         onResizeField={resizeCustomField}
                       />
 

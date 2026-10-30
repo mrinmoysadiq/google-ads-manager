@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import {
-  getDashboard, getOverdueLeads, exportCsv, getExportPdfUrl,
+  getDashboard, getOverdueLeads, exportCsv, getExportPdfHtml,
   getDashboardCards, createDashboardCard, updateDashboardCard, deleteDashboardCard,
   getActivity, getActivityLeads,
 } from '../../../utils/outreachApi';
 import { fmtDate, fmtDateTime } from '../../../utils/dates';
+import { isAdmin } from '../../../utils/auth';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -329,8 +330,8 @@ function MetricCard({ label, value, sub, color, onEdit }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Edit button — appears on hover */}
-      {hovered && (
+      {/* Edit button — appears on hover (admins only; card config is admin-only) */}
+      {hovered && onEdit && (
         <div style={{ position: 'absolute', top: 8, right: 8 }}>
           <button
             onClick={onEdit}
@@ -795,10 +796,21 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
     } catch { toast.error('CSV export failed'); }
   }
 
-  function handleExportPdf() {
+  async function handleExportPdf() {
     const params = { ...getDateParams(dateRange, customFrom, customTo) };
     if (specialistId) params.specialist_id = specialistId;
-    window.open(getExportPdfUrl(params), '_blank');
+    // Open the tab synchronously (inside the click) so popup blockers allow it, then fill it
+    const win = window.open('', '_blank');
+    if (!win) { toast.error('Allow pop-ups to open the report'); return; }
+    try {
+      const html = await getExportPdfHtml(params);
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } catch {
+      win.close();
+      toast.error('PDF export failed');
+    }
   }
 
   // ── Card CRUD handlers ───────────────────────────────────────────────────
@@ -891,7 +903,7 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
               <p style={{ color: '#8a8680', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600, margin: 0 }}>
                 Metrics
               </p>
-              <button
+              {isAdmin() && <button
                 onClick={() => { setModalCard({}); setModalOpen(true); }}
                 style={{
                   padding: '4px 14px', borderRadius: 999,
@@ -900,7 +912,7 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
                   color: '#575ECF', fontSize: '0.78rem', fontWeight: 600,
                   cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
                 }}
-              >+ Add Card</button>
+              >+ Add Card</button>}
             </div>
 
             {cards.length === 0 ? (
@@ -910,10 +922,10 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
                 color: '#8a8680', fontSize: '0.85rem',
               }}>
                 No metric cards yet.{' '}
-                <button
+                {isAdmin() && <button
                   onClick={() => { setModalCard({}); setModalOpen(true); }}
                   style={{ color: '#575ECF', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem' }}
-                >Add your first card →</button>
+                >Add your first card →</button>}
               </div>
             ) : (
               <div style={{
@@ -928,7 +940,7 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
                     value={computeCardValue(card, byStatus, totalLeads)}
                     sub={computeCardSub(card, byStatus, totalLeads)}
                     color={card.color}
-                    onEdit={() => { setModalCard(card); setModalOpen(true); }}
+                    onEdit={isAdmin() ? () => { setModalCard(card); setModalOpen(true); } : undefined}
                   />
                 ))}
               </div>

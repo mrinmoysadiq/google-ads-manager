@@ -13,6 +13,19 @@ api.interceptors.request.use(config => {
   return config
 })
 
+// Redirect to login on 401 (expired or invalid token)
+api.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('app_token')
+      localStorage.removeItem('app_user')
+      window.location.href = '/login'
+    }
+    return Promise.reject(err)
+  }
+)
+
 // Specialists
 export const getSpecialists = () => api.get('/outreach/specialists').then(r => r.data)
 export const createSpecialist = (data) => api.post('/outreach/specialists', data).then(r => r.data)
@@ -54,16 +67,17 @@ export const deleteDashboardCard = (id) => api.delete(`/outreach/dashboard/cards
 
 // Export
 export const exportCsv = (params) => api.get('/outreach/export/csv', { params, responseType: 'blob' }).then(r => r.data)
-export const getExportPdfUrl = (params) => {
-  const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v))).toString()
-  return `${api.defaults.baseURL}/outreach/export/pdf${qs ? '?' + qs : ''}`
-}
+// Returns the printable report HTML (fetched with auth, so it can't be opened as a bare URL)
+export const getExportPdfHtml = (params) =>
+  api.get('/outreach/export/pdf', { params, responseType: 'text' }).then(r => r.data)
 
 // Pipeline Stages
 export const getPipelineStages = () => api.get('/outreach/pipeline-stages').then(r => r.data)
 export const createPipelineStage = (data) => api.post('/outreach/pipeline-stages', data).then(r => r.data)
 export const updatePipelineStage = (id, data) => api.patch(`/outreach/pipeline-stages/${id}`, data).then(r => r.data)
 export const deletePipelineStage = (id) => api.delete(`/outreach/pipeline-stages/${id}`).then(r => r.data)
+export const getOrphanedStages = () => api.get('/outreach/pipeline-stages/orphaned').then(r => r.data)
+export const remapStage = (from, to) => api.post('/outreach/pipeline-stages/remap', { from, to }).then(r => r.data)
 
 // Settings
 export const getSettings = () => api.get('/outreach/settings').then(r => r.data)

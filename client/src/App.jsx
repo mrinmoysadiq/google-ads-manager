@@ -115,7 +115,7 @@ export default function App() {
           {/* ── Outreach CRM module ────────────────────────────────────── */}
           <Route path="/outreach" element={<ProtectedRoute><OutreachHub /></ProtectedRoute>} />
           <Route path="/outreach/pipeline" element={<ProtectedRoute><OutreachHome /></ProtectedRoute>} />
-          <Route path="/outreach/admin" element={<ProtectedRoute><OutreachAdmin /></ProtectedRoute>} />
+          <Route path="/outreach/admin" element={<AdminRoute><OutreachAdmin /></AdminRoute>} />
           <Route path="/outreach/linkedin" element={<ProtectedRoute><LinkedInHome /></ProtectedRoute>} />
           <Route path="/outreach/linkedin/admin" element={<ProtectedRoute><LinkedInAdmin /></ProtectedRoute>} />
 

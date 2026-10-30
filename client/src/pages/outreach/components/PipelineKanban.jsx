@@ -27,7 +27,7 @@ const CHANNEL_COLORS = {
   'Website Form': '#06b6d4', 'Other': '#6b7280',
 }
 
-const NOT_OVERDUE_STATUSES = ['Closed / Booked as Client', 'Disqualified / Dead', 'Meeting Done - Not Interested']
+const NOT_OVERDUE_STATUSES = ['Closed / Booked as Client', 'Disqualified / Dead', 'Meeting Done - Not Interested', 'Not Interested', 'Not interested']
 
 function isOverdue(lead) {
   if (!lead.next_followup_date) return false
@@ -128,11 +128,9 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
     if (leadsByStatus[l.status] !== undefined) {
       leadsByStatus[l.status].push(l)
     } else {
-      // Lead has a status not in current stages — put in first column or skip
-      if (stageNames.length > 0) {
-        if (!leadsByStatus['__other__']) leadsByStatus['__other__'] = []
-        leadsByStatus['__other__'].push(l)
-      }
+      // Status isn't an active stage (renamed/deleted/deactivated) — collected in a separate column
+      if (!leadsByStatus['__other__']) leadsByStatus['__other__'] = []
+      leadsByStatus['__other__'].push(l)
     }
   })
 
@@ -154,9 +152,11 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
     onStatusChange(leadId, targetStatus)
   }
 
+  const otherLeads = leadsByStatus['__other__'] || []
+
   return (
     <div className="overflow-x-auto pb-4" style={{ minHeight: 400 }}>
-      <div className="flex gap-3" style={{ minWidth: stageNames.length * 236 + 'px' }}>
+      <div className="flex gap-3" style={{ minWidth: (stageNames.length + (otherLeads.length ? 1 : 0)) * 236 + 'px' }}>
         {stageNames.map(status => {
           const sc = DEFAULT_STATUS_COLORS[status] || FALLBACK_COLOR
           const colLeads = leadsByStatus[status] || []
@@ -212,6 +212,35 @@ export default function PipelineKanban({ leads, loading, onLeadClick, onStatusCh
             </div>
           )
         })}
+
+        {/* Leads whose stage no longer exists — open one to move it, or remap them in Admin */}
+        {!loading && otherLeads.length > 0 && (
+          <div
+            className="flex-shrink-0 rounded-xl flex flex-col"
+            style={{ width: 228, backgroundColor: '#1f1f1f', border: '1px dashed rgba(245,158,11,0.4)', minHeight: 200 }}
+          >
+            <div className="px-3 pt-3 pb-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold" style={{ color: '#f59e0b' }}>⚠ Missing stage</span>
+                <span className="text-xs font-bold ml-1 flex-shrink-0" style={{ color: '#8a8680' }}>{otherLeads.length}</span>
+              </div>
+              <p className="text-[11px] mt-1" style={{ color: '#8a8680' }}>In a stage that was renamed, removed or turned off</p>
+            </div>
+            <div className="flex-1 p-2 space-y-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+              {otherLeads.map(lead => (
+                <div key={lead.id}>
+                  <p className="text-[10px] px-1 mb-1 truncate" style={{ color: '#f59e0b' }}>{lead.status}</p>
+                  <KanbanCard
+                    lead={lead}
+                    onLeadClick={onLeadClick}
+                    showSpecialistColumn={showSpecialistColumn}
+                    maxTouchpoints={maxTouchpoints}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
