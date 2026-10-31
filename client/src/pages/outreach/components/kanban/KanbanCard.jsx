@@ -13,8 +13,6 @@ const Icon = ({ d, size = 14 }) => (
 const ICONS = {
   notes: 'M8 10h8M8 14h5M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.83L3 20l1.4-3.72A7.6 7.6 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
   move: 'M13 7l5 5-5 5M6 12h12',
-  mail: 'M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
-  phone: 'M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z',
   link: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1',
   clock: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
   reply: 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6',
@@ -182,7 +180,7 @@ function KanbanCard({ lead, s, slots, compact, showSpecialist, channelColors, me
       <div className="flex items-center justify-between gap-1 mt-1.5 pt-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <Progress lead={lead} slots={slots} active={menuType === 'peek'} onOpen={a => onMenu(lead, 'peek', a)} />
         <div className="flex items-center gap-0.5 shrink-0">
-          {s.nextTpStage && (
+          {s.nextTpStage && s.nextTp <= slots && (
             <button
               type="button"
               draggable={false}
@@ -197,8 +195,6 @@ function KanbanCard({ lead, s, slots, compact, showSpecialist, channelColors, me
           <IconButton title="Move to stage…" popover active={menuType === 'move'} onClick={a => onMenu(lead, 'move', a)}>
             <Icon d={ICONS.move} />
           </IconButton>
-          {!compact && lead.email && <IconButton title={`Email ${lead.email}`} href={`mailto:${lead.email}`}><Icon d={ICONS.mail} /></IconButton>}
-          {!compact && lead.phone && <IconButton title={`Call ${lead.phone}`} href={`tel:${lead.phone.replace(/[^\d+]/g, '')}`}><Icon d={ICONS.phone} /></IconButton>}
           {!compact && lead.linkedin_url && (
             <IconButton title="Open LinkedIn profile" href={lead.linkedin_url.startsWith('http') ? lead.linkedin_url : `https://${lead.linkedin_url}`}>
               <Icon d={ICONS.link} />

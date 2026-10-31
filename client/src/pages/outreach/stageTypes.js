@@ -42,8 +42,27 @@ export function touchpointNumberOf(stages, name) {
   return findStage(stages, name)?.touchpoint_number || null
 }
 
+// A pipeline either has a stage per touchpoint ("Touchpoint 1", "Touchpoint 2"…) or a single
+// touchpoint stage that every touchpoint lands in
+export function hasNumberedTouchpointStages(stages) {
+  return (stages || []).filter(s => s.stage_type === 'touchpoint').length > 1
+}
+
+// The stage touchpoint N moves a lead to
 export function touchpointStageName(stages, number) {
-  return (stages || []).find(s => s.touchpoint_number === number)?.name || null
+  const list = stages || []
+  const exact = list.find(s => s.touchpoint_number === number)
+  if (exact) return exact.name
+  if (hasNumberedTouchpointStages(list)) return null
+  return list.find(s => s.stage_type === 'touchpoint')?.name || null
+}
+
+// Which touchpoint a move into `stageName` logs: the stage's own number when each touchpoint
+// has a stage, otherwise the lead's next one. null when it isn't a touchpoint stage.
+export function touchpointNumberForMove(stages, stageName, lastLogged) {
+  const n = touchpointNumberOf(stages, stageName)
+  if (!n) return null
+  return hasNumberedTouchpointStages(stages) ? n : (lastLogged || 0) + 1
 }
 
 export function needsResponse(stages, name) {

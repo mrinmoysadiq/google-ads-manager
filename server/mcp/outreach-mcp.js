@@ -80,10 +80,12 @@ function buildServer(user) {
     return match.name;
   }
 
-  // The stage for touchpoint N is the Nth touchpoint-type stage, whatever it's named
+  // The stage for touchpoint N is the Nth touchpoint-type stage, whatever it's named — or,
+  // when the pipeline has a single touchpoint stage, that stage for every touchpoint
   async function touchpointStage(number) {
-    const stages = await api('GET', '/pipeline-stages');
-    const match = stages.find(s => s.touchpoint_number === number && s.active !== 0);
+    const stages = (await api('GET', '/pipeline-stages')).filter(s => s.active !== 0);
+    const touchpointStages = stages.filter(s => s.stage_type === 'touchpoint');
+    const match = stages.find(s => s.touchpoint_number === number) || (touchpointStages.length === 1 ? touchpointStages[0] : null);
     if (!match) throw new Error(`No pipeline stage is set up for touchpoint ${number}`);
     return match.name;
   }

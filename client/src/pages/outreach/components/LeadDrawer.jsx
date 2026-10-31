@@ -16,7 +16,7 @@ import TouchpointQuickModal from './TouchpointQuickModal'
 import ResponseQuickModal from './ResponseQuickModal'
 import { fmtDate, fmtDateTime, todayLocal } from '../../../utils/dates'
 import LeadFields, { inputClass, isEmptyFieldValue } from './LeadFields'
-import { stageColor, touchpointNumberOf, touchpointStageName, needsResponse } from '../stageTypes'
+import { stageColor, touchpointNumberForMove, touchpointStageName, needsResponse } from '../stageTypes'
 import ChannelSelect from './ChannelSelect'
 
 
@@ -687,7 +687,8 @@ export default function LeadDrawer({
   // ── Status change ────────────────────────────────────────────────────────────
 
   const handleStatusChange = async (newStatus) => {
-    const tpNum = touchpointNumberOf(stages, newStatus)
+    const lastLogged = Math.max(0, ...(lead?.touchpoints || []).filter(t => t.date).map(t => t.touchpoint_number))
+    const tpNum = touchpointNumberForMove(stages, newStatus, lastLogged)
     if (tpNum !== null) {
       setTpQuickModal({ open: true, number: tpNum, status: newStatus, modalKey: Date.now() })
       return
@@ -722,8 +723,9 @@ export default function LeadDrawer({
 
   const handleTpQuickModalSave = async (fields) => {
     const { number, status } = tpQuickModal
-    const savedTp = await upsertTouchpoint(leadId, number, fields)
-    const updated = await updateLead(leadId, { status, performed_by: getUser()?.name || null })
+    const { next_followup_date, ...touchpoint } = fields
+    const savedTp = await upsertTouchpoint(leadId, number, touchpoint)
+    const updated = await updateLead(leadId, { status, next_followup_date, performed_by: getUser()?.name || null })
     setLead(prev => ({
       ...prev,
       ...updated,

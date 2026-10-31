@@ -12,7 +12,7 @@ import PipelineKanban from './components/PipelineKanban'
 import Dashboard from './components/Dashboard'
 import TouchpointQuickModal from './components/TouchpointQuickModal'
 import ResponseQuickModal from './components/ResponseQuickModal'
-import { touchpointNumberOf, needsResponse, isClosedStatus, touchpointSlots } from './stageTypes'
+import { touchpointNumberForMove, needsResponse, isClosedStatus, touchpointSlots } from './stageTypes'
 
 const LS_SPECIALIST_KEY = 'outreach_specialist'
 const LS_VIEW_KEY = 'outreach_view'
@@ -166,7 +166,8 @@ export default function OutreachHome() {
   }
 
   const handleStatusChange = async (leadId, newStatus) => {
-    const tpNum = touchpointNumberOf(stages, newStatus)
+    const lead = leads.find(l => l.id === leadId)
+    const tpNum = touchpointNumberForMove(stages, newStatus, lead?.last_touchpoint_number)
     if (tpNum !== null) {
       setTpModal({ open: true, leadId, number: tpNum, status: newStatus, modalKey: Date.now() })
       return

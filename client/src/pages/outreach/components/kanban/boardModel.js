@@ -1,5 +1,5 @@
 import { todayLocal } from '../../../../utils/dates'
-import { isClosedStatus, stageTypeOf, touchpointNumberOf, touchpointStageName } from '../../stageTypes'
+import { isClosedStatus, stageTypeOf, touchpointNumberOf, touchpointStageName, hasNumberedTouchpointStages } from '../../stageTypes'
 
 // ─── Dates ────────────────────────────────────────────────────────────────────
 
@@ -59,7 +59,8 @@ export function leadSignals(lead, stages) {
   const quietDays = daysAgo(lastActivity)
   const repliedLast = !!replyDay && (!touchDay || replyDay >= touchDay)
 
-  const stageTp = touchpointNumberOf(stages, lead.status) || 0
+  // With a stage per touchpoint, sitting in "Touchpoint 3" means three are done even if unlogged
+  const stageTp = hasNumberedTouchpointStages(stages) ? touchpointNumberOf(stages, lead.status) || 0 : 0
   const nextTp = Math.max(lead.last_touchpoint_number || 0, stageTp) + 1
   const nextTpStage = LOGGABLE_TYPES.includes(type) ? touchpointStageName(stages, nextTp) : null
 

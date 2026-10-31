@@ -881,6 +881,59 @@ function OrphanedStagesPanel({ stages, orphans, onRemapped }) {
   );
 }
 
+// Deleting a stage that has leads: pick where they go. They're merged in like a rename —
+// history and dashboard cards follow, and no stage moves are logged.
+function DeleteStageModal({ stage, leadCount, stages, onClose, onDeleted }) {
+  const options = [...stages]
+    .filter(s => s.id !== stage.id && s.active)
+    .sort((a, b) => a.order_index - b.order_index);
+  // Default to another stage of the same type (e.g. touchpoint → touchpoint), else the one before it
+  const sameType = options.find(s => s.stage_type === stage.stage_type);
+  const before = options.filter(s => s.order_index < stage.order_index).pop();
+  const [target, setTarget] = useState((sameType || before || options[0])?.name || '');
+  const [busy, setBusy] = useState(false);
+
+  const confirm = async () => {
+    setBusy(true);
+    try {
+      await deletePipelineStage(stage.id, target);
+      toast.success(`"${stage.name}" deleted — ${leadCount} lead${leadCount === 1 ? '' : 's'} moved to "${target}"`);
+      onDeleted();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete stage');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-md rounded-xl p-6 bg-[#242424] border border-white/10 shadow-2xl">
+        <h3 className="text-base font-semibold text-[#c5c1b9]">Delete "{stage.name}"</h3>
+        <p className="text-sm text-[#8a8680] mt-2">
+          {leadCount} lead{leadCount === 1 ? ' is' : 's are'} in this stage. Move {leadCount === 1 ? 'it' : 'them'} to:
+        </p>
+        <select
+          value={target}
+          onChange={e => setTarget(e.target.value)}
+          className={inputClass + ' mt-3'}
+          style={{ colorScheme: 'dark' }}
+        >
+          {options.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+        </select>
+        <p className="text-xs text-[#8a8680] mt-3">
+          Their history and any dashboard cards using "{stage.name}" move over too, and they keep their days-in-stage.
+        </p>
+        <div className="flex justify-end gap-2 mt-5">
+          <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+          <Btn variant="danger" onClick={confirm} disabled={busy || !target}>
+            {busy ? <Spinner /> : `Move & delete`}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PipelineStagesSection({ stages, setStages }) {
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
@@ -888,6 +941,7 @@ function PipelineStagesSection({ stages, setStages }) {
   const [editName, setEditName] = useState('');
   const [orphans, setOrphans] = useState([]);
   const [newType, setNewType] = useState('in_progress');
+  const [deleting, setDeleting] = useState(null); // { stage, leadCount } when the stage has leads
 
   const refreshOrphans = useCallback(() => {
     getOrphanedStages().then(setOrphans).catch(() => {});
@@ -953,12 +1007,16 @@ function PipelineStagesSection({ stages, setStages }) {
     if (!window.confirm(`Delete stage "${stage.name}"?`)) return;
     try {
       await deletePipelineStage(stage.id);
-      setStages(prev => prev.filter(s => s.id !== stage.id));
+      refreshStages();
       toast.success('Stage deleted');
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to delete stage');
+      const leadCount = err.response?.data?.lead_count;
+      if (err.response?.status === 409 && leadCount) setDeleting({ stage, leadCount });
+      else toast.error(err.response?.data?.error || 'Failed to delete stage');
     }
   };
+
+  const touchpointStageCount = stages.filter(s => s.stage_type === 'touchpoint').length;
 
   const handleMove = async (stage, direction) => {
     const sorted = [...stages].sort((a, b) => a.order_index - b.order_index);
@@ -987,8 +1045,18 @@ function PipelineStagesSection({ stages, setStages }) {
         Name stages however you like — each stage's <span className="text-[#c5c1b9]">type</span> decides how it behaves:
         touchpoint stages open the touchpoint logger (numbered in order), interested / not interested / meeting-lost
         stages ask for the lead's reply, and the dashboard metrics and overdue rules are based on types.
-        Stages in use can't be deleted; renaming moves leads along.
+        Renaming moves leads along; deleting a stage in use asks where to move its leads. Use one touchpoint stage
+        to keep every touchpoint in a single column — touchpoints are then numbered per lead.
       </p>
+      {deleting && (
+        <DeleteStageModal
+          stage={deleting.stage}
+          leadCount={deleting.leadCount}
+          stages={stages}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => { setDeleting(null); refreshStages(); refreshOrphans(); }}
+        />
+      )}
 
       <OrphanedStagesPanel stages={stages} orphans={orphans} onRemapped={refreshOrphans} />
 
@@ -1057,7 +1125,7 @@ function PipelineStagesSection({ stages, setStages }) {
 
               {stage.touchpoint_number && (
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#14b8a6]/15 text-[#14b8a6]">
-                  TP {stage.touchpoint_number}
+                  {touchpointStageCount > 1 ? `TP ${stage.touchpoint_number}` : 'All TPs'}
                 </span>
               )}
               <StageTypeSelect value={stage.stage_type} onChange={t => handleTypeChange(stage, t)} />

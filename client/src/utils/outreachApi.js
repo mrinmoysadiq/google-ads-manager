@@ -87,7 +87,8 @@ export const getExportPdfHtml = (params) =>
 export const getPipelineStages = () => api.get('/outreach/pipeline-stages').then(r => r.data)
 export const createPipelineStage = (data) => api.post('/outreach/pipeline-stages', data).then(r => r.data)
 export const updatePipelineStage = (id, data) => api.patch(`/outreach/pipeline-stages/${id}`, data).then(r => r.data)
-export const deletePipelineStage = (id) => api.delete(`/outreach/pipeline-stages/${id}`).then(r => r.data)
+// moveTo: stage name to merge the stage's leads into (needed when leads are in it)
+export const deletePipelineStage = (id, moveTo) => api.delete(`/outreach/pipeline-stages/${id}`, { params: moveTo ? { move_to: moveTo } : {} }).then(r => r.data)
 export const getOrphanedStages = () => api.get('/outreach/pipeline-stages/orphaned').then(r => r.data)
 export const remapStage = (from, to) => api.post('/outreach/pipeline-stages/remap', { from, to }).then(r => r.data)
 

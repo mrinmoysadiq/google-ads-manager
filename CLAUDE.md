@@ -211,10 +211,13 @@ Stage *names* are free text; behaviour comes from `outreach_pipeline_stages.stag
 set per stage in Admin. Server: `STAGE_TYPES` / `TYPE_GROUPS` in `outreach.js`; client: `pages/outreach/stageTypes.js`.
 - **Responded** = types `interested, not_interested, booked, no_show, meeting_lost, trial, won` (not `in_progress`, so a stage named "Responded" doesn't count)
 - **Never overdue** = `won, dead, meeting_lost, not_interested`
-- **Touchpoint logger** opens for `touchpoint` stages; they're numbered 1..n in pipeline order (`touchpoint_number` from `GET /pipeline-stages`)
+- **Touchpoint logger** opens for `touchpoint` stages. With several touchpoint stages they're numbered 1..n in pipeline order
+  (`touchpoint_number` from `GET /pipeline-stages`); with a single one (the current setup), every touchpoint lands in it and the
+  number comes from the lead — next = last logged + 1 (`touchpointNumberForMove` / `touchpointStageName` in `stageTypes.js`)
 - **Response logger** opens for `interested, not_interested, meeting_lost`
 - New leads start in the first active `new` stage
-- Renaming a stage carries leads, status history and dashboard cards along
+- Renaming a stage carries leads, status history and dashboard cards along; deleting a stage that has leads takes
+  `?move_to=<stage>` and merges it the same way (no stage moves logged, days-in-stage kept)
 Never match stage names in code — use the type helpers.
 
 ### Lead Fields (form layout)

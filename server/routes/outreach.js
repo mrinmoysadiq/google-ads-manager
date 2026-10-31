@@ -1815,7 +1815,8 @@ function renameStageReferences(oldName, newName) {
   db.prepare('UPDATE outreach_leads SET status = ? WHERE status = ?').run(newName, oldName);
   db.prepare('UPDATE outreach_status_history SET new_status = ? WHERE new_status = ?').run(newName, oldName);
   db.prepare('UPDATE outreach_status_history SET old_status = ? WHERE old_status = ?').run(newName, oldName);
-  const swap = list => list.map(s => (s === oldName ? newName : s));
+  // De-duplicated, since a merge can map two statuses onto one
+  const swap = list => [...new Set(list.map(s => (s === oldName ? newName : s)))];
   const updateCard = db.prepare('UPDATE outreach_dashboard_cards SET numerator_statuses = ?, denominator = ? WHERE id = ?');
   db.prepare('SELECT * FROM outreach_dashboard_cards').all().map(parseCard).forEach(card => {
     const numerator = swap(card.numerator_statuses);
@@ -1900,17 +1901,28 @@ router.patch('/pipeline-stages/:id', requireAdmin, (req, res) => {
   }
 });
 
+// ?move_to=<stage name> merges the stage into another before deleting it: its leads, status
+// history and dashboard cards are carried over (like a rename), so leads keep their
+// "in stage since" date and no stage moves are logged for the clean-up.
 router.delete('/pipeline-stages/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const stage = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE id = ?').get(id);
     if (!stage) return res.status(404).json({ error: 'Stage not found' });
-    const used = db.prepare('SELECT COUNT(*) as cnt FROM outreach_leads WHERE status = ?').get(stage.name);
-    if (used.cnt > 0) {
-      return res.status(409).json({ error: `Cannot delete: ${used.cnt} lead(s) are in this stage` });
+    const used = db.prepare('SELECT COUNT(*) as cnt FROM outreach_leads WHERE status = ?').get(stage.name).cnt;
+    const moveTo = typeof req.query.move_to === 'string' ? req.query.move_to.trim() : '';
+    let target = null;
+    if (moveTo) {
+      target = db.prepare('SELECT * FROM outreach_pipeline_stages WHERE name = ? AND active = 1 AND id != ?').get(moveTo, stage.id);
+      if (!target) return res.status(400).json({ error: 'Pick another active stage to move the leads to' });
+    } else if (used > 0) {
+      return res.status(409).json({ error: `${used} lead(s) are in this stage — choose where to move them`, lead_count: used });
     }
-    db.prepare('DELETE FROM outreach_pipeline_stages WHERE id = ?').run(id);
-    res.json({ success: true });
+    db.transaction(() => {
+      if (target) renameStageReferences(stage.name, target.name);
+      db.prepare('DELETE FROM outreach_pipeline_stages WHERE id = ?').run(id);
+    })();
+    res.json({ success: true, moved: target ? used : 0 });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete stage' });
