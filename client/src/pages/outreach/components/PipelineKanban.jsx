@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import toast from 'react-hot-toast'
 import { stageColor, PHASES, phaseOf } from '../stageTypes'
 import { useChannelColors } from '../channels'
@@ -6,6 +6,7 @@ import TouchpointPeek from './TouchpointPeek'
 import KanbanCard from './kanban/KanbanCard'
 import { FollowUpMenu, MoveMenu } from './kanban/CardMenus'
 import { leadSignals, FOCUS_FILTERS, SORTS } from './kanban/boardModel'
+import { useDismiss } from './kanban/useAnchored'
 
 // The board is a daily work surface: phases group the stages, finished and empty
 // columns fold into slim rails, focus filters answer "who do I contact now?",
@@ -38,9 +39,93 @@ function SkeletonCard() {
 
 // ─── Toolbar ──────────────────────────────────────────────────────────────────
 
+const SortIcon = () => (
+  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7 4v16m0 0l-3-3m3 3l3-3M17 20V4m0 0l-3 3m3-3l3 3" />
+  </svg>
+)
+
+// How cards are ordered inside every column
+function SortMenu({ sort, setSort }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  const close = useCallback(() => setOpen(false), [])
+  useDismiss(ref, close, '[data-sort-trigger]')
+  const current = SORTS.find(s => s.key === sort) || SORTS[0]
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        data-sort-trigger
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Change how cards are ordered in each column"
+        className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors hover:brightness-125"
+        style={{ color: '#e8e5df', backgroundColor: 'rgba(87,94,207,0.18)', border: '1px solid rgba(87,94,207,0.45)' }}
+      >
+        <SortIcon />
+        Sort: {current.label}
+        <span style={{ color: '#8a8680' }}>▾</span>
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Sort cards"
+          className="absolute left-0 top-full mt-1.5 z-[60] w-72 rounded-xl p-1"
+          style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)' }}
+        >
+          <p className="text-[10px] uppercase tracking-wide font-semibold px-2.5 pt-2 pb-1" style={{ color: '#8a8680' }}>Order cards in each column by</p>
+          {SORTS.map(s => {
+            const active = s.key === sort
+            return (
+              <button
+                key={s.key}
+                type="button"
+                role="menuitemradio"
+                aria-checked={active}
+                onClick={() => { setSort(s.key); setOpen(false) }}
+                className="w-full flex items-start gap-2 text-left px-2.5 py-2 rounded-md hover:bg-white/[0.06]"
+                style={{ backgroundColor: active ? 'rgba(87,94,207,0.18)' : undefined }}
+              >
+                <span className="w-3 shrink-0 text-xs mt-px" style={{ color: '#575ECF' }}>{active ? '✓' : ''}</span>
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-medium" style={{ color: '#e8e5df' }}>{s.label}</span>
+                  {s.hint && <span className="block text-[11px] mt-0.5" style={{ color: '#8a8680' }}>{s.hint}</span>}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Toolbar({ focus, setFocus, counts, sort, setSort, compact, setCompact }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <SortMenu sort={sort} setSort={setSort} />
+        {sort === 'manual' && (
+          <span className="text-[11px]" style={{ color: '#8a8680' }}>Drag cards to arrange them</span>
+        )}
+        <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }} role="group" aria-label="Card density">
+          {[[false, 'Detailed'], [true, 'Compact']].map(([value, label]) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setCompact(value)}
+              aria-pressed={compact === value}
+              className="px-2.5 py-1.5 text-xs font-medium"
+              style={compact === value ? { backgroundColor: 'rgba(87,94,207,0.35)', color: '#fff' } : { color: '#8a8680' }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <span className="hidden sm:block w-px h-5" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }} />
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Focus">
         {FOCUS_FILTERS.map(f => {
           const active = focus === f.key
@@ -66,35 +151,6 @@ function Toolbar({ focus, setFocus, counts, sort, setSort, compact, setCompact }
             </button>
           )
         })}
-      </div>
-
-      <div className="flex items-center gap-2">
-        <label className="flex items-center gap-1.5 text-xs" style={{ color: '#8a8680' }}>
-          Sort
-          <select
-            value={sort}
-            onChange={e => setSort(e.target.value)}
-            title={SORTS.find(s => s.key === sort)?.hint}
-            className="rounded-lg px-2 py-1 text-xs focus:outline-none cursor-pointer"
-            style={{ backgroundColor: '#242424', border: '1px solid rgba(255,255,255,0.1)', color: '#c5c1b9', colorScheme: 'dark' }}
-          >
-            {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
-        </label>
-        <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }} role="group" aria-label="Card density">
-          {[[false, 'Detailed'], [true, 'Compact']].map(([value, label]) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setCompact(value)}
-              aria-pressed={compact === value}
-              className="px-2.5 py-1 text-xs font-medium"
-              style={compact === value ? { backgroundColor: 'rgba(87,94,207,0.35)', color: '#fff' } : { color: '#8a8680' }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   )

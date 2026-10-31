@@ -101,7 +101,7 @@ export const SORTS = [
   {
     key: 'priority',
     label: 'Priority',
-    hint: 'Overdue first, then due today, then leads with no follow-up (quietest first), then upcoming',
+    hint: 'Overdue first, then due today, then no follow-up (quietest first), then upcoming',
     compare: (a, b) =>
       (FOLLOWUP_RANK[a.s.followup] - FOLLOWUP_RANK[b.s.followup]) ||
       (a.s.followup === 'overdue' ? b.s.overdueDays - a.s.overdueDays : 0) ||
@@ -110,8 +110,8 @@ export const SORTS = [
   },
   {
     key: 'manual',
-    label: 'Custom order (drag to arrange)',
-    hint: 'Drag cards up and down to arrange them. Leads that just arrived in a stage show at the top.',
+    label: 'Custom order',
+    hint: 'Drag cards to put them anywhere. New arrivals in a stage show at the top.',
     compare: (a, b) => {
       const pa = a.lead.board_position, pb = b.lead.board_position
       const unplacedA = pa === null || pa === undefined
@@ -124,21 +124,25 @@ export const SORTS = [
   {
     key: 'quiet',
     label: 'Longest without contact',
+    hint: 'Leads nobody has touched for the longest time first',
     compare: (a, b) => (b.s.quietDays ?? 1e9) - (a.s.quietDays ?? 1e9),
   },
   {
     key: 'moved',
     label: 'Recently moved',
+    hint: 'Leads that changed stage most recently first',
     compare: (a, b) => (b.lead.status_updated_at || '').localeCompare(a.lead.status_updated_at || ''),
   },
   {
     key: 'newest',
     label: 'Newest leads',
+    hint: 'Most recently added leads first',
     compare: (a, b) => (b.lead.created_at || '').localeCompare(a.lead.created_at || ''),
   },
   {
     key: 'company',
     label: 'Company A–Z',
+    hint: 'Alphabetical by company name',
     compare: (a, b) => (a.lead.company_name || '').localeCompare(b.lead.company_name || '', undefined, { sensitivity: 'base' }),
   },
 ]
