@@ -497,7 +497,7 @@ router.get('/leads', (req, res) => {
       SELECT
         l.id, l.specialist_id, l.company_name, l.contact_name, l.job_title,
         l.website, l.industry_id, l.source_id, l.location, l.status, l.next_followup_date,
-        l.source_url, l.email, l.phone, l.fb_page_url, l.ig_url,
+        l.source_url, l.email, l.phone, l.fb_page_url, l.ig_url, l.linkedin_url,
         l.created_at, l.status_updated_at,
         s.name as specialist_name,
         i.name as industry_name,
@@ -508,7 +508,11 @@ router.get('/leads', (req, res) => {
         (SELECT GROUP_CONCAT(ols2.specialist_id, ',') FROM outreach_lead_specialists ols2
          WHERE ols2.lead_id = l.id) as specialist_ids_csv,
         (SELECT COUNT(*) FROM outreach_touchpoints WHERE lead_id = l.id AND date IS NOT NULL) as touchpoint_count,
-        (SELECT MAX(date) FROM outreach_touchpoints WHERE lead_id = l.id AND date IS NOT NULL) as last_touchpoint_date
+        (SELECT MAX(date) FROM outreach_touchpoints WHERE lead_id = l.id AND date IS NOT NULL) as last_touchpoint_date,
+        (SELECT channel FROM outreach_touchpoints WHERE lead_id = l.id AND date IS NOT NULL
+         ORDER BY date DESC, touchpoint_number DESC LIMIT 1) as last_touchpoint_channel,
+        (SELECT MAX(touchpoint_number) FROM outreach_touchpoints WHERE lead_id = l.id AND date IS NOT NULL) as last_touchpoint_number,
+        (SELECT MAX(COALESCE(date, substr(created_at, 1, 10))) FROM outreach_lead_responses WHERE lead_id = l.id) as last_response_date
       FROM outreach_leads l
       LEFT JOIN outreach_specialists s ON s.id = l.specialist_id
       LEFT JOIN outreach_industries i ON i.id = l.industry_id

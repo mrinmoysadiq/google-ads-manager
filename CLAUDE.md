@@ -256,6 +256,15 @@ useEffect(() => { fetchData(); }, [refreshKey]);
 ```
 `bumpDashboard()` must be called after EVERY lead status change, save, or delete.
 
+### Kanban board (`components/PipelineKanban.jsx` + `components/kanban/`)
+A daily work surface, not just a stage view. Columns are grouped into phases by stage type (`PHASES` in `stageTypes.js`);
+Closed-phase and empty columns fold into rails (still drop targets; user overrides saved in localStorage). Per-lead signals
+(follow-up state, last activity, days in stage, next touchpoint) come from `leadSignals()` in `kanban/boardModel.js`, which
+also defines the focus filters (Overdue, Due today, Not contacted, Going cold, Hot) and column sorts (default Priority).
+Cards: follow-up chip → `FollowUpMenu`, progress dots → `TouchpointPeek`, `+ TPn` → touchpoint logger, → `MoveMenu`.
+The touchpoint logger also sets the next follow-up (default +3 days). The leads list returns `last_touchpoint_channel`,
+`last_touchpoint_number`, `last_response_date` and `linkedin_url` for the cards.
+
 ### Kanban vs Table Fetch Difference
 ```js
 // Kanban: loads up to 500 leads (no pagination, needs all leads for columns)

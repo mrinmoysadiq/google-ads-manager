@@ -4,7 +4,7 @@ import Select from 'react-select'
 import toast from 'react-hot-toast'
 import { useDebounce } from '../../hooks/useDebounce'
 import { getUser, isAdmin } from '../../utils/auth'
-import { todayLocal } from '../../utils/dates'
+import { todayLocal, fmtDate } from '../../utils/dates'
 import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, getSources, upsertTouchpoint, createLeadResponse } from '../../utils/outreachApi'
 import LeadDrawer from './components/LeadDrawer'
 import PipelineTable from './components/PipelineTable'
@@ -188,11 +188,13 @@ export default function OutreachHome() {
 
   const handleTpModalSave = async (fields) => {
     const { leadId, number, status } = tpModal
-    await upsertTouchpoint(leadId, number, fields)
-    await updateLead(leadId, { status, performed_by: getUser()?.name || null })
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l))
+    const { next_followup_date, ...touchpoint } = fields
+    await upsertTouchpoint(leadId, number, touchpoint)
+    await updateLead(leadId, { status, next_followup_date, performed_by: getUser()?.name || null })
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status, next_followup_date } : l))
     setTpModal({ open: false, leadId: null, number: null, status: null, modalKey: 0 })
     toast.success(`Touchpoint ${number} saved — moved to ${status}`)
+    fetchLeads() // touchpoint count / last touch on the card
     bumpDashboard()
   }
 
@@ -204,12 +206,26 @@ export default function OutreachHome() {
       setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l))
       setResponseModal({ open: false, leadId: null, status: null, modalKey: 0 })
       toast.success(`Response logged — moved to "${status}"`)
+      fetchLeads() // "replied" on the card
       bumpDashboard()
     } catch {
       toast.error('Failed to save response')
       throw new Error('Failed')
     }
   }
+
+  // Kanban follow-up menu: optimistic, then saved
+  const handleFollowUpChange = useCallback(async (leadId, date) => {
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, next_followup_date: date } : l))
+    try {
+      await updateLead(leadId, { next_followup_date: date })
+      toast.success(date ? `Follow-up set for ${fmtDate(date)}` : 'Follow-up cleared')
+      bumpDashboard()
+    } catch {
+      toast.error('Failed to update follow-up')
+      fetchLeads()
+    }
+  }, [fetchLeads])
 
   const handleLeadUpdated = (updatedLead) => {
     setLeads(prev => prev.map(l => l.id === updatedLead.id ? { ...l, ...updatedLead } : l))
@@ -261,7 +277,7 @@ export default function OutreachHome() {
 
   return (
     <div className="min-h-screen bg-[#1b1b1b]">
-      <div className="max-w-screen-xl mx-auto px-4 py-6">
+      <div className={`${tab === 'pipeline' && viewMode === 'kanban' ? 'max-w-none' : 'max-w-screen-xl'} mx-auto px-4 py-6`}>
 
         {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -462,6 +478,7 @@ export default function OutreachHome() {
                 loading={loading}
                 onLeadClick={openDrawer}
                 onStatusChange={handleStatusChange}
+                onFollowUpChange={handleFollowUpChange}
                 showSpecialistColumn={showSpecialistColumn}
                 stages={stages}
                 maxTouchpoints={touchpointSlots(stages, maxTouchpoints)}

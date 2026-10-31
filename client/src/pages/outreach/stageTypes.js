@@ -59,3 +59,19 @@ export function touchpointSlots(stages, maxTouchpoints) {
   const stageCount = (stages || []).filter(s => s.stage_type === 'touchpoint').length
   return Math.max(maxTouchpoints || 0, stageCount)
 }
+
+// The board groups stages into phases (by type, so renames don't matter)
+export const PHASES = [
+  { key: 'outreach',     label: 'Outreach',      types: ['new', 'touchpoint'] },
+  { key: 'conversation', label: 'Conversations', types: ['in_progress', 'interested'] },
+  { key: 'meetings',     label: 'Meetings',      types: ['booked', 'no_show', 'trial'] },
+  { key: 'closed',       label: 'Closed',        types: ['won', 'not_interested', 'meeting_lost', 'dead'] },
+]
+
+export function phaseOf(type) {
+  return PHASES.find(p => p.types.includes(type))?.key || 'conversation'
+}
+
+export function stageTypeOf(stages, name) {
+  return findStage(stages, name)?.stage_type || null
+}

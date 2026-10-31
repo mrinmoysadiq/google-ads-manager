@@ -1,10 +1,15 @@
 import { useState, useCallback } from 'react'
 import { todayLocal } from '../../../utils/dates'
 import ChannelSelect from './ChannelSelect'
+import { addDays } from './kanban/boardModel'
+import { fmtDate } from '../../../utils/dates'
 import toast from 'react-hot-toast'
 
 const inputClass =
   'w-full rounded-lg px-3 py-2 text-sm focus:outline-none bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#575ECF] transition-colors'
+
+const DEFAULT_FOLLOWUP_DAYS = 3
+const FOLLOWUP_PRESETS = [['Tomorrow', 1], ['3 days', 3], ['1 week', 7], ['2 weeks', 14]]
 
 // Called with a fresh key each open so form state always resets
 export default function TouchpointQuickModal({ touchpointNumber, initialData, onSave, onClose }) {
@@ -15,6 +20,8 @@ export default function TouchpointQuickModal({ touchpointNumber, initialData, on
     message_body: initialData?.message_body || '',
     loom_url: initialData?.loom_url || '',
     notes: initialData?.notes || '',
+    // Logging a touch schedules the next one, so the lead doesn't sit "overdue"
+    next_followup_date: addDays(DEFAULT_FOLLOWUP_DAYS),
   })
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
@@ -166,6 +173,50 @@ export default function TouchpointQuickModal({ touchpointNumber, initialData, on
               style={{ resize: 'vertical' }}
               placeholder="Any additional notes…"
             />
+          </div>
+
+          {/* Next follow-up — defaults to a few days out */}
+          <div>
+            <label style={labelStyle(false)}>Next follow-up</label>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+              {FOLLOWUP_PRESETS.map(([label, n]) => {
+                const date = addDays(n)
+                const active = fields.next_followup_date === date
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setFields(v => ({ ...v, next_followup_date: date }))}
+                    title={fmtDate(date)}
+                    style={{
+                      padding: '5px 10px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer',
+                      color: active ? '#fff' : '#c5c1b9',
+                      backgroundColor: active ? '#575ECF' : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${active ? '#575ECF' : 'rgba(255,255,255,0.1)'}`,
+                    }}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+              <input
+                type="date"
+                aria-label="Next follow-up date"
+                className={inputClass}
+                value={fields.next_followup_date || ''}
+                onChange={e => setFields(v => ({ ...v, next_followup_date: e.target.value || null }))}
+                style={{ width: 'auto', flex: '1 1 140px', colorScheme: 'dark' }}
+              />
+              {fields.next_followup_date && (
+                <button
+                  type="button"
+                  onClick={() => setFields(v => ({ ...v, next_followup_date: null }))}
+                  style={{ fontSize: '12px', color: '#8a8680', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  None
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

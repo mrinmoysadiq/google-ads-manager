@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useLayoutEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { getTouchpoints, getLeadResponses } from '../../../utils/outreachApi'
 import { fmtDate } from '../../../utils/dates'
+import { useAnchoredPosition, useDismiss } from './kanban/useAnchored'
 
 const WIDTH = 380
 
@@ -34,7 +35,6 @@ function Block({ label, children }) {
 export default function TouchpointPeek({ lead, anchor, channelColors = {}, onClose, onOpenLead }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(false)
-  const [pos, setPos] = useState({ left: 0, top: 0, maxHeight: 400 })
   const ref = useRef(null)
 
   useEffect(() => {
@@ -47,49 +47,8 @@ export default function TouchpointPeek({ lead, anchor, channelColors = {}, onClo
     return () => { cancelled = true }
   }, [lead.id])
 
-  // Below the button when there's room, otherwise above (decided once, so it doesn't flip
-  // while scrolling); never off the right edge. Re-placed on scroll/resize to follow the card.
-  const side = useRef(null)
-  useLayoutEffect(() => {
-    const margin = 12
-    let frame = 0
-    const place = () => {
-      frame = 0
-      if (!anchor.isConnected) return // card re-rendered away — stay where we are
-      const rect = anchor.getBoundingClientRect()
-      const left = Math.max(margin, Math.min(rect.left, window.innerWidth - WIDTH - margin))
-      const below = window.innerHeight - rect.bottom - margin
-      const above = rect.top - margin
-      if (!side.current) side.current = below >= 280 || below >= above ? 'below' : 'above'
-      if (side.current === 'below') {
-        setPos({ left, top: rect.bottom + 6, maxHeight: Math.max(160, below - 6) })
-      } else {
-        setPos({ left, bottom: window.innerHeight - rect.top + 6, maxHeight: Math.max(160, above - 6) })
-      }
-    }
-    const schedule = () => { if (!frame) frame = requestAnimationFrame(place) }
-    place()
-    window.addEventListener('scroll', schedule, true)
-    window.addEventListener('resize', schedule)
-    return () => {
-      cancelAnimationFrame(frame)
-      window.removeEventListener('scroll', schedule, true)
-      window.removeEventListener('resize', schedule)
-    }
-  }, [anchor])
-
-  useEffect(() => {
-    const inside = e => ref.current && ref.current.contains(e.target)
-    // The card buttons toggle the popover themselves
-    const onDown = e => { if (!inside(e) && !e.target.closest?.('[data-peek-trigger]')) onClose() }
-    const onKey = e => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [onClose])
+  const pos = useAnchoredPosition(anchor, WIDTH)
+  useDismiss(ref, onClose)
 
   return createPortal(
     <div
