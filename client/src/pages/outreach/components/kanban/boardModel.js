@@ -109,6 +109,19 @@ export const SORTS = [
       ((b.s.quietDays ?? 1e9) - (a.s.quietDays ?? 1e9)),
   },
   {
+    key: 'manual',
+    label: 'Custom order (drag to arrange)',
+    hint: 'Drag cards up and down to arrange them. Leads that just arrived in a stage show at the top.',
+    compare: (a, b) => {
+      const pa = a.lead.board_position, pb = b.lead.board_position
+      const unplacedA = pa === null || pa === undefined
+      const unplacedB = pb === null || pb === undefined
+      if (unplacedA !== unplacedB) return unplacedA ? -1 : 1
+      if (unplacedA) return (b.lead.status_updated_at || '').localeCompare(a.lead.status_updated_at || '')
+      return pa - pb
+    },
+  },
+  {
     key: 'quiet',
     label: 'Longest without contact',
     compare: (a, b) => (b.s.quietDays ?? 1e9) - (a.s.quietDays ?? 1e9),

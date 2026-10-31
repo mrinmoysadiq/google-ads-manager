@@ -734,6 +734,8 @@ function initializeDatabase() {
     'ALTER TABLE outreach_custom_fields ADD COLUMN help_text TEXT',
     'ALTER TABLE outreach_custom_fields ADD COLUMN required INTEGER DEFAULT 0',
     'ALTER TABLE outreach_leads ADD COLUMN source_id INTEGER REFERENCES outreach_lead_sources(id)',
+    // Custom card order within a Kanban column (NULL = not placed yet, shown at the top)
+    'ALTER TABLE outreach_leads ADD COLUMN board_position REAL',
   ];
 
   // Explicit buyer-account assignment table

@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
+import toast from 'react-hot-toast'
 import { stageColor, PHASES, phaseOf } from '../stageTypes'
 import { useChannelColors } from '../channels'
 import TouchpointPeek from './TouchpointPeek'
@@ -101,18 +102,38 @@ function Toolbar({ focus, setFocus, counts, sort, setSort, compact, setCompact }
 
 // ─── Columns ──────────────────────────────────────────────────────────────────
 
-function dropProps(status, dragOver, setDragOver, onDropLead) {
+// The card the dragged one would land above (null = the end), from the cursor's position
+function cardBelowPointer(container, clientY, draggedId) {
+  for (const el of container.querySelectorAll('[data-card-id]')) {
+    const id = Number(el.dataset.cardId)
+    if (id === draggedId) continue
+    const r = el.getBoundingClientRect()
+    if (clientY < r.top + r.height / 2) return id
+  }
+  return null
+}
+
+function dropProps(status, dropAt, setDropAt, draggedId, onDropLead) {
   return {
-    onDragOver: e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOver !== status) setDragOver(status) },
-    onDragLeave: e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null) },
+    onDragOver: e => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      const beforeId = cardBelowPointer(e.currentTarget, e.clientY, draggedId)
+      if (dropAt?.status !== status || dropAt.beforeId !== beforeId) setDropAt({ status, beforeId })
+    },
+    onDragLeave: e => { if (!e.currentTarget.contains(e.relatedTarget)) setDropAt(null) },
     onDrop: e => {
       e.preventDefault()
-      setDragOver(null)
       const id = parseInt(e.dataTransfer.getData('text/plain'))
-      if (id) onDropLead(id, status)
+      const beforeId = cardBelowPointer(e.currentTarget, e.clientY, id)
+      setDropAt(null)
+      if (id) onDropLead(id, status, beforeId)
     },
   }
 }
+
+// Where the dragged card will land
+const DropLine = () => <div className="h-0.5 rounded-full -my-1" style={{ backgroundColor: '#575ECF', boxShadow: '0 0 6px #575ECF' }} />
 
 // A folded column: name, count and overdue dot. Click to open; still a drop target.
 function Rail({ column, isDragTarget, drop, onExpand }) {
@@ -142,7 +163,7 @@ function Rail({ column, isDragTarget, drop, onExpand }) {
   )
 }
 
-function Column({ column, isDragTarget, drop, onCollapse, children, footer }) {
+function Column({ column, isDragTarget, showDropBox, drop, onCollapse, children, footer }) {
   return (
     <div
       {...drop}
@@ -186,7 +207,7 @@ function Column({ column, isDragTarget, drop, onCollapse, children, footer }) {
       </div>
       <div className="flex-1 p-2 space-y-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
         {children}
-        {isDragTarget && (
+        {isDragTarget && showDropBox && (
           <div className="rounded-lg border-2 border-dashed h-12 flex items-center justify-center" style={{ borderColor: 'rgba(87,94,207,0.4)' }}>
             <span className="text-xs" style={{ color: '#575ECF' }}>Drop here</span>
           </div>
@@ -200,7 +221,7 @@ function Column({ column, isDragTarget, drop, onCollapse, children, footer }) {
 // ─── Board ────────────────────────────────────────────────────────────────────
 
 export default function PipelineKanban({
-  leads, loading, onLeadClick, onStatusChange, onFollowUpChange, showSpecialistColumn, stages = [], maxTouchpoints = 5,
+  leads, loading, onLeadClick, onStatusChange, onFollowUpChange, onReorder, showSpecialistColumn, stages = [], maxTouchpoints = 5,
 }) {
   const channelColors = useChannelColors()
   const [focus, setFocus] = useState('all')
@@ -208,7 +229,8 @@ export default function PipelineKanban({
   const [compact, setCompactState] = useState(() => readLS(LS_DENSITY, false))
   const [columnPrefs, setColumnPrefs] = useState(() => readLS(LS_COLUMNS, {}))
   const [shown, setShown] = useState({}) // { [column key]: cards rendered }
-  const [dragOver, setDragOver] = useState(null)
+  const [dragging, setDragging] = useState(null) // { leadId, status } of the card being dragged
+  const [dropAt, setDropAt] = useState(null) // { status, beforeId } — where it would land
   const [menu, setMenu] = useState(null) // { lead, leadId, type, anchor }
 
   const setSort = v => { setSortState(v); writeLS(LS_SORT, v) }
@@ -224,7 +246,8 @@ export default function PipelineKanban({
   }, [])
   const closeMenu = useCallback(() => setMenu(null), [])
   const logTouchpoint = useCallback((lead, stageName) => onStatusChange(lead.id, stageName), [onStatusChange])
-  const endDrag = useCallback(() => setDragOver(null), [])
+  const startDrag = useCallback(lead => setDragging({ leadId: lead.id, status: lead.status }), [])
+  const endDrag = useCallback(() => { setDragging(null); setDropAt(null) }, [])
 
   const items = useMemo(() => leads.map(lead => ({ lead, s: leadSignals(lead, stages) })), [leads, stages])
 
@@ -270,10 +293,37 @@ export default function PipelineKanban({
     return phaseKey !== 'closed' && column.items.length > 0
   }
 
-  const handleDropLead = (leadId, status) => {
+  // A column's lead IDs top to bottom (ignoring the focus filter), with `leadId` placed above `beforeId`
+  const orderWith = (status, leadId, beforeId, compare) => {
+    const ids = items.filter(it => it.lead.status === status && it.lead.id !== leadId)
+      .sort(compare).map(it => it.lead.id)
+    const at = beforeId ? ids.indexOf(beforeId) : -1
+    ids.splice(at === -1 ? ids.length : at, 0, leadId)
+    return ids
+  }
+  const manualCompare = SORTS.find(s => s.key === 'manual').compare
+
+  const handleDropLead = (leadId, status, beforeId) => {
+    endDrag()
     if (status === MISSING) return
     const lead = leads.find(l => l.id === leadId)
-    if (lead && lead.status !== status) onStatusChange(leadId, status)
+    if (!lead) return
+    if (lead.status === status) {
+      // Re-arranging within a column: keep the order as it looks now, with this card moved
+      if (beforeId === leadId) return
+      const current = (SORTS.find(s => s.key === sort) || SORTS[0]).compare
+      onReorder(orderWith(status, leadId, beforeId, current))
+      if (sort !== 'manual') {
+        setSort('manual')
+        toast.success('Switched to Custom order — drag cards to arrange them')
+      }
+      return
+    }
+    // Into another column: in Custom order it lands where it was dropped, otherwise per the sort
+    const place = sort === 'manual' && beforeId !== undefined
+      ? () => onReorder(orderWith(status, leadId, beforeId, manualCompare))
+      : undefined
+    onStatusChange(leadId, status, place)
   }
 
   const slots = maxTouchpoints
@@ -297,11 +347,23 @@ export default function PipelineKanban({
                 </div>
                 <div className="flex gap-2 items-start">
                   {phase.columns.map(column => {
-                    const drop = dropProps(column.key, dragOver, setDragOver, handleDropLead)
-                    const isDragTarget = dragOver === column.key
+                    const drop = dropProps(column.key, dropAt, setDropAt, dragging?.leadId, handleDropLead)
+                    const isDragTarget = dropAt?.status === column.key
+                    // Shows exactly where the card will go when that position is kept
+                    const positional = isDragTarget && (sort === 'manual' || dragging?.status === column.key)
                     if (!loading && !isOpen(column, phase.key)) {
                       return (
-                        <Rail key={column.key} column={column} isDragTarget={isDragTarget} drop={drop}
+                        <Rail key={column.key} column={column} isDragTarget={isDragTarget}
+                          drop={{
+                            ...drop,
+                            // A folded column has no visible spot to aim for — the lead arrives at the top
+                            onDrop: e => {
+                              e.preventDefault()
+                              setDropAt(null)
+                              const id = parseInt(e.dataTransfer.getData('text/plain'))
+                              if (id) handleDropLead(id, column.key, undefined)
+                            },
+                          }}
                           onExpand={() => setColumnPref(column.key, 'open')} />
                       )
                     }
@@ -312,6 +374,7 @@ export default function PipelineKanban({
                         key={column.key}
                         column={column}
                         isDragTarget={isDragTarget}
+                        showDropBox={!positional}
                         drop={drop}
                         onCollapse={column.missing ? null : () => setColumnPref(column.key, 'closed')}
                         footer={hidden > 0 && (
@@ -332,9 +395,11 @@ export default function PipelineKanban({
                             <span className="text-xs" style={{ color: '#444' }}>{focus === 'all' ? 'No leads' : 'Nothing here for this filter'}</span>
                           </div>
                         ) : (
-                          column.items.slice(0, limit).map(({ lead, s }) => (
+                          <>
+                          {column.items.slice(0, limit).map(({ lead, s }) => (
+                            <div key={lead.id} className="space-y-2">
+                            {positional && dropAt.beforeId === lead.id && <DropLine />}
                             <KanbanCard
-                              key={lead.id}
                               lead={lead}
                               s={s}
                               slots={slots}
@@ -345,9 +410,14 @@ export default function PipelineKanban({
                               onMenu={onMenu}
                               onOpen={onLeadClick}
                               onLogTouchpoint={logTouchpoint}
+                              isDragging={dragging?.leadId === lead.id}
+                              onDragStart={startDrag}
                               onDragEnd={endDrag}
                             />
-                          ))
+                            </div>
+                          ))}
+                          {positional && dropAt.beforeId === null && <DropLine />}
+                          </>
                         )}
                       </Column>
                     )

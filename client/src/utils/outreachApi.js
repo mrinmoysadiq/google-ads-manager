@@ -52,6 +52,8 @@ export const deleteChannel = (id) => api.delete(`/outreach/channels/${id}`).then
 
 // Leads
 export const getLeads = (params) => api.get('/outreach/leads', { params }).then(r => r.data)
+// Custom Kanban order: a column's lead IDs, top to bottom
+export const reorderLeads = (ids) => api.post('/outreach/leads/reorder', { ids }).then(r => r.data)
 export const createLead = (data) => api.post('/outreach/leads', data).then(r => r.data)
 export const getLead = (id) => api.get(`/outreach/leads/${id}`).then(r => r.data)
 export const updateLead = (id, data) => api.patch(`/outreach/leads/${id}`, data).then(r => r.data)

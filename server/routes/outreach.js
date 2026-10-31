@@ -498,7 +498,7 @@ router.get('/leads', (req, res) => {
         l.id, l.specialist_id, l.company_name, l.contact_name, l.job_title,
         l.website, l.industry_id, l.source_id, l.location, l.status, l.next_followup_date,
         l.source_url, l.email, l.phone, l.fb_page_url, l.ig_url, l.linkedin_url,
-        l.created_at, l.status_updated_at,
+        l.created_at, l.status_updated_at, l.board_position,
         s.name as specialist_name,
         i.name as industry_name,
         src.name as source_name, src.color as source_color,
@@ -767,7 +767,9 @@ router.patch('/leads/:id', (req, res) => {
           fb_page_url = ?,
           ig_url = ?,
           linkedin_url = ?,
-          status_updated_at = CASE WHEN ? IS NOT NULL AND ? != status THEN CURRENT_TIMESTAMP ELSE status_updated_at END
+          status_updated_at = CASE WHEN ? IS NOT NULL AND ? != status THEN CURRENT_TIMESTAMP ELSE status_updated_at END,
+          -- A lead that changes stage loses its custom spot and arrives at the top of its new column
+          board_position = CASE WHEN ? IS NOT NULL AND ? != status THEN NULL ELSE board_position END
         WHERE id = ?
       `).run(
         specialist_id || null,
@@ -787,6 +789,7 @@ router.patch('/leads/:id', (req, res) => {
         fb_page_url !== undefined ? (fb_page_url || null) : existing.fb_page_url,
         ig_url !== undefined ? (ig_url || null) : existing.ig_url,
         linkedin_url !== undefined ? (linkedin_url || null) : existing.linkedin_url,
+        status || null, status || null,
         status || null, status || null,
         id,
       );
@@ -913,6 +916,30 @@ router.get('/leads/:leadId/touchpoints', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch touchpoints' });
+  }
+});
+
+// Custom card order on the Kanban board: `ids` is a column's leads top to bottom. Leads the
+// user can't see are skipped. Positions are shared by everyone viewing the pipeline.
+router.post('/leads/reorder', (req, res) => {
+  try {
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number).filter(Number.isInteger) : [];
+    if (!ids.length) return res.status(400).json({ error: 'ids must be a list of lead IDs' });
+    if (ids.length > 2000) return res.status(400).json({ error: 'Too many leads in one reorder' });
+    const specId = resolveSpecialistForUser(req.user);
+    const allowed = specId === null
+      ? () => true
+      : (id => specId !== -1 && !!db.prepare('SELECT 1 FROM outreach_lead_specialists WHERE lead_id = ? AND specialist_id = ?').get(id, specId));
+    const setPosition = db.prepare('UPDATE outreach_leads SET board_position = ? WHERE id = ?');
+    const updated = db.transaction(() => {
+      let n = 0;
+      ids.forEach((id, index) => { if (allowed(id)) n += setPosition.run(index, id).changes; });
+      return n;
+    })();
+    res.json({ updated });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reorder leads' });
   }
 });
 

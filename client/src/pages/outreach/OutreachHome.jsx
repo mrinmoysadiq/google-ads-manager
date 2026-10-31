@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { useDebounce } from '../../hooks/useDebounce'
 import { getUser, isAdmin } from '../../utils/auth'
 import { todayLocal, fmtDate } from '../../utils/dates'
-import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, getSources, upsertTouchpoint, createLeadResponse } from '../../utils/outreachApi'
+import { getSpecialists, createSpecialist, getIndustries, getLeads, updateLead, createLead, exportCsv, getPipelineStages, getSettings, getSources, upsertTouchpoint, createLeadResponse, reorderLeads } from '../../utils/outreachApi'
 import LeadDrawer from './components/LeadDrawer'
 import PipelineTable from './components/PipelineTable'
 import PipelineKanban from './components/PipelineKanban'
@@ -165,21 +165,24 @@ export default function OutreachHome() {
     localStorage.setItem(LS_VIEW_KEY, mode)
   }
 
-  const handleStatusChange = async (leadId, newStatus) => {
+  // afterMove (optional, from the Kanban): runs once the lead is in its new stage — used to
+  // drop it at the exact spot it was dragged to. Skipped if the touchpoint/reply logger is cancelled.
+  const handleStatusChange = async (leadId, newStatus, afterMove) => {
     const lead = leads.find(l => l.id === leadId)
     const tpNum = touchpointNumberForMove(stages, newStatus, lead?.last_touchpoint_number)
     if (tpNum !== null) {
-      setTpModal({ open: true, leadId, number: tpNum, status: newStatus, modalKey: Date.now() })
+      setTpModal({ open: true, leadId, number: tpNum, status: newStatus, afterMove, modalKey: Date.now() })
       return
     }
     if (needsResponse(stages, newStatus)) {
-      setResponseModal({ open: true, leadId, status: newStatus, modalKey: Date.now() })
+      setResponseModal({ open: true, leadId, status: newStatus, afterMove, modalKey: Date.now() })
       return
     }
-    // All other stages: optimistic update
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: newStatus } : l))
+    // All other stages: optimistic update (a stage change clears the lead's custom spot)
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: newStatus, board_position: null } : l))
     try {
       await updateLead(leadId, { status: newStatus, performed_by: getUser()?.name || null })
+      await afterMove?.()
       bumpDashboard()
     } catch {
       toast.error('Failed to update status')
@@ -187,12 +190,25 @@ export default function OutreachHome() {
     }
   }
 
+  // Custom Kanban order for one column (lead IDs top to bottom)
+  const handleReorder = useCallback(async (ids) => {
+    const position = new Map(ids.map((id, i) => [id, i]))
+    setLeads(prev => prev.map(l => position.has(l.id) ? { ...l, board_position: position.get(l.id) } : l))
+    try {
+      await reorderLeads(ids)
+    } catch {
+      toast.error('Failed to save the new order')
+      fetchLeads()
+    }
+  }, [fetchLeads])
+
   const handleTpModalSave = async (fields) => {
-    const { leadId, number, status } = tpModal
+    const { leadId, number, status, afterMove } = tpModal
     const { next_followup_date, ...touchpoint } = fields
     await upsertTouchpoint(leadId, number, touchpoint)
     await updateLead(leadId, { status, next_followup_date, performed_by: getUser()?.name || null })
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status, next_followup_date } : l))
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status, next_followup_date, board_position: null } : l))
+    await afterMove?.()
     setTpModal({ open: false, leadId: null, number: null, status: null, modalKey: 0 })
     toast.success(`Touchpoint ${number} saved — moved to ${status}`)
     fetchLeads() // touchpoint count / last touch on the card
@@ -200,11 +216,12 @@ export default function OutreachHome() {
   }
 
   const handleResponseModalSave = async (fields) => {
-    const { leadId, status } = responseModal
+    const { leadId, status, afterMove } = responseModal
     try {
       await createLeadResponse(leadId, fields)
       await updateLead(leadId, { status, performed_by: getUser()?.name || null })
-      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l))
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status, board_position: null } : l))
+      await afterMove?.()
       setResponseModal({ open: false, leadId: null, status: null, modalKey: 0 })
       toast.success(`Response logged — moved to "${status}"`)
       fetchLeads() // "replied" on the card
@@ -480,6 +497,7 @@ export default function OutreachHome() {
                 onLeadClick={openDrawer}
                 onStatusChange={handleStatusChange}
                 onFollowUpChange={handleFollowUpChange}
+                onReorder={handleReorder}
                 showSpecialistColumn={showSpecialistColumn}
                 stages={stages}
                 maxTouchpoints={touchpointSlots(stages, maxTouchpoints)}

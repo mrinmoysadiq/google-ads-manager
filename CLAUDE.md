@@ -265,7 +265,10 @@ Closed-phase and empty columns fold into rails (still drop targets; user overrid
 (follow-up state, last activity, days in stage, next touchpoint) come from `leadSignals()` in `kanban/boardModel.js`, which
 also defines the focus filters (Overdue, Due today, Not contacted, Going cold, Hot) and column sorts (default Priority).
 Cards: follow-up chip → `FollowUpMenu`, progress dots → `TouchpointPeek`, `+ TPn` → touchpoint logger, → `MoveMenu`.
-The touchpoint logger also sets the next follow-up (default +3 days). The leads list returns `last_touchpoint_channel`,
+The touchpoint logger also sets the next follow-up (default +3 days).
+**Custom order:** sort "Custom order" uses `outreach_leads.board_position` (shared by everyone). Dragging a card within a column
+switches to it and saves the column via `POST /leads/reorder { ids }`; in Custom order a cross-column drop lands at the drop spot
+(`handleStatusChange(leadId, status, afterMove)`). Any stage change clears `board_position`, so the lead arrives at the top. The leads list returns `last_touchpoint_channel`,
 `last_touchpoint_number`, `last_response_date` and `linkedin_url` for the cards.
 
 ### Kanban vs Table Fetch Difference

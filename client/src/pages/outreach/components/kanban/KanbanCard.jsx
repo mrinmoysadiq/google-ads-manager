@@ -123,7 +123,7 @@ function Progress({ lead, slots, active, onOpen }) {
 }
 
 // menuType: which of this card's pop-ups is open ('peek' | 'followup' | 'move'), if any
-function KanbanCard({ lead, s, slots, compact, showSpecialist, channelColors, menuType, onMenu, onOpen, onLogTouchpoint, onDragEnd }) {
+function KanbanCard({ lead, s, slots, compact, showSpecialist, channelColors, menuType, onMenu, onOpen, onLogTouchpoint, isDragging, onDragStart, onDragEnd }) {
   const dragged = useRef(false)
   const sourceColor = lead.source_color || null
 
@@ -134,11 +134,14 @@ function KanbanCard({ lead, s, slots, compact, showSpecialist, channelColors, me
         dragged.current = true
         e.dataTransfer.setData('text/plain', String(lead.id))
         e.dataTransfer.effectAllowed = 'move'
+        onDragStart?.(lead)
       }}
       onDragEnd={() => { setTimeout(() => { dragged.current = false }, 100); onDragEnd?.() }}
       onClick={() => { if (!dragged.current) onOpen(lead.id) }}
-      className="group rounded-lg cursor-pointer select-none transition-[filter] hover:brightness-[1.15]"
+      data-card-id={lead.id}
+      className="group rounded-lg cursor-grab active:cursor-grabbing select-none transition-[filter,opacity] hover:brightness-[1.15]"
       style={{
+        opacity: isDragging ? 0.4 : 1,
         padding: compact ? '8px 10px' : '10px 12px',
         backgroundColor: '#2a2a2a',
         // Tinted by lead source: a wash of the source colour plus a solid left edge
