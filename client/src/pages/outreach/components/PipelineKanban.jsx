@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import { stageColor, PHASES, phaseOf } from '../stageTypes'
 import { useChannelColors } from '../channels'
@@ -277,7 +277,7 @@ function Column({ column, isDragTarget, showDropBox, drop, onCollapse, children,
 // ─── Board ────────────────────────────────────────────────────────────────────
 
 export default function PipelineKanban({
-  leads, loading, onLeadClick, onStatusChange, onFollowUpChange, onReorder, showSpecialistColumn, stages = [], maxTouchpoints = 5,
+  leads, loading, onLeadClick, onStatusChange, onFollowUpChange, onReorder, onVisibleOrder, showSpecialistColumn, stages = [], maxTouchpoints = 5,
 }) {
   const channelColors = useChannelColors()
   const [focus, setFocus] = useState('all')
@@ -341,6 +341,12 @@ export default function PipelineKanban({
     }
     return groups
   }, [items, stages, focus, sort])
+
+  // The order leads appear on the board (column by column, as filtered and sorted) — the
+  // lead drawer steps through it with next / previous
+  useEffect(() => {
+    onVisibleOrder?.(phases.flatMap(p => p.columns.flatMap(c => c.items.map(it => it.lead.id))))
+  }, [phases, onVisibleOrder])
 
   const isOpen = (column, phaseKey) => {
     const pref = columnPrefs[column.key]

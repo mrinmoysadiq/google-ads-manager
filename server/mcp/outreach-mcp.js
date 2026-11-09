@@ -286,7 +286,7 @@ function buildServer(user) {
 
   server.registerTool('log_touchpoint', {
     title: 'Log touchpoint',
-    description: 'Record an outreach touchpoint (creates or overwrites touchpoint N) and, by default, move the lead to the stage for touchpoint N (see touchpoint_number in list_pipeline_stages).',
+    description: 'Record an outreach touchpoint (creates or overwrites touchpoint N) and, by default, move the lead to the stage for touchpoint N (see touchpoint_number in list_pipeline_stages). Needs a message_body or notes (or both).',
     inputSchema: {
       lead_id: intArg(),
       touchpoint_number: intArg().min(1),
@@ -315,6 +315,18 @@ function buildServer(user) {
     let lead = null;
     if (Object.keys(body).length) lead = await api('PATCH', `/leads/${a.lead_id}`, { body: { ...body, performed_by } });
     return { touchpoint, lead: lead && { id: lead.id, status: lead.status, next_followup_date: lead.next_followup_date } };
+  }));
+
+  server.registerTool('add_lead_note', {
+    title: 'Add lead note',
+    description: 'Add a dated note to a lead (context, research, reminders). Shows in the lead\'s activity timeline.',
+    inputSchema: {
+      lead_id: intArg(),
+      body: z.string().describe('The note text'),
+    },
+  }, tool(async a => {
+    await loadLead(a.lead_id);
+    return api('POST', `/leads/${a.lead_id}/notes`, { body: { body: a.body, author: `${user.name} (via Claude)` } });
   }));
 
   server.registerTool('log_response', {

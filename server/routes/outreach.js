@@ -702,7 +702,11 @@ router.get('/leads/:id', (req, res) => {
     const custom_fields = {};
     customValues.forEach(v => { custom_fields[v.field_key] = v.value; });
 
-    res.json({ ...lead, touchpoints, history, responses, specialists, custom_fields });
+    const notes = db.prepare(
+      'SELECT * FROM outreach_lead_notes WHERE lead_id = ? ORDER BY created_at DESC, id DESC'
+    ).all(id);
+
+    res.json({ ...lead, touchpoints, history, responses, notes, specialists, custom_fields });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch lead' });
@@ -948,6 +952,9 @@ router.put('/leads/:leadId/touchpoints/:number', (req, res) => {
     const { leadId, number } = req.params;
     if (!checkLeadAccess(req, res, leadId)) return;
     const { date, channel, message_body, loom_url, notes } = req.body;
+    if (!String(message_body || '').trim() && !String(notes || '').trim()) {
+      return res.status(400).json({ error: 'Add a message or a note to the touchpoint' });
+    }
     const num = parseInt(number);
     const maxTp = Math.max(getMaxTouchpoints(), stageNamesOfTypes(['touchpoint']).length);
     if (num < 1 || num > maxTp) return res.status(400).json({ error: `Touchpoint number must be 1–${maxTp}` });
@@ -2030,6 +2037,64 @@ router.delete('/leads/:leadId/responses/:id', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete response' });
+  }
+});
+
+// ─── LEAD NOTES ───────────────────────────────────────────────────────────────
+// Dated notes anyone with access to the lead can add; only the author or an admin can
+// edit or delete one.
+
+function canEditNote(req, note) {
+  return req.user.role === 'admin' || (note.user_id && note.user_id === req.user.id);
+}
+
+router.post('/leads/:leadId/notes', (req, res) => {
+  try {
+    const { leadId } = req.params;
+    if (!checkLeadAccess(req, res, leadId)) return;
+    const body = String(req.body.body || '').trim();
+    if (!body) return res.status(400).json({ error: 'Write something first' });
+    // The author is always the signed-in user; a suffix like "(via Claude)" is allowed
+    const author = typeof req.body.author === 'string' && req.body.author.startsWith(req.user.name)
+      ? req.body.author : req.user.name;
+    const result = db.prepare('INSERT INTO outreach_lead_notes (lead_id, body, author, user_id) VALUES (?, ?, ?, ?)')
+      .run(leadId, body, author, req.user.id);
+    res.status(201).json(db.prepare('SELECT * FROM outreach_lead_notes WHERE id = ?').get(result.lastInsertRowid));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to add note' });
+  }
+});
+
+router.patch('/leads/:leadId/notes/:id', (req, res) => {
+  try {
+    const { leadId, id } = req.params;
+    if (!checkLeadAccess(req, res, leadId)) return;
+    const note = db.prepare('SELECT * FROM outreach_lead_notes WHERE id = ? AND lead_id = ?').get(id, leadId);
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    if (!canEditNote(req, note)) return res.status(403).json({ error: 'Only the author or an admin can edit this note' });
+    const body = String(req.body.body || '').trim();
+    if (!body) return res.status(400).json({ error: 'A note cannot be empty' });
+    db.prepare('UPDATE outreach_lead_notes SET body = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(body, id);
+    res.json(db.prepare('SELECT * FROM outreach_lead_notes WHERE id = ?').get(id));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update note' });
+  }
+});
+
+router.delete('/leads/:leadId/notes/:id', (req, res) => {
+  try {
+    const { leadId, id } = req.params;
+    if (!checkLeadAccess(req, res, leadId)) return;
+    const note = db.prepare('SELECT * FROM outreach_lead_notes WHERE id = ? AND lead_id = ?').get(id, leadId);
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    if (!canEditNote(req, note)) return res.status(403).json({ error: 'Only the author or an admin can delete this note' });
+    db.prepare('DELETE FROM outreach_lead_notes WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete note' });
   }
 });
 

@@ -98,6 +98,11 @@ export const remapStage = (from, to) => api.post('/outreach/pipeline-stages/rema
 export const getSettings = () => api.get('/outreach/settings').then(r => r.data)
 export const updateSettings = (data) => api.patch('/outreach/settings', data).then(r => r.data)
 
+// Lead notes (dated, shown in the drawer timeline)
+export const addLeadNote = (leadId, body) => api.post(`/outreach/leads/${leadId}/notes`, { body }).then(r => r.data)
+export const updateLeadNote = (leadId, id, body) => api.patch(`/outreach/leads/${leadId}/notes/${id}`, { body }).then(r => r.data)
+export const deleteLeadNote = (leadId, id) => api.delete(`/outreach/leads/${leadId}/notes/${id}`).then(r => r.data)
+
 // Lead Responses
 export const getLeadResponses = (leadId) => api.get(`/outreach/leads/${leadId}/responses`).then(r => r.data)
 export const createLeadResponse = (leadId, data) => api.post(`/outreach/leads/${leadId}/responses`, data).then(r => r.data)

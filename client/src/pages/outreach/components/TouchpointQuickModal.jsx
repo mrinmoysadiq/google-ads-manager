@@ -2,14 +2,13 @@ import { useState, useCallback } from 'react'
 import { todayLocal } from '../../../utils/dates'
 import ChannelSelect from './ChannelSelect'
 import { addDays } from './kanban/boardModel'
-import { fmtDate } from '../../../utils/dates'
+import FollowUpPicker from './FollowUpPicker'
 import toast from 'react-hot-toast'
 
 const inputClass =
   'w-full rounded-lg px-3 py-2 text-sm focus:outline-none bg-[#2a2a2a] border border-white/10 text-[#c5c1b9] focus:border-[#575ECF] transition-colors'
 
 const DEFAULT_FOLLOWUP_DAYS = 3
-const FOLLOWUP_PRESETS = [['Tomorrow', 1], ['3 days', 3], ['1 week', 7], ['2 weeks', 14]]
 
 // Called with a fresh key each open so form state always resets
 export default function TouchpointQuickModal({ touchpointNumber, initialData, onSave, onClose }) {
@@ -43,10 +42,11 @@ export default function TouchpointQuickModal({ touchpointNumber, initialData, on
   const handleSave = async () => {
     const newErrors = {}
     if (!fields.channel) newErrors.channel = true
-    if (!fields.message_body.trim()) newErrors.message_body = true
+    // A message or a note is enough — e.g. "called, no answer"
+    if (!fields.message_body.trim() && !fields.notes.trim()) newErrors.message_body = true
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
-      toast.error('Channel and Message Body are required')
+      toast.error(newErrors.channel ? 'Pick a channel' : 'Add a message or a note')
       return
     }
     setErrors({})
@@ -128,10 +128,10 @@ export default function TouchpointQuickModal({ touchpointNumber, initialData, on
             />
           </div>
 
-          {/* Message Body — required */}
+          {/* Message — this or Notes is required */}
           <div>
             <label style={labelStyle(errors.message_body)}>
-              Message Body <span style={{ color: '#ef4444' }}>*</span>
+              Message <span style={{ color: '#555', fontSize: '10px', textTransform: 'none', letterSpacing: 0 }}>(or a note below)</span>
             </label>
             <textarea
               className={inputClass}
@@ -163,13 +163,16 @@ export default function TouchpointQuickModal({ touchpointNumber, initialData, on
           {/* Notes — optional */}
           <div>
             <label style={labelStyle(false)}>
-              Notes <span style={{ color: '#555', fontSize: '10px', textTransform: 'none', letterSpacing: 0 }}>(optional)</span>
+              Notes
             </label>
             <textarea
               className={inputClass}
               rows={2}
               value={fields.notes}
-              onChange={e => setFields(v => ({ ...v, notes: e.target.value }))}
+              onChange={e => {
+                setFields(v => ({ ...v, notes: e.target.value }))
+                if (errors.message_body && e.target.value.trim()) setErrors(v => ({ ...v, message_body: false }))
+              }}
               style={{ resize: 'vertical' }}
               placeholder="Any additional notes…"
             />
@@ -178,45 +181,11 @@ export default function TouchpointQuickModal({ touchpointNumber, initialData, on
           {/* Next follow-up — defaults to a few days out */}
           <div>
             <label style={labelStyle(false)}>Next follow-up</label>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-              {FOLLOWUP_PRESETS.map(([label, n]) => {
-                const date = addDays(n)
-                const active = fields.next_followup_date === date
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => setFields(v => ({ ...v, next_followup_date: date }))}
-                    title={fmtDate(date)}
-                    style={{
-                      padding: '5px 10px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer',
-                      color: active ? '#fff' : '#c5c1b9',
-                      backgroundColor: active ? '#575ECF' : 'rgba(255,255,255,0.05)',
-                      border: `1px solid ${active ? '#575ECF' : 'rgba(255,255,255,0.1)'}`,
-                    }}
-                  >
-                    {label}
-                  </button>
-                )
-              })}
-              <input
-                type="date"
-                aria-label="Next follow-up date"
-                className={inputClass}
-                value={fields.next_followup_date || ''}
-                onChange={e => setFields(v => ({ ...v, next_followup_date: e.target.value || null }))}
-                style={{ width: 'auto', flex: '1 1 140px', colorScheme: 'dark' }}
-              />
-              {fields.next_followup_date && (
-                <button
-                  type="button"
-                  onClick={() => setFields(v => ({ ...v, next_followup_date: null }))}
-                  style={{ fontSize: '12px', color: '#8a8680', background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  None
-                </button>
-              )}
-            </div>
+            <FollowUpPicker
+              value={fields.next_followup_date}
+              onChange={next_followup_date => setFields(v => ({ ...v, next_followup_date }))}
+              inputClass={inputClass}
+            />
           </div>
         </div>
 

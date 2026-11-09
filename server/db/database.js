@@ -381,6 +381,18 @@ function initializeDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Dated free-text notes on a lead (shown in the drawer's activity timeline)
+    CREATE TABLE IF NOT EXISTS outreach_lead_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL REFERENCES outreach_leads(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      author TEXT,
+      user_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME
+    );
+    CREATE INDEX IF NOT EXISTS idx_outreach_lead_notes_lead ON outreach_lead_notes(lead_id);
+
     CREATE TABLE IF NOT EXISTS outreach_lead_custom_values (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_id INTEGER NOT NULL REFERENCES outreach_leads(id) ON DELETE CASCADE,

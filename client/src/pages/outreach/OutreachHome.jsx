@@ -50,6 +50,7 @@ export default function OutreachHome() {
   const [drawerLeadId, setDrawerLeadId] = useState(undefined) // undefined=closed, null=create, number=edit
   const [drawerKey, setDrawerKey] = useState(0) // force remount on open
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0) // increment to refresh dashboard
+  const [boardOrder, setBoardOrder] = useState([]) // lead IDs as the Kanban shows them (for drawer next / previous)
 
   // Pipeline filters — default sort by most-recently-updated so moved leads surface to top
   const [filters, setFilters] = useState({
@@ -259,6 +260,12 @@ export default function OutreachHome() {
     fetchLeads()
     bumpDashboard()
   }
+
+  // Next / previous in the drawer follow what's on screen: the board's filtered, sorted order or the table rows
+  const navIds = useMemo(
+    () => (viewMode === 'kanban' ? boardOrder : leads.map(l => l.id)),
+    [viewMode, boardOrder, leads],
+  )
 
   const openDrawer = (leadId) => {
     setDrawerLeadId(leadId)
@@ -498,6 +505,7 @@ export default function OutreachHome() {
                 onStatusChange={handleStatusChange}
                 onFollowUpChange={handleFollowUpChange}
                 onReorder={handleReorder}
+                onVisibleOrder={setBoardOrder}
                 showSpecialistColumn={showSpecialistColumn}
                 stages={stages}
                 maxTouchpoints={touchpointSlots(stages, maxTouchpoints)}
@@ -523,6 +531,8 @@ export default function OutreachHome() {
           leadId={drawerLeadId}
           defaultSpecialistId={selectedSpecialistId || null}
           onClose={() => setDrawerLeadId(undefined)}
+          navIds={navIds}
+          onNavigate={setDrawerLeadId}
           onSaved={handleLeadSaved}
           onDeleted={handleLeadDeleted}
           onLeadUpdated={handleLeadUpdated}

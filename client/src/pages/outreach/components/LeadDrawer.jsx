@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import toast from 'react-hot-toast'
 import { getUser, isAdmin } from '../../../utils/auth'
 import {
@@ -8,528 +8,20 @@ import {
   upsertTouchpoint,
   createLead,
   createLeadResponse,
-  deleteLeadResponse,
   getFields,
   updateCustomField,
 } from '../../../utils/outreachApi'
 import TouchpointQuickModal from './TouchpointQuickModal'
 import ResponseQuickModal from './ResponseQuickModal'
-import { fmtDate, fmtDateTime, todayLocal } from '../../../utils/dates'
-import LeadFields, { inputClass, isEmptyFieldValue } from './LeadFields'
-import { stageColor, touchpointNumberForMove, touchpointStageName, needsResponse } from '../stageTypes'
-import ChannelSelect from './ChannelSelect'
+import { fmtDate } from '../../../utils/dates'
+import LeadFields, { isEmptyFieldValue } from './LeadFields'
+import { touchpointNumberForMove, needsResponse } from '../stageTypes'
+import DrawerHeader from './drawer/DrawerHeader'
+import QuickLog, { lastLoggedTouchpoint } from './drawer/QuickLog'
+import ActivityTimeline from './drawer/ActivityTimeline'
 
+const LS_DETAILS_OPEN = 'outreach_drawer_details_open'
 
-// ─── Sub-component: StatusBadge with dropdown ────────────────────────────────
-
-function StatusBadge({ status, onChange, stages = [] }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-  const colors = stageColor(stages, status)
-
-  useEffect(() => {
-    if (!open) return
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  return (
-    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{
-          backgroundColor: colors.bg,
-          color: colors.color,
-          border: `1px solid ${colors.color}33`,
-          borderRadius: '20px',
-          padding: '3px 10px',
-          fontSize: '12px',
-          fontWeight: 500,
-          cursor: 'pointer',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {status || 'Set status'} ▾
-      </button>
-
-      {open && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(100% + 6px)',
-          left: 0,
-          zIndex: 200,
-          backgroundColor: '#2a2a2a',
-          border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: '8px',
-          padding: '4px',
-          minWidth: '240px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-        }}>
-          {stages.map(stage => {
-            const s = stage.name
-            const c = stageColor(stages, s)
-            return (
-              <button
-                key={s}
-                onClick={() => { onChange(s); setOpen(false) }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '6px 10px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  backgroundColor: s === status ? 'rgba(87,94,207,0.15)' : 'transparent',
-                  color: c.color || '#c5c1b9',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  fontWeight: s === status ? 600 : 400,
-                }}
-                onMouseEnter={e => { if (s !== status) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)' }}
-                onMouseLeave={e => { if (s !== status) e.currentTarget.style.backgroundColor = 'transparent' }}
-              >
-                {s}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Sub-component: TouchpointSection ────────────────────────────────────────
-
-function TouchpointSection({ leadId, number, initialData, defaultOpen, onStageChange }) {
-  const today = todayLocal()
-  const [open, setOpen] = useState(defaultOpen || false)
-  const [fields, setFields] = useState({
-    date: initialData?.date || today,
-    channel: initialData?.channel || '',
-    message_body: initialData?.message_body || '',
-    loom_url: initialData?.loom_url || '',
-    notes: initialData?.notes || '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [savedOk, setSavedOk] = useState(false)
-  const [errors, setErrors] = useState({})
-  const setChannel = useCallback(channel => {
-    setFields(v => ({ ...v, channel }))
-    if (channel) setErrors(v => (v.channel ? { ...v, channel: false } : v))
-  }, [])
-
-  const hasData = initialData?.date || initialData?.channel || initialData?.message_body
-
-  const summary = hasData
-    ? [initialData.date && fmtDate(initialData.date), initialData.channel,
-       initialData.message_body ? initialData.message_body.slice(0, 40) + (initialData.message_body.length > 40 ? '…' : '') : null]
-        .filter(Boolean).join(' · ')
-    : null
-
-  const validate = () => {
-    const newErrors = {}
-    if (!fields.channel) newErrors.channel = true
-    if (!fields.message_body.trim()) newErrors.message_body = true
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors)
-      toast.error('Channel and Message Body are required')
-      return false
-    }
-    setErrors({})
-    return true
-  }
-
-  const handleSave = async () => {
-    if (!validate()) return
-    setSaving(true)
-    try {
-      await upsertTouchpoint(leadId, number, fields)
-      setSavedOk(true)
-      toast.success(`Touchpoint ${number} saved`)
-      setTimeout(() => setSavedOk(false), 2500)
-    } catch {
-      toast.error('Failed to save touchpoint')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleSaveAndChangeStage = async () => {
-    if (!validate()) return
-    setSaving(true)
-    try {
-      await upsertTouchpoint(leadId, number, fields)
-      setSavedOk(true)
-      toast.success(`Touchpoint ${number} saved`)
-      setTimeout(() => setSavedOk(false), 2500)
-      if (onStageChange) await onStageChange(number)
-    } catch {
-      toast.error('Failed to save touchpoint')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const labelStyle = (hasError) => ({
-    display: 'block', fontSize: '11px', marginBottom: '4px',
-    textTransform: 'uppercase', letterSpacing: '0.05em',
-    color: hasError ? '#ef4444' : '#8a8680',
-  })
-
-  return (
-    <div style={{ border: `1px solid ${open ? 'rgba(87,94,207,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: '8px', overflow: 'hidden', marginBottom: '8px' }}>
-      {/* Header */}
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          width: '100%', padding: '10px 14px',
-          background: open ? 'rgba(87,94,207,0.08)' : 'rgba(255,255,255,0.03)',
-          border: 'none', cursor: 'pointer', textAlign: 'left', gap: '8px',
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 500 }}>
-            Touchpoint {number}
-          </span>
-          {!open && (
-            summary
-              ? <span style={{ color: '#8a8680', fontSize: '12px', marginLeft: '10px' }}>{summary}</span>
-              : <span style={{ color: '#555', fontSize: '12px', marginLeft: '10px', fontStyle: 'italic' }}>Not yet used</span>
-          )}
-        </div>
-        <span style={{ color: '#8a8680', fontSize: '12px', flexShrink: 0 }}>{open ? '▲' : '▼'}</span>
-      </button>
-
-      {/* Body */}
-      {open && (
-        <div style={{ padding: '14px', backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-
-          {/* Date — defaults to today */}
-          <div>
-            <label style={labelStyle(false)}>Date</label>
-            <input
-              type="date"
-              className={inputClass}
-              value={fields.date}
-              onChange={e => setFields(v => ({ ...v, date: e.target.value }))}
-            />
-          </div>
-
-          {/* Channel — mandatory */}
-          <div>
-            <label style={labelStyle(errors.channel)}>
-              Channel <span style={{ color: '#ef4444' }}>*</span>
-            </label>
-            <ChannelSelect
-              value={fields.channel}
-              error={!!errors.channel}
-              onChange={setChannel}
-            />
-          </div>
-
-          {/* Message Body — mandatory */}
-          <div>
-            <label style={labelStyle(errors.message_body)}>
-              Message Body <span style={{ color: '#ef4444' }}>*</span>
-            </label>
-            <textarea
-              className={inputClass}
-              rows={4}
-              value={fields.message_body}
-              onChange={e => {
-                setFields(v => ({ ...v, message_body: e.target.value }))
-                if (errors.message_body && e.target.value.trim()) setErrors(v => ({ ...v, message_body: false }))
-              }}
-              style={{ resize: 'vertical', borderColor: errors.message_body ? '#ef4444' : undefined }}
-              placeholder="Write your outreach message here…"
-            />
-          </div>
-
-          {/* Loom URL */}
-          <div>
-            <label style={labelStyle(false)}>Loom URL</label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <input
-                type="text"
-                className={inputClass}
-                value={fields.loom_url}
-                onChange={e => setFields(v => ({ ...v, loom_url: e.target.value }))}
-                placeholder="https://loom.com/share/…"
-                style={{ flex: 1 }}
-              />
-              {fields.loom_url && (
-                <a href={fields.loom_url} target="_blank" rel="noopener noreferrer"
-                  style={{ backgroundColor: 'rgba(87,94,207,0.15)', color: '#575ECF', border: '1px solid rgba(87,94,207,0.3)', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                  ▶ View
-                </a>
-              )}
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label style={labelStyle(false)}>Notes</label>
-            <textarea
-              className={inputClass}
-              rows={2}
-              value={fields.notes}
-              onChange={e => setFields(v => ({ ...v, notes: e.target.value }))}
-              style={{ resize: 'vertical' }}
-              placeholder="Any additional notes…"
-            />
-          </div>
-
-          {/* Save buttons */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '4px', flexWrap: 'wrap' }}>
-            {onStageChange && (
-              <button
-                onClick={handleSaveAndChangeStage}
-                disabled={saving}
-                style={{
-                  backgroundColor: 'rgba(20,184,166,0.15)',
-                  color: '#14b8a6',
-                  border: '1px solid rgba(20,184,166,0.3)',
-                  borderRadius: '7px',
-                  padding: '8px 16px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                  opacity: saving ? 0.7 : 1,
-                  transition: 'all 0.2s',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Save & Change Stage
-              </button>
-            )}
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              style={{
-                backgroundColor: savedOk ? 'rgba(34,197,94,0.15)' : '#575ECF',
-                color: savedOk ? '#22c55e' : '#fff',
-                border: savedOk ? '1px solid rgba(34,197,94,0.3)' : 'none',
-                borderRadius: '7px',
-                padding: '8px 20px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: saving ? 'not-allowed' : 'pointer',
-                opacity: saving ? 0.7 : 1,
-                transition: 'all 0.2s',
-              }}
-            >
-              {saving ? 'Saving…' : savedOk ? '✓ Saved' : 'Save Touchpoint'}
-            </button>
-          </div>
-
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Sub-component: ResponsesSection ─────────────────────────────────────────
-
-function ResponsesSection({ leadId, initialResponses = [] }) {
-  const today = todayLocal()
-  const [responses, setResponses] = useState(initialResponses)
-  const [form, setForm] = useState({ date: today, channel: '', message_body: '', notes: '' })
-  const [saving, setSaving] = useState(false)
-  const [errors, setErrors] = useState({})
-  const setChannel = useCallback(channel => {
-    setForm(v => ({ ...v, channel }))
-    if (channel) setErrors(v => (v.channel ? { ...v, channel: false } : v))
-  }, [])
-
-  const labelStyle = (hasError) => ({
-    display: 'block', fontSize: '11px', marginBottom: '4px',
-    textTransform: 'uppercase', letterSpacing: '0.05em',
-    color: hasError ? '#ef4444' : '#8a8680',
-  })
-
-  const handleAdd = async () => {
-    const newErrors = {}
-    if (!form.channel) newErrors.channel = true
-    if (!form.message_body.trim()) newErrors.message_body = true
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors)
-      toast.error('Channel and message are required')
-      return
-    }
-    setErrors({})
-    setSaving(true)
-    try {
-      const created = await createLeadResponse(leadId, form)
-      setResponses(prev => [created, ...prev])
-      setForm({ date: today, channel: '', message_body: '', notes: '' })
-      toast.success('Response saved')
-    } catch {
-      toast.error('Failed to save response')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleDelete = async (id) => {
-    try {
-      await deleteLeadResponse(leadId, id)
-      setResponses(prev => prev.filter(r => r.id !== id))
-      toast.success('Response deleted')
-    } catch {
-      toast.error('Failed to delete response')
-    }
-  }
-
-  return (
-    <div>
-      {/* Add response form */}
-      <div style={{ backgroundColor: '#242424', borderRadius: '10px', padding: '16px', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <h4 style={{ color: '#c5c1b9', fontSize: '13px', fontWeight: 600, marginBottom: '14px' }}>Log a Response</h4>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div>
-            <label style={labelStyle(false)}>Date</label>
-            <input
-              type="date"
-              className={inputClass}
-              value={form.date}
-              onChange={e => setForm(v => ({ ...v, date: e.target.value }))}
-            />
-          </div>
-          <div>
-            <label style={labelStyle(errors.channel)}>
-              Channel <span style={{ color: '#ef4444' }}>*</span>
-            </label>
-            <ChannelSelect
-              value={form.channel}
-              error={!!errors.channel}
-              onChange={setChannel}
-            />
-          </div>
-          <div>
-            <label style={labelStyle(errors.message_body)}>
-              Response Message <span style={{ color: '#ef4444' }}>*</span>
-            </label>
-            <textarea
-              className={inputClass}
-              rows={3}
-              value={form.message_body}
-              onChange={e => {
-                setForm(v => ({ ...v, message_body: e.target.value }))
-                if (errors.message_body && e.target.value.trim()) setErrors(v => ({ ...v, message_body: false }))
-              }}
-              style={{ resize: 'vertical', borderColor: errors.message_body ? '#ef4444' : undefined }}
-              placeholder="What did the lead say…"
-            />
-          </div>
-          <div>
-            <label style={labelStyle(false)}>Notes</label>
-            <textarea
-              className={inputClass}
-              rows={2}
-              value={form.notes}
-              onChange={e => setForm(v => ({ ...v, notes: e.target.value }))}
-              style={{ resize: 'vertical' }}
-              placeholder="Additional notes…"
-            />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              onClick={handleAdd}
-              disabled={saving}
-              style={{
-                backgroundColor: '#575ECF',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '7px',
-                padding: '8px 20px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: saving ? 'not-allowed' : 'pointer',
-                opacity: saving ? 0.7 : 1,
-              }}
-            >
-              {saving ? 'Saving…' : 'Log Response'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Response list */}
-      {responses.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '32px 24px', color: '#555', fontSize: '13px' }}>
-          No responses logged yet
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {responses.map(r => (
-            <div
-              key={r.id}
-              style={{
-                backgroundColor: '#242424',
-                borderRadius: '8px',
-                padding: '12px 14px',
-                border: '1px solid rgba(255,255,255,0.06)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                    {r.channel && (
-                      <span style={{
-                        backgroundColor: 'rgba(59,130,246,0.15)',
-                        color: '#3b82f6',
-                        borderRadius: '12px',
-                        padding: '2px 8px',
-                        fontSize: '11px',
-                        fontWeight: 500,
-                      }}>
-                        {r.channel}
-                      </span>
-                    )}
-                    {r.date && (
-                      <span style={{ color: '#555', fontSize: '11px' }}>{fmtDate(r.date)}</span>
-                    )}
-                    <span style={{ color: '#444', fontSize: '11px' }}>{fmtDateTime(r.created_at)}</span>
-                  </div>
-                  <p style={{ color: '#c5c1b9', fontSize: '13px', lineHeight: 1.5, margin: 0, wordBreak: 'break-word' }}>
-                    {r.message_body}
-                  </p>
-                  {r.notes && (
-                    <p style={{ color: '#8a8680', fontSize: '12px', marginTop: '6px', fontStyle: 'italic' }}>
-                      {r.notes}
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleDelete(r.id)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#555',
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    flexShrink: 0,
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)' }}
-                  onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.backgroundColor = 'transparent' }}
-                  title="Delete response"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 function FieldsLoadError({ onRetry }) {
   return (
@@ -546,6 +38,8 @@ export default function LeadDrawer({
   leadId: initialLeadId,
   defaultSpecialistId,
   onClose,
+  navIds = [],
+  onNavigate,
   onSaved,
   onDeleted,
   onLeadUpdated,
@@ -560,7 +54,14 @@ export default function LeadDrawer({
   const [leadId, setLeadId] = useState(initialLeadId)
   const [lead, setLead] = useState(null)
   const [loading, setLoading] = useState(initialLeadId !== null)
-  const [activeTab, setActiveTab] = useState('details')
+  const [switching, setSwitching] = useState(false) // loading the next/previous lead over the current one
+  const draftDirty = useRef(false) // the quick log has unsaved text
+  // Lead details form: collapsed by default, remembered per browser
+  const [detailsOpen, setDetailsOpen] = useState(() => {
+    try { return localStorage.getItem(LS_DETAILS_OPEN) === '1' } catch { return false }
+  })
+  const detailsRef = useRef(null)
+  const scrollRef = useRef(null)
   const [saved, setSaved] = useState({})
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -607,26 +108,94 @@ export default function LeadDrawer({
     return () => clearTimeout(t)
   }, [])
 
-  // Fetch lead in edit mode
+  // The parent switches leads (next / previous) without reopening the drawer
+  useEffect(() => {
+    if (mode === 'edit' && initialLeadId && initialLeadId !== leadId) setLeadId(initialLeadId)
+  }, [initialLeadId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch lead in edit mode — keep the current one on screen while the next loads
   useEffect(() => {
     if (mode !== 'edit' || !leadId) return
-    setLoading(true)
+    let cancelled = false
+    if (lead) setSwitching(true)
+    else setLoading(true)
     getLead(leadId)
-      .then(data => { setLead(data); setLoading(false) })
-      .catch(() => { toast.error('Failed to load lead'); setLoading(false) })
-  }, [leadId, mode])
+      .then(data => { if (!cancelled) setLead(data) })
+      .catch(() => { if (!cancelled) toast.error('Failed to load lead') })
+      .finally(() => { if (!cancelled) { setLoading(false); setSwitching(false) } })
+    return () => { cancelled = true }
+  }, [leadId, mode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Each lead opens at the top (quick log first) — matters when stepping through leads
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0 }, [lead?.id])
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  // Refresh the timeline (touchpoints, replies, notes, stage moves) without a spinner
+  const reloadLead = useCallback(() => {
+    if (!leadId) return
+    getLead(leadId).then(setLead).catch(() => {})
+  }, [leadId])
+
+  // Something was logged: refresh this lead and the pipeline behind the drawer
+  const handleActivity = () => {
+    reloadLead()
+    if (onSaved) onSaved()
+  }
+
+  const toggleDetails = (open = !detailsOpen) => {
+    setDetailsOpen(open)
+    try { localStorage.setItem(LS_DETAILS_OPEN, open ? '1' : '0') } catch { /* private mode */ }
+  }
+
+  const editDetails = () => {
+    toggleDetails(true)
+    setTimeout(() => detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
 
   const markSaved = (field) => {
     setSaved(v => ({ ...v, [field]: true }))
     setTimeout(() => setSaved(v => ({ ...v, [field]: false })), 1500)
   }
 
+  // Unsaved text in the quick log is easy to lose with one stray click
+  const confirmDiscard = () => !draftDirty.current || window.confirm('You have an unsaved log entry. Discard it?')
+
   const handleClose = () => {
+    if (!confirmDiscard()) return
     setVisible(false)
     setTimeout(onClose, 280)
   }
+
+  // ── Next / previous lead (in the order the board or table shows them) ────────
+  const navIndex = leadId ? navIds.indexOf(leadId) : -1
+  const prevId = navIndex > 0 ? navIds[navIndex - 1] : null
+  const nextId = navIndex !== -1 && navIndex < navIds.length - 1 ? navIds[navIndex + 1] : null
+  const goTo = (id, { force = false } = {}) => {
+    if (!id || !onNavigate) return
+    if (!force && !confirmDiscard()) return
+    draftDirty.current = false
+    onNavigate(id)
+  }
+
+  // J / K step through leads, Esc closes — not while typing or with a menu or dialog open
+  const keys = useRef({})
+  keys.current = { prevId, nextId, goTo, handleClose }
+  useEffect(() => {
+    if (mode !== 'edit') return
+    const onKey = e => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return
+      const el = e.target
+      if (el.closest?.('input, textarea, select, [contenteditable="true"]')) return
+      if (document.querySelector('[role="menu"], [role="dialog"]')) return
+      const k = keys.current
+      if (e.key === 'j' || e.key === 'J') { e.preventDefault(); k.goTo(k.nextId) }
+      else if (e.key === 'k' || e.key === 'K') { e.preventDefault(); k.goTo(k.prevId) }
+      else if (e.key === 'Escape') k.handleClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [mode])
 
   // ── Field save (edit mode) ───────────────────────────────────────────────────
 
@@ -687,8 +256,7 @@ export default function LeadDrawer({
   // ── Status change ────────────────────────────────────────────────────────────
 
   const handleStatusChange = async (newStatus) => {
-    const lastLogged = Math.max(0, ...(lead?.touchpoints || []).filter(t => t.date).map(t => t.touchpoint_number))
-    const tpNum = touchpointNumberForMove(stages, newStatus, lastLogged)
+    const tpNum = touchpointNumberForMove(stages, newStatus, lastLoggedTouchpoint(lead))
     if (tpNum !== null) {
       setTpQuickModal({ open: true, number: tpNum, status: newStatus, modalKey: Date.now() })
       return
@@ -700,7 +268,8 @@ export default function LeadDrawer({
     try {
       const updated = await updateLead(leadId, { status: newStatus, performed_by: getUser()?.name || null })
       setLead(prev => ({ ...prev, ...updated }))
-      markSaved('status')
+      toast.success(`Moved to ${newStatus}`)
+      reloadLead()
       if (onLeadUpdated) onLeadUpdated(updated)
     } catch {
       toast.error('Failed to update status')
@@ -717,6 +286,7 @@ export default function LeadDrawer({
       responses: [created, ...(prev.responses || [])],
     }))
     if (onLeadUpdated) onLeadUpdated(updated)
+    reloadLead()
     setResponseModal({ open: false, status: null, modalKey: 0 })
     toast.success(`Response logged — moved to ${status}`)
   }
@@ -734,25 +304,9 @@ export default function LeadDrawer({
         savedTp,
       ],
     }))
-    if (onLeadUpdated) onLeadUpdated(updated)
+    handleActivity()
     setTpQuickModal({ open: false, number: null, status: null, modalKey: 0 })
     toast.success(`Touchpoint ${number} saved — moved to ${status}`)
-  }
-
-  const handleTpStageChange = async (number) => {
-    const stageName = touchpointStageName(stages, number)
-    if (!stageName) {
-      toast.error(`No pipeline stage is set up for touchpoint ${number}`)
-      return
-    }
-    try {
-      const updated = await updateLead(leadId, { status: stageName, performed_by: getUser()?.name || null })
-      setLead(prev => ({ ...prev, ...updated }))
-      toast.success(`Stage changed to ${stageName}`)
-      if (onLeadUpdated) onLeadUpdated(updated)
-    } catch {
-      toast.error('Failed to change stage')
-    }
   }
 
   // ── Create lead ───────────────────────────────────────────────────────────────
@@ -797,7 +351,7 @@ export default function LeadDrawer({
     setDeleting(true)
     try {
       await deleteLead(leadId)
-      toast.success('Lead deleted')
+      toast.success('Lead moved to trash')
       onDeleted(leadId)
       handleClose()
     } catch {
@@ -811,35 +365,24 @@ export default function LeadDrawer({
 
   const handleCopySummary = () => {
     if (!lead) return
-    const tp = lead.touchpoints?.[0]
+    const tp = [...(lead.touchpoints || [])].filter(t => t.date).sort((a, b) => b.touchpoint_number - a.touchpoint_number)[0]
     const lines = [
       `Company: ${lead.company_name || '—'}`,
       `Contact: ${lead.contact_name || '—'}`,
       `Status: ${lead.status || '—'}`,
       lead.website ? `Website: ${lead.website}` : null,
-      tp?.date ? `Latest Touchpoint: ${fmtDate(tp.date)} via ${tp.channel || '?'}` : null,
+      lead.email ? `Email: ${lead.email}` : null,
+      lead.phone ? `Phone: ${lead.phone}` : null,
+      lead.next_followup_date ? `Next follow-up: ${fmtDate(lead.next_followup_date)}` : null,
+      tp ? `Latest touchpoint: TP${tp.touchpoint_number} on ${fmtDate(tp.date)} via ${tp.channel || '?'}` : null,
       tp?.message_body ? `Message: ${tp.message_body.slice(0, 120)}` : null,
+      tp?.notes ? `Note: ${tp.notes.slice(0, 120)}` : null,
     ].filter(Boolean).join('\n')
 
     navigator.clipboard.writeText(lines)
       .then(() => toast.success('Summary copied'))
       .catch(() => toast.error('Failed to copy'))
   }
-
-  // ── Derived select options ────────────────────────────────────────────────────
-
-
-  // ── Touchpoints ───────────────────────────────────────────────────────────────
-
-  const touchpointsByNumber = {}
-  ;(lead?.touchpoints || []).forEach(tp => {
-    touchpointsByNumber[tp.touchpoint_number] = tp
-  })
-
-  // Default open TP1 if none have data
-  const anyTpData = Object.values(touchpointsByNumber).some(
-    tp => tp.date || tp.channel || tp.message_body
-  )
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -861,7 +404,8 @@ export default function LeadDrawer({
       <div
         style={{
           position: 'fixed', top: 0, right: 0, bottom: 0,
-          width: '580px',
+          width: '620px',
+          maxWidth: '100vw',
           backgroundColor: '#1b1b1b',
           zIndex: 51,
           display: 'flex',
@@ -979,250 +523,77 @@ export default function LeadDrawer({
               </div>
             ) : lead ? (
               <>
-                {/* ── Header ─────────────────────────────────────────────────── */}
-                <div style={{
-                  padding: '18px 24px 14px',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
-                  backgroundColor: '#1e1e1e',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {/* Editable company name */}
-                      <input
-                        key={lead.company_name}
-                        defaultValue={lead.company_name}
-                        onBlur={e => {
-                          const v = e.target.value.trim()
-                          if (v && v !== lead.company_name) saveField('company_name', v)
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          borderBottom: '1px solid transparent',
-                          color: '#c5c1b9',
-                          fontSize: '20px',
-                          fontWeight: 700,
-                          width: '100%',
-                          padding: '2px 0',
-                          outline: 'none',
-                          transition: 'border-color 0.15s',
-                        }}
-                        onFocus={e => { e.currentTarget.style.borderBottomColor = '#575ECF' }}
-                        onBlurCapture={e => { e.currentTarget.style.borderBottomColor = 'transparent' }}
-                      />
+                <DrawerHeader
+                  lead={lead}
+                  stages={stages}
+                  maxTouchpoints={maxTouchpoints}
+                  nav={navIndex !== -1 && navIds.length > 1 ? {
+                    position: navIndex + 1,
+                    total: navIds.length,
+                    onPrev: prevId ? () => goTo(prevId) : null,
+                    onNext: nextId ? () => goTo(nextId) : null,
+                  } : null}
+                  switching={switching}
+                  onSaveField={saveField}
+                  onStatusChange={handleStatusChange}
+                  onFollowUp={date => saveField('next_followup_date', date)}
+                  onEditDetails={editDetails}
+                  onCopySummary={handleCopySummary}
+                  onDelete={() => setShowDeleteModal(true)}
+                  onClose={handleClose}
+                />
 
-                      {/* Status + meta */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
-                        <StatusBadge status={lead.status} onChange={handleStatusChange} stages={stages} />
-                        <span style={{ color: '#555', fontSize: '11px' }}>
-                          Created {fmtDate(lead.created_at)}
-                          {(lead.specialists?.length > 0
-                            ? lead.specialists.map(s => s.name).join(', ')
-                            : lead.specialist_names || lead.specialist_name)
-                            ? ` · ${lead.specialists?.length > 0
-                                ? lead.specialists.map(s => s.name).join(', ')
-                                : lead.specialist_names || lead.specialist_name}`
-                            : ''}
-                        </span>
-                      </div>
-                    </div>
+                <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <QuickLog
+                    lead={lead}
+                    stages={stages}
+                    slots={maxTouchpoints}
+                    onLogged={handleActivity}
+                    onDirtyChange={dirty => { draftDirty.current = dirty }}
+                    nextLeadId={nextId}
+                    onNext={id => goTo(id, { force: true })}
+                  />
 
+                  <ActivityTimeline lead={lead} stages={stages} onChanged={handleActivity} />
+
+                  {/* ── Lead details (collapsible) ─────────────────────────── */}
+                  <section ref={detailsRef} aria-label="Lead details" style={{ scrollMarginTop: '12px' }}>
                     <button
-                      onClick={handleClose}
-                      style={{ background: 'none', border: 'none', color: '#8a8680', fontSize: '20px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
+                      type="button"
+                      onClick={() => toggleDetails()}
+                      aria-expanded={detailsOpen}
+                      className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 hover:bg-white/[0.04]"
+                      style={{ border: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#1e1e1e' }}
                     >
-                      ✕
+                      <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#8a8680' }}>Lead details</span>
+                      <span className="text-xs" style={{ color: '#8a8680' }}>
+                        {detailsOpen ? 'Hide ▲' : 'Edit contact info & fields ▼'}
+                      </span>
                     </button>
-                  </div>
-
-                  {/* Tabs */}
-                  <div style={{ display: 'flex', gap: '4px', marginTop: '16px' }}>
-                    {['details', 'touchpoints', 'responses', 'history'].map(tab => (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        style={{
-                          background: activeTab === tab ? 'rgba(87,94,207,0.2)' : 'none',
-                          border: activeTab === tab ? '1px solid rgba(87,94,207,0.4)' : '1px solid transparent',
-                          borderRadius: '6px',
-                          color: activeTab === tab ? '#575ECF' : '#8a8680',
-                          fontSize: '13px',
-                          fontWeight: activeTab === tab ? 600 : 400,
-                          padding: '5px 14px',
-                          cursor: 'pointer',
-                          textTransform: 'capitalize',
-                          transition: 'all 0.15s',
-                        }}
-                      >
-                        {tab}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* ── Tab body — always mounted, hidden via display:none ────── */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-
-                  {/* ── DETAILS TAB ─────────────────────────────────────────── */}
-                  <div style={{ display: activeTab === 'details' ? 'block' : 'none' }}>
-                    {fieldsError ? (
-                      <FieldsLoadError onRetry={loadFields} />
-                    ) : !fields ? (
-                      <span style={{ color: '#8a8680', fontSize: '13px' }}>Loading fields…</span>
-                    ) : (
-                      <LeadFields
-                        fields={fields}
-                        values={{ ...lead, specialist_ids: (lead.specialists || []).map(sp => sp.id) }}
-                        customValues={lead.custom_fields}
-                        onCommit={commitEditField}
-                        saved={saved}
-                        specialists={specialists}
-                        industries={industries}
-                        sources={sources}
-                        canManage={canManageFields}
-                        onResizeHeight={resizeFieldHeight}
-                      />
+                    {detailsOpen && (
+                      <div style={{ paddingTop: '16px' }}>
+                        {fieldsError ? (
+                          <FieldsLoadError onRetry={loadFields} />
+                        ) : !fields ? (
+                          <span style={{ color: '#8a8680', fontSize: '13px' }}>Loading fields…</span>
+                        ) : (
+                          <LeadFields
+                            fields={fields}
+                            values={{ ...lead, specialist_ids: (lead.specialists || []).map(sp => sp.id) }}
+                            customValues={lead.custom_fields}
+                            onCommit={commitEditField}
+                            saved={saved}
+                            specialists={specialists}
+                            industries={industries}
+                            sources={sources}
+                            canManage={canManageFields}
+                            onResizeHeight={resizeFieldHeight}
+                          />
+                        )}
+                        <p style={{ color: '#555', fontSize: '11px', fontStyle: 'italic', marginTop: '12px' }}>Fields save automatically.</p>
+                      </div>
                     )}
-                  </div>
-
-                  {/* ── TOUCHPOINTS TAB ─────────────────────────────────────── */}
-                  <div style={{ display: activeTab === 'touchpoints' ? 'block' : 'none' }}>
-                    {Array.from({ length: maxTouchpoints }, (_, i) => i + 1).map(n => (
-                      <TouchpointSection
-                        key={`${leadId}-tp-${n}`}
-                        leadId={leadId}
-                        number={n}
-                        initialData={touchpointsByNumber[n] || null}
-                        defaultOpen={n === 1}
-                        onStageChange={handleTpStageChange}
-                      />
-                    ))}
-                  </div>
-
-                  {/* ── RESPONSES TAB ───────────────────────────────────────── */}
-                  <div style={{ display: activeTab === 'responses' ? 'block' : 'none' }}>
-                    <ResponsesSection
-                      leadId={leadId}
-                      initialResponses={lead.responses || []}
-                    />
-                  </div>
-
-                  {/* ── HISTORY TAB ─────────────────────────────────────────── */}
-                  <div style={{ display: activeTab === 'history' ? 'block' : 'none' }}>
-                    <div>
-                      {!lead.history || lead.history.length === 0 ? (
-                        <div style={{
-                          textAlign: 'center',
-                          padding: '48px 24px',
-                          color: '#555',
-                          fontSize: '14px',
-                        }}>
-                          No status changes recorded
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          {[...lead.history].reverse().map((item, i) => (
-                            <div
-                              key={i}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                gap: '12px',
-                                padding: '12px 14px',
-                                backgroundColor: '#242424',
-                                borderRadius: '8px',
-                                border: '1px solid rgba(255,255,255,0.06)',
-                              }}
-                            >
-                              {/* Timeline dot */}
-                              <div style={{
-                                width: '8px', height: '8px',
-                                borderRadius: '50%',
-                                backgroundColor: '#575ECF',
-                                marginTop: '5px',
-                                flexShrink: 0,
-                              }} />
-
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                  {item.old_status && (
-                                    <span style={{
-                                      backgroundColor: stageColor(stages, item.old_status).bg,
-                                      color: stageColor(stages, item.old_status).color,
-                                      borderRadius: '12px',
-                                      padding: '2px 8px',
-                                      fontSize: '11px',
-                                      fontWeight: 500,
-                                    }}>
-                                      {item.old_status}
-                                    </span>
-                                  )}
-                                  {item.old_status && <span style={{ color: '#555', fontSize: '13px' }}>→</span>}
-                                  <span style={{
-                                    backgroundColor: stageColor(stages, item.new_status).bg,
-                                    color: stageColor(stages, item.new_status).color,
-                                    borderRadius: '12px',
-                                    padding: '2px 8px',
-                                    fontSize: '11px',
-                                    fontWeight: 500,
-                                  }}>
-                                    {item.new_status}
-                                  </span>
-                                </div>
-                                <div style={{ color: '#555', fontSize: '11px', marginTop: '4px' }}>
-                                  {fmtDateTime(item.changed_at || item.created_at)}
-                                  {item.performed_by && (
-                                  <span style={{ color: '#575ECF', fontWeight: 500 }}> · {item.performed_by}</span>
-                                )}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── Footer ──────────────────────────────────────────────────── */}
-                <div style={{
-                  padding: '14px 24px',
-                  borderTop: '1px solid rgba(255,255,255,0.08)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  backgroundColor: '#1e1e1e',
-                  gap: '10px',
-                }}>
-                  <button
-                    onClick={() => setShowDeleteModal(true)}
-                    style={{
-                      backgroundColor: 'rgba(239,68,68,0.1)',
-                      color: '#ef4444',
-                      border: '1px solid rgba(239,68,68,0.25)',
-                      borderRadius: '7px',
-                      padding: '7px 16px',
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      fontWeight: 500,
-                      transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.18)' }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)' }}
-                  >
-                    Delete Lead
-                  </button>
-
-                  {activeTab === 'details' && (
-                    <span style={{ color: '#555', fontSize: '11px', fontStyle: 'italic' }}>
-                      Fields auto-save on change
-                    </span>
-                  )}
-                  {activeTab === 'touchpoints' && (
-                    <span style={{ color: '#555', fontSize: '11px', fontStyle: 'italic' }}>
-                      Use "Save Touchpoint" inside each section
-                    </span>
-                  )}
+                  </section>
                 </div>
               </>
             ) : (
@@ -1285,9 +656,9 @@ export default function LeadDrawer({
             width: '360px',
             boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
           }}>
-            <h3 style={{ color: '#c5c1b9', fontSize: '16px', fontWeight: 600, margin: '0 0 10px' }}>Delete Lead?</h3>
+            <h3 style={{ color: '#c5c1b9', fontSize: '16px', fontWeight: 600, margin: '0 0 10px' }}>Move lead to trash?</h3>
             <p style={{ color: '#8a8680', fontSize: '13px', margin: '0 0 24px', lineHeight: 1.5 }}>
-              This will permanently delete <strong style={{ color: '#c5c1b9' }}>{lead?.company_name}</strong> and all associated data. This action cannot be undone.
+              <strong style={{ color: '#c5c1b9' }}>{lead?.company_name}</strong> will be removed from the pipeline. An admin can restore it from the trash.
             </p>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button
@@ -1320,7 +691,7 @@ export default function LeadDrawer({
                   opacity: deleting ? 0.7 : 1,
                 }}
               >
-                {deleting ? 'Deleting…' : 'Delete'}
+                {deleting ? 'Moving…' : 'Move to trash'}
               </button>
             </div>
           </div>

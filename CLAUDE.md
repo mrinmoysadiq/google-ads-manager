@@ -227,6 +227,18 @@ and custom fields (values in `outreach_lead_custom_values`) in one ordered list.
 required, hide (built-ins) / archive (custom, values kept). `company_name` and `specialist_ids` are locked.
 New built-in columns must also be added to `OUTREACH_BUILTIN_FIELDS` in `database.js`.
 
+### Lead Drawer (`components/LeadDrawer.jsx` + `components/drawer/`)
+Edit mode is one page, not tabs: `DrawerHeader` (stage, follow-up chip, contact links with copy, ⋯ menu for copy summary /
+move to trash), `QuickLog` (log a touchpoint — next number automatic, channel + message **or** note required, sets next
+follow-up; their reply with optional stage move; a dated note), `ActivityTimeline` (touchpoints, replies, notes and stage
+changes merged newest-first, filterable, edit in place), then a collapsible "Lead details" form (`LeadFields`).
+Notes live in `outreach_lead_notes` (`/leads/:id/notes`, author = signed-in user, edit/delete by author or admin) and come
+back in `GET /leads/:id` as `notes`. The touchpoint upsert rejects a touchpoint with neither message nor note.
+Working a queue: the drawer steps through leads in the order on screen (`navIds` from OutreachHome — the Kanban reports its
+filtered/sorted order via `onVisibleOrder`, the table uses its rows); ‹ › in the header, J / K, Esc closes. Every quick-log
+form has "… & next" (⇧⌘↵). Unsaved quick-log text triggers a discard confirm on close / switching leads. The last channel
+used is remembered (`outreach_last_channel`) and "Reuse TPn message" copies the previous message.
+
 ### Lead Sources
 `outreach_lead_sources` (name, colour, active) — where a lead came from. `outreach_leads.source_id` → built-in
 "Lead Source" field. List/detail responses include `source_name` + `source_color`; Kanban cards and table rows are
