@@ -2,6 +2,7 @@ import { memo, useRef } from 'react'
 import { fmtDate } from '../../../../utils/dates'
 import { DEFAULT_CHANNEL_COLOR } from '../../channels'
 import { relDays, daysAgo } from './boardModel'
+import { leadTitle, leadSubtitle } from '../../leadDisplay'
 
 const MUTED = '#8a8680'
 
@@ -102,7 +103,7 @@ function Progress({ lead, slots, active, onOpen }) {
       draggable={false}
       aria-expanded={active}
       title="View touchpoints & notes"
-      aria-label={`View touchpoints and notes for ${lead.company_name}`}
+      aria-label={`View touchpoints and notes for ${leadTitle(lead)}`}
       onClick={e => { stop(e); onOpen(e.currentTarget) }}
       className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 -ml-1.5 transition-colors hover:bg-white/10"
       style={{ backgroundColor: active ? 'rgba(87,94,207,0.3)' : undefined }}
@@ -168,11 +169,9 @@ function KanbanCard({ lead, s, slots, compact, showSpecialist, channelColors, me
         </div>
       )}
 
-      <p className="text-[13px] font-semibold leading-snug line-clamp-2" style={{ color: '#ecebe8' }}>{lead.company_name}</p>
-      {!compact && (lead.contact_name || lead.job_title) && (
-        <p className="text-[11px] mt-0.5 truncate" style={{ color: MUTED }}>
-          {[lead.contact_name, lead.job_title].filter(Boolean).join(' · ')}
-        </p>
+      <p className="text-[13px] font-semibold leading-snug line-clamp-2" style={{ color: '#ecebe8' }}>{leadTitle(lead)}</p>
+      {!compact && leadSubtitle(lead) && (
+        <p className="text-[11px] mt-0.5 truncate" style={{ color: MUTED }}>{leadSubtitle(lead)}</p>
       )}
 
       <div className="flex items-center gap-2 mt-2 min-w-0">

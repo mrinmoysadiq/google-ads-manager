@@ -235,10 +235,9 @@ function buildServer(user) {
 
   server.registerTool('create_lead', {
     title: 'Create lead',
-    description: 'Create a new lead in the first "new" stage. Rejected if another lead already has the same email, phone or Facebook page.',
+    description: 'Create a new lead in the first "new" stage. Needs at least a company, contact name, email or phone. Rejected if another lead already has the same email, phone or Facebook page.',
     inputSchema: {
       ...leadFields,
-      company_name: z.string(),
       specialist_ids: z.array(intArg()).min(1).optional()
         .describe('Assigned specialists (first is primary). Defaults to your own specialist record.'),
     },

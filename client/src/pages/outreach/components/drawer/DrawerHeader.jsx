@@ -5,6 +5,7 @@ import { stageColor, isClosedStatus } from '../../stageTypes'
 import { daysAgo, relDays } from '../kanban/boardModel'
 import { FollowUpMenu } from '../kanban/CardMenus'
 import { useDismiss } from '../kanban/useAnchored'
+import { leadTitle, leadSubtitle } from '../../leadDisplay'
 
 const MUTED = '#8a8680'
 
@@ -234,7 +235,8 @@ export default function DrawerHeader({ lead, stages, maxTouchpoints, nav, switch
   const closed = isClosedStatus(stages, lead.status)
   const inStage = lead.status_updated_at ? daysAgo(lead.status_updated_at.slice(0, 10)) : null
   const specialistNames = lead.specialists?.length ? lead.specialists.map(s => s.name).join(', ') : lead.specialist_names || lead.specialist_name
-  const subtitle = [lead.contact_name, lead.job_title].filter(Boolean).join(' · ')
+  const subtitle = leadSubtitle(lead)
+  const hasCompany = !!(lead.company_name || '').trim()
 
   const links = [
     lead.email && { key: 'email', icon: LINK_ICONS.email, label: lead.email, href: `mailto:${lead.email}`, copyValue: lead.email, copyLabel: 'Email' },
@@ -257,24 +259,31 @@ export default function DrawerHeader({ lead, stages, maxTouchpoints, nav, switch
               {lead.source_name}
             </span>
           )}
-          <input
-            key={lead.company_name}
-            defaultValue={lead.company_name}
-            aria-label="Company name"
-            title="Click to rename"
-            onBlur={e => {
-              e.currentTarget.style.borderBottomColor = 'transparent'
-              const v = e.target.value.trim()
-              if (v && v !== lead.company_name) onSaveField('company_name', v)
-              else e.target.value = lead.company_name
-            }}
-            onFocus={e => { e.currentTarget.style.borderBottomColor = '#575ECF' }}
-            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-            style={{
-              background: 'none', border: 'none', borderBottom: '1px solid transparent', color: '#ecebe8',
-              fontSize: '19px', fontWeight: 700, width: '100%', padding: '1px 0', outline: 'none',
-            }}
-          />
+          {hasCompany ? (
+            <input
+              key={lead.company_name}
+              defaultValue={lead.company_name}
+              aria-label="Company name"
+              title="Click to rename"
+              onBlur={e => {
+                e.currentTarget.style.borderBottomColor = 'transparent'
+                const v = e.target.value.trim()
+                if (v !== lead.company_name) onSaveField('company_name', v)
+              }}
+              onFocus={e => { e.currentTarget.style.borderBottomColor = '#575ECF' }}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+              style={{
+                background: 'none', border: 'none', borderBottom: '1px solid transparent', color: '#ecebe8',
+                fontSize: '19px', fontWeight: 700, width: '100%', padding: '1px 0', outline: 'none',
+              }}
+            />
+          ) : (
+            // No company: the lead is named after the person (or email / phone)
+            <div className="flex items-baseline gap-2 min-w-0">
+              <h2 className="truncate" style={{ color: '#ecebe8', fontSize: '19px', fontWeight: 700, padding: '1px 0' }} aria-label="Lead name">{leadTitle(lead)}</h2>
+              <button type="button" onClick={() => onEditDetails('company_name')} className="text-[11px] shrink-0 hover:underline" style={{ color: '#575ECF' }}>+ Add company</button>
+            </div>
+          )}
           {subtitle && <p className="text-xs truncate" style={{ color: MUTED }}>{subtitle}</p>}
         </div>
         {nav && <NavButtons nav={nav} />}
@@ -306,7 +315,7 @@ export default function DrawerHeader({ lead, stages, maxTouchpoints, nav, switch
         {(!lead.email || !lead.phone) && (
           <button
             type="button"
-            onClick={onEditDetails}
+            onClick={() => onEditDetails(!lead.email ? 'email' : 'phone')}
             className="text-xs px-2 py-1 rounded-md hover:bg-white/[0.06]"
             style={{ color: '#575ECF', border: '1px dashed rgba(87,94,207,0.4)' }}
           >

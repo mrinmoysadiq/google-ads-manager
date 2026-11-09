@@ -1,5 +1,6 @@
 import { todayLocal } from '../../../../utils/dates'
 import { isClosedStatus, stageTypeOf, touchpointNumberOf, touchpointStageName, hasNumberedTouchpointStages } from '../../stageTypes'
+import { leadTitle } from '../../leadDisplay'
 
 // ─── Dates ────────────────────────────────────────────────────────────────────
 
@@ -143,6 +144,6 @@ export const SORTS = [
     key: 'company',
     label: 'Company A–Z',
     hint: 'Alphabetical by company name',
-    compare: (a, b) => (a.lead.company_name || '').localeCompare(b.lead.company_name || '', undefined, { sensitivity: 'base' }),
+    compare: (a, b) => leadTitle(a.lead).localeCompare(leadTitle(b.lead), undefined, { sensitivity: 'base' }),
   },
 ]

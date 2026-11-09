@@ -107,7 +107,32 @@ function SavedIndicator({ show }) {
   return <span style={{ color: '#22c55e', fontSize: '11px', marginLeft: '6px' }}>Saved ✓</span>
 }
 
-const labelStyle = { display: 'block', fontSize: '11px', color: '#8a8680', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }
+const labelStyle = { display: 'block', fontSize: '12px', fontWeight: 500, color: '#a8a49c', marginBottom: '5px' }
+
+// ─── Groups ───────────────────────────────────────────────────────────────────
+// Built-ins are shown in groups by what they describe (who, which company, ownership, where
+// they were found); within a group they keep the admin's order. Custom fields go last.
+export const FIELD_GROUPS = [
+  { key: 'person',   title: 'Contact person',       keys: ['contact_name', 'job_title', 'email', 'phone', 'linkedin_url'] },
+  { key: 'company',  title: 'Company',              keys: ['company_name', 'website', 'industry_id', 'location', 'fb_page_url', 'ig_url'] },
+  { key: 'pipeline', title: 'Ownership',            keys: ['source_id', 'specialist_ids', 'next_followup_date'] },
+  { key: 'found',    title: 'Where you found them', keys: ['source_url', 'source_image'] },
+  { key: 'more',     title: 'More details',         keys: [] }, // custom fields and anything else
+]
+
+export function groupFields(fields) {
+  const groups = FIELD_GROUPS.map(g => ({ ...g, fields: [] }))
+  const more = groups.find(g => g.key === 'more')
+  fields.forEach(f => {
+    const group = f.is_builtin && groups.find(g => g.keys.includes(f.field_key))
+    ;(group || more).fields.push(f)
+  })
+  return groups.filter(g => g.fields.length)
+}
+
+export function fieldValue(field, values, customValues) {
+  return field.is_builtin ? values?.[field.field_key] : customValues?.[field.field_key]
+}
 
 // ─── One field's input ────────────────────────────────────────────────────────
 
@@ -115,6 +140,7 @@ const labelStyle = { display: 'block', fontSize: '11px', color: '#8a8680', margi
 // only when the value actually changed. Required fields refuse to be cleared in edit mode.
 function FieldControl({ field, value, onCommit, live, specialists, industries, sources, onResizeHeight }) {
   const [nonce, setNonce] = useState(0)
+  const addHint = `Add ${field.label.toLowerCase()}`
   const textareaRef = useRef(null)
   const { field_type: type, field_key: key } = field
 
@@ -145,7 +171,7 @@ function FieldControl({ field, value, onCommit, live, specialists, industries, s
         className={inputClass}
         defaultValue={shown}
         onBlur={e => { if (e.target.value !== String(shown)) commit(e.target.value || null) }}
-        placeholder="—"
+        placeholder={addHint}
       />
     )
   }
@@ -190,7 +216,7 @@ function FieldControl({ field, value, onCommit, live, specialists, industries, s
           defaultValue={value ?? ''}
           onBlur={e => { if (e.target.value !== (value ?? '')) commit(e.target.value || null) }}
           onMouseUp={handleMouseUp}
-          placeholder="—"
+          placeholder={addHint}
           style={{ height, resize: 'vertical' }}
         />
       )
@@ -317,49 +343,94 @@ function FieldControl({ field, value, onCommit, live, specialists, industries, s
   }
 }
 
-// ─── The whole form ───────────────────────────────────────────────────────────
+// ─── Fields ───────────────────────────────────────────────────────────────────
 
-// Renders lead fields in the admin-configured order and widths.
-// `values` holds built-in values (keyed like the lead columns, specialist_ids as an array);
-// `customValues` holds custom field values. `onCommit(field, value)` saves one field.
-export default function LeadFields({
+// A two-column grid of fields, each at its admin-configured width
+export function FieldGrid({
   fields, values, customValues, onCommit, live = false, saved = {},
-  specialists = [], industries = [], sources = [], canManage = false, onResizeHeight,
+  specialists = [], industries = [], sources = [], onResizeHeight,
 }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-      {canManage && (
-        <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginBottom: '-8px' }}>
-          <Link to="/outreach/admin#fields" style={{ color: '#575ECF', fontSize: '12px', fontWeight: 500, textDecoration: 'none' }}>
-            ⚙ Edit fields
-          </Link>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 12px' }}>
+      {fields.map(field => (
+        <div key={field.id} data-field-key={field.field_key} style={{ gridColumn: field.width === 'full' ? '1 / -1' : 'auto', minWidth: 0 }}>
+          <label style={labelStyle}>
+            {field.label}
+            {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+            <SavedIndicator show={saved[savedKeyFor(field)]} />
+          </label>
+          <FieldControl
+            field={field}
+            value={fieldValue(field, values, customValues)}
+            live={live}
+            specialists={specialists}
+            industries={industries}
+            sources={sources}
+            onCommit={v => onCommit(field, v)}
+            onResizeHeight={onResizeHeight ? h => onResizeHeight(field, h) : undefined}
+          />
+          {field.help_text && (
+            <p style={{ color: '#666', fontSize: '11px', margin: '4px 0 0' }}>{field.help_text}</p>
+          )}
         </div>
+      ))}
+    </div>
+  )
+}
+
+export function GroupHeading({ title, filled, total, children }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '10px' }}>
+      <h4 style={{ color: '#8a8680', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>{title}</h4>
+      {total > 0 && filled !== undefined && (
+        <span style={{ color: filled === total ? '#22c55e' : '#555', fontSize: '11px' }}>{filled}/{total}</span>
       )}
-      {fields.map(field => {
-        const value = field.is_builtin ? values?.[field.field_key] : customValues?.[field.field_key]
-        return (
-          <div key={field.id} style={{ gridColumn: field.width === 'full' ? '1 / -1' : 'auto', minWidth: 0 }}>
-            <label style={labelStyle}>
-              {field.label}
-              {field.required && <span style={{ color: '#ef4444' }}> *</span>}
-              <SavedIndicator show={saved[savedKeyFor(field)]} />
-            </label>
-            <FieldControl
-              field={field}
-              value={value}
-              live={live}
-              specialists={specialists}
-              industries={industries}
-              sources={sources}
-              onCommit={v => onCommit(field, v)}
-              onResizeHeight={onResizeHeight ? h => onResizeHeight(field, h) : undefined}
-            />
-            {field.help_text && (
-              <p style={{ color: '#666', fontSize: '11px', margin: '4px 0 0' }}>{field.help_text}</p>
+      <span style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.06)', alignSelf: 'center' }} />
+      {children}
+    </div>
+  )
+}
+
+// ─── The whole form ───────────────────────────────────────────────────────────
+
+// Renders lead fields grouped (contact person, company, ownership, where found, more).
+// `values` holds built-in values (keyed like the lead columns, specialist_ids as an array);
+// `customValues` holds custom field values. `onCommit(field, value)` saves one field.
+// `exclude` hides fields shown elsewhere (e.g. the follow-up, which lives in the drawer header).
+export default function LeadFields({
+  fields, values, customValues, onCommit, live = false, saved = {},
+  specialists = [], industries = [], sources = [], canManage = false, onResizeHeight, exclude = [],
+}) {
+  const groups = groupFields(fields.filter(f => !exclude.includes(f.field_key)))
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+      {groups.map((group, i) => (
+        <section key={group.key} aria-label={group.title}>
+          <GroupHeading
+            title={group.title}
+            filled={live ? undefined : group.fields.filter(f => !isEmptyFieldValue(fieldValue(f, values, customValues))).length}
+            total={group.fields.length}
+          >
+            {canManage && i === 0 && (
+              <Link to="/outreach/admin#fields" style={{ color: '#575ECF', fontSize: '12px', fontWeight: 500, textDecoration: 'none' }}>
+                ⚙ Edit fields
+              </Link>
             )}
-          </div>
-        )
-      })}
+          </GroupHeading>
+          <FieldGrid
+            fields={group.fields}
+            values={values}
+            customValues={customValues}
+            onCommit={onCommit}
+            live={live}
+            saved={saved}
+            specialists={specialists}
+            industries={industries}
+            sources={sources}
+            onResizeHeight={onResizeHeight}
+          />
+        </section>
+      ))}
     </div>
   )
 }

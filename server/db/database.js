@@ -87,8 +87,7 @@ function seedOutreachBuiltinFields() {
         } else {
           order = (db.prepare('SELECT MAX(sort_order) as m FROM outreach_custom_fields').get().m || 0) + 1;
         }
-        const locked = key === 'company_name' || key === 'specialist_ids';
-        insert.run(label, key, type, order, width, locked ? 1 : 0);
+        insert.run(label, key, type, order, width, key === 'specialist_ids' ? 1 : 0);
       });
     })();
   } catch (e) { console.error('Built-in lead field seed failed', e); }
@@ -488,6 +487,16 @@ function initializeDatabase() {
 
   // Seed default outreach settings
   db.prepare("INSERT OR IGNORE INTO outreach_settings (key, value) VALUES ('max_touchpoints', '5')").run();
+
+  // One-off: Company Name used to be locked as required. Make it optional once; afterwards
+  // admins decide (Admin → Lead Fields).
+  try {
+    const done = db.prepare("SELECT 1 FROM outreach_settings WHERE key = 'company_name_optional_v1'").get();
+    if (!done) {
+      db.prepare("UPDATE outreach_custom_fields SET required = 0 WHERE field_key = 'company_name' AND is_builtin = 1").run();
+      db.prepare("INSERT INTO outreach_settings (key, value) VALUES ('company_name_optional_v1', '1')").run();
+    }
+  } catch (e) { console.error('Company name migration failed', e); }
 
   console.log('Outreach tables initialized');
 

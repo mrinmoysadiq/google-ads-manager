@@ -34,6 +34,7 @@ import {
 import { STAGE_TYPES, stageTypeMeta } from './stageTypes';
 import { CUSTOM_FIELD_TYPES, fieldTypeLabel } from './components/LeadFields';
 import { ChannelList } from './components/ChannelManager';
+import { leadTitle } from './leadDisplay';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -1495,12 +1496,12 @@ function LeadsTrashSection() {
     try {
       await restoreTrashLead(lead.id);
       setLeads(prev => prev.filter(l => l.id !== lead.id));
-      toast.success(`"${lead.company_name}" restored`);
+      toast.success(`"${leadTitle(lead)}" restored`);
     } catch { toast.error('Failed to restore'); }
   };
 
   const deletePermanent = async (lead) => {
-    if (!window.confirm(`Permanently delete "${lead.company_name}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Permanently delete "${leadTitle(lead)}"? This cannot be undone.`)) return;
     try {
       await permanentDeleteLead(lead.id);
       setLeads(prev => prev.filter(l => l.id !== lead.id));
@@ -1528,7 +1529,7 @@ function LeadsTrashSection() {
             return (
               <div key={lead.id} className="flex items-center gap-4 px-6 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p className="text-sm font-medium text-[#c5c1b9]">{lead.company_name}</p>
+                  <p className="text-sm font-medium text-[#c5c1b9]">{leadTitle(lead)}</p>
                   <p className="text-xs text-[#8a8680]">{lead.contact_name || ''}{lead.specialist_name ? ` · ${lead.specialist_name}` : ''} · {lead.status}</p>
                 </div>
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: days <= 2 ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.1)', color: days <= 2 ? '#ef4444' : '#f59e0b' }}>{days === 0 ? 'Expiring today' : `${days}d left`}</span>

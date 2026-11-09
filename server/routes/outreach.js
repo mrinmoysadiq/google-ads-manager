@@ -124,7 +124,7 @@ function findDuplicateLead({ email, phone, fb_page_url, excludeId }) {
   if (!nEmail && !nPhone && !nFb) return null;
 
   const params = [];
-  let query = 'SELECT id, company_name, email, phone, fb_page_url FROM outreach_leads WHERE deleted_at IS NULL';
+  let query = 'SELECT id, company_name, contact_name, email, phone, fb_page_url FROM outreach_leads WHERE deleted_at IS NULL';
   if (excludeId) { query += ' AND id != ?'; params.push(excludeId); }
   const candidates = db.prepare(query).all(...params);
 
@@ -136,8 +136,20 @@ function findDuplicateLead({ email, phone, fb_page_url, excludeId }) {
   return null;
 }
 
+// How a lead is named in messages — company is optional, so fall back to who / how to reach them
+function leadLabel(l) {
+  return (l.company_name || '').trim() || (l.contact_name || '').trim() || l.email || l.phone || `Lead #${l.id}`;
+}
+
+// A lead needs something to identify it by
+const IDENTITY_FIELDS = ['company_name', 'contact_name', 'email', 'phone'];
+function hasIdentity(values) {
+  return IDENTITY_FIELDS.some(k => String(values[k] ?? '').trim());
+}
+const IDENTITY_ERROR = 'Add at least a company, contact name, email or phone';
+
 function duplicateErrorMessage(dup) {
-  return `Duplicate lead: this ${dup.field} is already used by "${dup.lead.company_name}" (lead #${dup.lead.id}).`;
+  return `Duplicate lead: this ${dup.field} is already used by "${leadLabel(dup.lead)}" (lead #${dup.lead.id}).`;
 }
 
 // ─── SPECIALISTS ──────────────────────────────────────────────────────────────
@@ -578,7 +590,7 @@ router.post('/leads', (req, res) => {
     if (ownSpecId !== null && !specIds.map(Number).includes(ownSpecId)) specIds.unshift(ownSpecId);
 
     if (!specIds.length) return res.status(400).json({ error: 'At least one specialist is required' });
-    if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'company_name is required' });
+    if (!hasIdentity(req.body)) return res.status(400).json({ error: IDENTITY_ERROR });
     const missing = missingRequiredField(req.body, false);
     if (missing) return res.status(400).json({ error: missing });
 
@@ -595,7 +607,7 @@ router.post('/leads', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         specIds[0],
-        company_name.trim(),
+        String(company_name || '').trim(),
         contact_name || null,
         job_title || null,
         website || null,
@@ -736,8 +748,8 @@ router.patch('/leads/:id', (req, res) => {
     if (Array.isArray(specialist_ids) && specialist_ids.length === 0) {
       return res.status(400).json({ error: 'At least one specialist is required' });
     }
-    if (company_name !== undefined && !String(company_name || '').trim()) {
-      return res.status(400).json({ error: '"Company Name" is required' });
+    if (!hasIdentity({ ...existing, ...Object.fromEntries(IDENTITY_FIELDS.filter(k => req.body[k] !== undefined).map(k => [k, req.body[k]])) })) {
+      return res.status(400).json({ error: IDENTITY_ERROR });
     }
     const missing = missingRequiredField(req.body, true);
     if (missing) return res.status(400).json({ error: missing });
@@ -777,7 +789,7 @@ router.patch('/leads/:id', (req, res) => {
         WHERE id = ?
       `).run(
         specialist_id || null,
-        company_name || null,
+        company_name !== undefined ? String(company_name || '').trim() : null,
         contact_name !== undefined ? (contact_name || null) : existing.contact_name,
         job_title !== undefined ? (job_title || null) : existing.job_title,
         website !== undefined ? (website || null) : existing.website,
@@ -993,7 +1005,7 @@ const CUSTOM_FIELD_TYPES = [
 // Values of these types are plain strings, so a field can switch between them safely
 const TEXT_LIKE_TYPES = ['text', 'short_text', 'email', 'phone', 'link'];
 // Built-ins that every lead needs — always shown and required
-const LOCKED_BUILTINS = ['company_name', 'specialist_ids'];
+const LOCKED_BUILTINS = ['specialist_ids'];
 
 function parseCustomField(f) {
   if (!f) return f;

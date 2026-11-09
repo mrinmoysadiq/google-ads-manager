@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { getTouchpoints, getLeadResponses } from '../../../utils/outreachApi'
 import { fmtDate } from '../../../utils/dates'
 import { useAnchoredPosition, useDismiss } from './kanban/useAnchored'
+import { leadTitle } from '../leadDisplay'
 
 const WIDTH = 380
 
@@ -54,7 +55,7 @@ export default function TouchpointPeek({ lead, anchor, channelColors = {}, onClo
     <div
       ref={ref}
       role="dialog"
-      aria-label={`Touchpoints for ${lead.company_name}`}
+      aria-label={`Touchpoints for ${leadTitle(lead)}`}
       className="fixed z-[60] rounded-xl flex flex-col"
       style={{
         width: WIDTH, left: pos.left, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight,
@@ -62,7 +63,7 @@ export default function TouchpointPeek({ lead, anchor, channelColors = {}, onClo
       }}
     >
       <div className="flex items-center justify-between gap-2 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <p className="text-sm font-semibold truncate" style={{ color: '#e8e5df' }}>{lead.company_name}</p>
+        <p className="text-sm font-semibold truncate" style={{ color: '#e8e5df' }}>{leadTitle(lead)}</p>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={() => { onClose(); onOpenLead(lead.id) }} className="text-xs font-medium hover:underline" style={{ color: '#575ECF' }}>
             Open lead

@@ -3,6 +3,7 @@ import Select from 'react-select';
 import { fmtDate as formatDate } from '../../../utils/dates';
 import { stageColor, isClosedStatus } from '../stageTypes';
 import { useChannelColors, DEFAULT_CHANNEL_COLOR } from '../channels';
+import { leadTitle } from '../leadDisplay';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -562,9 +563,9 @@ export default function PipelineTable({
                           whiteSpace: 'nowrap',
                           maxWidth: 150,
                         }}
-                        title={lead.company_name}
+                        title={leadTitle(lead)}
                       >
-                        {lead.company_name || '—'}
+                        {leadTitle(lead)}
                       </div>
                     </td>
 

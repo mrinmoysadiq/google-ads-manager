@@ -9,6 +9,7 @@ import { fmtDate, fmtDateTime } from '../../../utils/dates';
 import { isAdmin } from '../../../utils/auth';
 import { stageColor } from '../stageTypes';
 import { useChannelColors, DEFAULT_CHANNEL_COLOR } from '../channels';
+import { leadTitle } from '../leadDisplay';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -252,7 +253,7 @@ function ActivityLeadsDrawer({ title, subtitle, leads, stages, loading, onClose,
               {/* Row 1: company + current status */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 5 }}>
                 <span style={{ color: '#575ECF', fontWeight: 600, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {lead.company_name || '—'}
+                  {leadTitle(lead)}
                 </span>
                 {statusPill(lead.status, stages)}
               </div>
@@ -1261,7 +1262,7 @@ export default function Dashboard({ specialistId, specialists, onLeadClick, refr
                       onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                       onClick={() => onLeadClick && onLeadClick(lead.id)}
                     >
-                      <span style={{ color: '#575ECF', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.company_name || lead.company || '—'}</span>
+                      <span style={{ color: '#575ECF', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{leadTitle({ ...lead, company_name: lead.company_name || lead.company })}</span>
                       <span style={{ ...mutedText, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.contact_name || lead.contact || '—'}</span>
                       <span style={{ ...mutedText, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{specialistName}</span>
                       <span style={{ textAlign: 'right', fontWeight: 600, color: days >= 7 ? '#ef4444' : days >= 3 ? '#f59e0b' : '#c5c1b9', whiteSpace: 'nowrap' }}>

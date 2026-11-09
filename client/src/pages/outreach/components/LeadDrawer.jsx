@@ -16,9 +16,11 @@ import ResponseQuickModal from './ResponseQuickModal'
 import { fmtDate } from '../../../utils/dates'
 import LeadFields, { isEmptyFieldValue } from './LeadFields'
 import { touchpointNumberForMove, needsResponse } from '../stageTypes'
+import { leadTitle } from '../leadDisplay'
 import DrawerHeader from './drawer/DrawerHeader'
 import QuickLog, { lastLoggedTouchpoint } from './drawer/QuickLog'
 import ActivityTimeline from './drawer/ActivityTimeline'
+import NewLeadForm from './drawer/NewLeadForm'
 
 const LS_DETAILS_OPEN = 'outreach_drawer_details_open'
 
@@ -72,12 +74,16 @@ export default function LeadDrawer({
   const [fieldsError, setFieldsError] = useState(false)
 
   // Create form state: built-in values keyed like the lead columns, custom values nested
-  const [createForm, setCreateForm] = useState({
-    specialist_ids: defaultSpecialistId ? [defaultSpecialistId] : [],
-    custom_fields: {},
+  // New leads go to the specialist being viewed, or else to your own specialist profile
+  const [createForm, setCreateForm] = useState(() => {
+    const me = getUser()
+    const own = !defaultSpecialistId && me && specialists.find(s => s.name.toLowerCase() === (me.name || '').toLowerCase())
+    const initial = defaultSpecialistId || own?.id
+    return { specialist_ids: initial ? [initial] : [], custom_fields: {} }
   })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState(null)
+  const [createKey, setCreateKey] = useState(0) // remounts the form for "create & add another"
 
   const commitCreateField = (field, value) => {
     setCreateError(null)
@@ -148,9 +154,18 @@ export default function LeadDrawer({
     try { localStorage.setItem(LS_DETAILS_OPEN, open ? '1' : '0') } catch { /* private mode */ }
   }
 
-  const editDetails = () => {
+  // Open the details; with a field key, jump to that field and put the cursor in it
+  const editDetails = (fieldKey) => {
     toggleDetails(true)
-    setTimeout(() => detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+    setTimeout(() => {
+      const field = typeof fieldKey === 'string' && detailsRef.current?.querySelector(`[data-field-key="${fieldKey}"]`)
+      if (field) {
+        field.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        field.querySelector('input, textarea')?.focus({ preventScroll: true })
+      } else {
+        detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }, 80)
   }
 
   const markSaved = (field) => {
@@ -311,9 +326,14 @@ export default function LeadDrawer({
 
   // ── Create lead ───────────────────────────────────────────────────────────────
 
-  const handleCreate = async (e) => {
-    e.preventDefault()
+  // andAnother: create, then start a fresh form (keeping source and specialists) for the next lead
+  const handleCreate = async (andAnother = false) => {
     setCreateError(null)
+    const identity = ['company_name', 'contact_name', 'email', 'phone'].some(k => !isEmptyFieldValue(createForm[k]))
+    if (!identity) {
+      setCreateError('Add at least a company, contact name, email or phone')
+      return
+    }
     for (const field of fields || []) {
       const value = field.is_builtin ? createForm[field.field_key] : createForm.custom_fields[field.field_key]
       if (field.required && isEmptyFieldValue(value)) {
@@ -332,8 +352,18 @@ export default function LeadDrawer({
       const custom = Object.fromEntries(Object.entries(createForm.custom_fields).filter(([, v]) => !isEmptyFieldValue(v)))
       if (Object.keys(custom).length > 0) payload.custom_fields = custom
       const newLead = await createLead(payload)
-      toast.success('Lead created')
       onSaved()
+      if (andAnother) {
+        toast.success(`${leadTitle(newLead)} created — add the next one`)
+        setCreateForm(prev => ({
+          specialist_ids: prev.specialist_ids,
+          source_id: prev.source_id,
+          custom_fields: {},
+        }))
+        setCreateKey(k => k + 1)
+        return
+      }
+      toast.success('Lead created')
       setLeadId(newLead.id)
       setMode('edit')
     } catch (err) {
@@ -367,8 +397,8 @@ export default function LeadDrawer({
     if (!lead) return
     const tp = [...(lead.touchpoints || [])].filter(t => t.date).sort((a, b) => b.touchpoint_number - a.touchpoint_number)[0]
     const lines = [
-      `Company: ${lead.company_name || '—'}`,
-      `Contact: ${lead.contact_name || '—'}`,
+      `Lead: ${leadTitle(lead)}`,
+      lead.company_name && lead.contact_name ? `Contact: ${lead.contact_name}` : null,
       `Status: ${lead.status || '—'}`,
       lead.website ? `Website: ${lead.website}` : null,
       lead.email ? `Email: ${lead.email}` : null,
@@ -425,84 +455,32 @@ export default function LeadDrawer({
               borderBottom: '1px solid rgba(255,255,255,0.08)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
-              <h2 style={{ color: '#c5c1b9', fontSize: '18px', fontWeight: 600, margin: 0 }}>New Lead</h2>
+              <h2 style={{ color: '#ecebe8', fontSize: '18px', fontWeight: 700, margin: 0 }}>New lead</h2>
               <button onClick={handleClose} style={{ background: 'none', border: 'none', color: '#8a8680', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleCreate} style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-                {fieldsError ? (
-                  <FieldsLoadError onRetry={loadFields} />
-                ) : !fields ? (
-                  <span style={{ color: '#8a8680', fontSize: '13px' }}>Loading form…</span>
-                ) : (
-                  <LeadFields
-                    fields={fields}
-                    values={createForm}
-                    customValues={createForm.custom_fields}
-                    onCommit={commitCreateField}
-                    live
-                    specialists={specialists}
-                    industries={industries}
-                    sources={sources}
-                    canManage={canManageFields}
-                    onResizeHeight={resizeFieldHeight}
-                  />
-                )}
-              </div>
-
-              {/* Duplicate lead error — shown right above the submit button */}
-              {createError && (
-                <div style={{
-                  marginTop: '18px', display: 'flex', alignItems: 'flex-start', gap: '8px',
-                  backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.35)',
-                  borderRadius: '8px', padding: '12px 14px', color: '#ef4444', fontSize: '13px', fontWeight: 500,
-                }}>
-                  <span style={{ flexShrink: 0 }}>⚠</span>
-                  <span>{createError}</span>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: '10px', marginTop: '28px' }}>
-                <button
-                  type="submit"
-                  disabled={creating}
-                  style={{
-                    flex: 1,
-                    backgroundColor: '#575ECF',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '10px',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    cursor: creating ? 'not-allowed' : 'pointer',
-                    opacity: creating ? 0.7 : 1,
-                    transition: 'opacity 0.15s',
-                  }}
-                >
-                  {creating ? 'Creating…' : 'Create Lead'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.05)',
-                    color: '#8a8680',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: '8px',
-                    padding: '10px 20px',
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+            {fieldsError ? (
+              <div style={{ padding: '24px' }}><FieldsLoadError onRetry={loadFields} /></div>
+            ) : !fields ? (
+              <span style={{ color: '#8a8680', fontSize: '13px', padding: '24px' }}>Loading form…</span>
+            ) : (
+              <NewLeadForm
+                key={createKey}
+                fields={fields}
+                values={createForm}
+                customValues={createForm.custom_fields}
+                onCommit={commitCreateField}
+                specialists={specialists}
+                industries={industries}
+                sources={sources}
+                canManage={canManageFields}
+                onResizeHeight={resizeFieldHeight}
+                creating={creating}
+                error={createError}
+                onSubmit={handleCreate}
+                onCancel={handleClose}
+              />
+            )}
           </>
         )}
 
@@ -588,9 +566,10 @@ export default function LeadDrawer({
                             sources={sources}
                             canManage={canManageFields}
                             onResizeHeight={resizeFieldHeight}
+                            exclude={['next_followup_date']}
                           />
                         )}
-                        <p style={{ color: '#555', fontSize: '11px', fontStyle: 'italic', marginTop: '12px' }}>Fields save automatically.</p>
+                        <p style={{ color: '#555', fontSize: '11px', fontStyle: 'italic', marginTop: '12px' }}>Fields save automatically. The follow-up date is set from the chip at the top.</p>
                       </div>
                     )}
                   </section>
@@ -658,7 +637,7 @@ export default function LeadDrawer({
           }}>
             <h3 style={{ color: '#c5c1b9', fontSize: '16px', fontWeight: 600, margin: '0 0 10px' }}>Move lead to trash?</h3>
             <p style={{ color: '#8a8680', fontSize: '13px', margin: '0 0 24px', lineHeight: 1.5 }}>
-              <strong style={{ color: '#c5c1b9' }}>{lead?.company_name}</strong> will be removed from the pipeline. An admin can restore it from the trash.
+              <strong style={{ color: '#c5c1b9' }}>{leadTitle(lead)}</strong> will be removed from the pipeline. An admin can restore it from the trash.
             </p>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button

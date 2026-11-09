@@ -4,6 +4,7 @@ import { fmtDate } from '../../../../utils/dates'
 import { PHASES, phaseOf, stageColor } from '../../stageTypes'
 import { useAnchoredPosition, useDismiss } from './useAnchored'
 import { addDays } from './boardModel'
+import { leadTitle } from '../../leadDisplay'
 
 const WIDTH = 236
 
@@ -54,7 +55,7 @@ export function FollowUpMenu({ lead, anchor, onClose, onSet }) {
     ['Today', 0], ['Tomorrow', 1], ['In 3 days', 3], ['Next week', 7], ['In 2 weeks', 14],
   ]
   return (
-    <MenuShell anchor={anchor} onClose={onClose} label={`Follow-up for ${lead.company_name}`}>
+    <MenuShell anchor={anchor} onClose={onClose} label={`Follow-up for ${leadTitle(lead)}`}>
       <Heading>Next follow-up</Heading>
       {presets.map(([label, n]) => {
         const date = addDays(n)
@@ -80,7 +81,7 @@ export function FollowUpMenu({ lead, anchor, onClose, onSet }) {
 // Move to any stage without dragging across the board
 export function MoveMenu({ lead, anchor, stages, onClose, onMove }) {
   return (
-    <MenuShell anchor={anchor} onClose={onClose} label={`Move ${lead.company_name}`}>
+    <MenuShell anchor={anchor} onClose={onClose} label={`Move ${leadTitle(lead)}`}>
       {PHASES.map(phase => {
         const inPhase = stages.filter(s => phaseOf(s.stage_type) === phase.key)
         if (!inPhase.length) return null

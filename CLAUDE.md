@@ -224,8 +224,14 @@ Never match stage names in code — use the type helpers.
 `outreach_custom_fields` holds built-in fields (`is_builtin = 1`, values in `outreach_leads` columns, type fixed)
 and custom fields (values in `outreach_lead_custom_values`) in one ordered list. `GET /fields` returns the layout;
 `LeadDrawer` renders it via `components/LeadFields.jsx`. Admin → Lead Fields manages label, order, width, help text,
-required, hide (built-ins) / archive (custom, values kept). `company_name` and `specialist_ids` are locked.
-New built-in columns must also be added to `OUTREACH_BUILTIN_FIELDS` in `database.js`.
+required, hide (built-ins) / archive (custom, values kept). Only `specialist_ids` is locked.
+**Company name is optional**: a lead needs at least a company, contact name, email or phone (`hasIdentity` in `outreach.js`);
+an empty company is stored as `''` (column is NOT NULL). Show a lead's name with `leadTitle()` / `leadSubtitle()` from
+`pages/outreach/leadDisplay.js` (company → contact → email → phone) — never `lead.company_name` directly.
+`LeadFields` renders fields in groups (`FIELD_GROUPS`: contact person, company, ownership, where found, more/custom) with
+fill counts; `FieldGrid` renders a plain list. The new-lead form (`drawer/NewLeadForm.jsx`) shows paired essentials
+(+ any required field) and folds the rest; "Create & add another" keeps source and specialists.
+New built-in columns must also be added to `OUTREACH_BUILTIN_FIELDS` in `database.js` (and to a `FIELD_GROUPS` entry).
 
 ### Lead Drawer (`components/LeadDrawer.jsx` + `components/drawer/`)
 Edit mode is one page, not tabs: `DrawerHeader` (stage, follow-up chip, contact links with copy, ⋯ menu for copy summary /
